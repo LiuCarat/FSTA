@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Conda
+.conda-auto
+
+# Output
+out/
+
+# Dataset backups (keep raw backups locally, not in git)
+dataset/sanch/_backup/
+dataset/_backup_fmri/
+
+# IDE
+.idea/
+*.swp
+*.swo

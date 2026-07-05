@@ -1,0 +1,7 @@
+{
+    "python.defaultInterpreterPath": "/data/users/liulin/miniconda3/envs/default/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "terminal.integrated.env.linux": {
+        "CONDA_DEFAULT_ENV": "default"
+    }
+}

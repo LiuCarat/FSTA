@@ -16,7 +16,7 @@ from utils.FourierAttUtils import EarlyStopping, check_path, set_seed, get_local
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 def prepare_dataloaders(opt, device):
-    path = '../data/real/individual_'+opt.pos+'_mtl_reduced/'
+    path = './dataset/real/individual_'+opt.pos+'_mtl_reduced/'
     ground_truth = real_data_label(opt.pos)
 
     all_path = os.listdir(path)

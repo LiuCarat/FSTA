@@ -16,8 +16,8 @@ from utils.FourierAttUtils import EarlyStopping, check_path, set_seed, get_local
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 def prepare_dataloaders(opt, device):
-    path = '../data/sanch/Network' + opt.index + '_amp'
-    ground_truth = np.loadtxt('../data/sanch/ground_truth' + opt.index + '.txt', delimiter='\t')
+    path = './dataset/sanch/Network' + opt.index + '_amp'
+    ground_truth = np.loadtxt('./dataset/sanch/ground_truth' + opt.index + '.txt', delimiter='\t')
 
     all_path = os.listdir(path)
     subjects = len(all_path)
