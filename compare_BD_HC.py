@@ -44,6 +44,7 @@ warnings.filterwarnings('ignore')
 PROJECT_ROOT = Path(__file__).resolve().parent
 ROI_BASE = PROJECT_ROOT / 'dataset' / 'ucla_roi'
 PARTICIPANTS_PATH = PROJECT_ROOT / 'dataset' / 'ucla_cnp' / 'participants.tsv'
+PHENOTYPE_DIR = PROJECT_ROOT / 'dataset' / 'ucla_cnp' / 'phenotype'
 OUT_BASE = PROJECT_ROOT / 'out' / 'ucla_cnp'
 
 # FSTA 相关 import
@@ -114,6 +115,9 @@ def load_timeseries_and_phenotype(atlas='HO55', groups=('BD', 'HC')):
     qc['subject'] = qc['subject'].astype(str)
 
     # 合并: subject_id → group + age + sex + scanner + mean_fd
+    # 同时加载额外的 phenotype 数据
+    extra = _load_extra_phenotype(all_subjects)
+
     records = []
     for sid, grp in zip(all_subjects, all_groups):
         pheno_row = participants[participants['participant_id'] == sid]
@@ -131,6 +135,9 @@ def load_timeseries_and_phenotype(atlas='HO55', groups=('BD', 'HC')):
         # 扫描仪: 编码为数值
         scanner = float(pheno_row['ScannerSerialNumber'].values[0])
 
+        # 额外 phenotype
+        ex = extra.get(sid, {})
+
         records.append({
             'subject_id': sid,
             'group': grp,
@@ -139,16 +146,100 @@ def load_timeseries_and_phenotype(atlas='HO55', groups=('BD', 'HC')):
             'sex': sex,
             'scanner': scanner,
             'mean_fd': float(qc_row['mean_fd'].values[0]),
+            'school_yrs': ex.get('school_yrs', np.nan),
+            'n_medications': ex.get('n_medications', 0),
+            'ymrs_score': ex.get('ymrs_score', np.nan),
+            'hamd_17': ex.get('hamd_17', np.nan),
         })
 
     pheno = pd.DataFrame(records)
     n_bd = (pheno['is_BD'] == 1).sum()
     n_hc = (pheno['is_BD'] == 0).sum()
+
+    # 填充缺失的教育年限为中位数
+    if pheno['school_yrs'].isna().any():
+        median_edu = pheno['school_yrs'].median()
+        pheno['school_yrs'].fillna(median_edu, inplace=True)
+
     print(f'[人口学] BD={n_bd}, HC={n_hc}, '
           f'年龄 {pheno["age"].mean():.1f}±{pheno["age"].std():.1f}, '
-          f'女 {pheno["sex"].sum()}/{len(pheno)}')
+          f'女 {pheno["sex"].sum()}/{len(pheno)}, '
+          f'教育 {pheno["school_yrs"].mean():.1f}±{pheno["school_yrs"].std():.1f} 年')
+    print(f'[人口学] BD 用药: {(pheno[pheno["is_BD"]==1]["n_medications"]>0).sum()}/{n_bd} '
+          f'(mean={pheno[pheno["is_BD"]==1]["n_medications"].mean():.1f}种)')
+    print(f'[人口学] BD ymrs: {pheno[pheno["is_BD"]==1]["ymrs_score"].mean():.1f}±{pheno[pheno["is_BD"]==1]["ymrs_score"].std():.1f}, '
+          f'hamd_17: {pheno[pheno["is_BD"]==1]["hamd_17"].mean():.1f}±{pheno[pheno["is_BD"]==1]["hamd_17"].std():.1f}')
+
+    # 组间差异检验
+    bd = pheno[pheno['is_BD'] == 1]
+    hc = pheno[pheno['is_BD'] == 0]
+    from scipy import stats
+    for var, label in [('age', '年龄'), ('sex', '性别(F)'), ('school_yrs', '教育年限'),
+                         ('mean_fd', 'mean FD'), ('n_medications', '用药种数')]:
+        t, p = stats.ttest_ind(bd[var], hc[var], equal_var=False)
+        sig = '*' if p < 0.05 else 'ns'
+        print(f'[组间] {label}: BD={bd[var].mean():.2f}±{bd[var].std():.2f}, '
+              f'HC={hc[var].mean():.2f}±{hc[var].std():.2f}, p={p:.4f} {sig}')
 
     return data, all_subjects, pheno
+
+
+def _load_extra_phenotype(subject_ids):
+    """
+    加载额外 phenotype 数据: 教育年限、用药、YMRS、Hamilton。
+
+    Returns:
+        dict: {subject_id: {school_yrs, n_medications, ymrs_score, hamd_17}}
+    """
+    extra = {sid: {} for sid in subject_ids}
+
+    # --- demographics.tsv: school_yrs ---
+    demo_path = PHENOTYPE_DIR / 'demographics.tsv'
+    if demo_path.exists():
+        demo = pd.read_csv(demo_path, sep='\t')
+        demo['participant_id'] = demo['participant_id'].str.replace('sub-', '', regex=False)
+        for sid in subject_ids:
+            row = demo[demo['participant_id'] == sid]
+            if not row.empty:
+                extra[sid]['school_yrs'] = pd.to_numeric(row['school_yrs'].values[0], errors='coerce')
+
+    # --- medication.tsv: 统计用药种数 ---
+    med_path = PHENOTYPE_DIR / 'medication.tsv'
+    if med_path.exists():
+        med = pd.read_csv(med_path, sep='\t')
+        med['participant_id'] = med['participant_id'].str.replace('sub-', '', regex=False)
+        med_name_cols = [c for c in med.columns if c.startswith('med_name')]
+        for sid in subject_ids:
+            row = med[med['participant_id'] == sid]
+            if not row.empty:
+                n = sum(1 for c in med_name_cols
+                        if pd.notna(row[c].values[0])
+                        and str(row[c].values[0]).strip() not in ('', 'n/a'))
+                extra[sid]['n_medications'] = n
+            else:
+                extra[sid]['n_medications'] = 0
+
+    # --- ymrs.tsv: ymrs_score (仅BD有数据) ---
+    ymrs_path = PHENOTYPE_DIR / 'ymrs.tsv'
+    if ymrs_path.exists():
+        ymrs = pd.read_csv(ymrs_path, sep='\t')
+        ymrs['participant_id'] = ymrs['participant_id'].str.replace('sub-', '', regex=False)
+        for sid in subject_ids:
+            row = ymrs[ymrs['participant_id'] == sid]
+            if not row.empty and 'ymrs_score' in ymrs.columns:
+                extra[sid]['ymrs_score'] = pd.to_numeric(row['ymrs_score'].values[0], errors='coerce')
+
+    # --- hamilton.tsv: hamd_17 (仅BD有数据) ---
+    ham_path = PHENOTYPE_DIR / 'hamilton.tsv'
+    if ham_path.exists():
+        ham = pd.read_csv(ham_path, sep='\t')
+        ham['participant_id'] = ham['participant_id'].str.replace('sub-', '', regex=False)
+        for sid in subject_ids:
+            row = ham[ham['participant_id'] == sid]
+            if not row.empty and 'hamd_17' in ham.columns:
+                extra[sid]['hamd_17'] = pd.to_numeric(row['hamd_17'].values[0], errors='coerce')
+
+    return extra
 
 
 # ============================================================
@@ -281,14 +372,17 @@ def glm_per_edge(all_adjs, pheno):
     print(f'\n[GLM] {S} 人 × {N} 节点, 共 {N*(N-1)//2} 条边')
 
     # 构建设计矩阵
-    X_cols = ['is_BD', 'age', 'sex', 'scanner', 'mean_fd']
+    # edge ~ is_BD + age + sex + school_yrs + scanner + mean_fd
+    # 注意: n_medications 与 is_BD 高度共线 (BD→用药, HC→不用药),
+    # 不纳入主模型, 仅做描述统计; 可另做 BD 组内 medicated vs unmedicated 比较
     X = np.column_stack([
         np.ones(S),                      # 截距
-        pheno['is_BD'].values,
-        pheno['age'].values,
-        pheno['sex'].values,
-        pheno['scanner'].values,
-        pheno['mean_fd'].values,
+        pheno['is_BD'].values,           # 核心预测变量 (BD vs HC)
+        pheno['age'].values,             # 年龄
+        pheno['sex'].values,             # 性别 (0=M, 1=F)
+        pheno['school_yrs'].values,      # 教育年限
+        pheno['scanner'].values,         # 扫描仪
+        pheno['mean_fd'].values,         # 头动
     ])
     n_predictors = X.shape[1]
 
