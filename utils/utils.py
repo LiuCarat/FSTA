@@ -231,22 +231,3 @@ def save_metrics_csv(csv_path, metrics, headers=None):
     print(f"[CSV] 指标已保存至 {csv_path}")
 
 
-def real_data_label(pos):
-    '''pos is a string'''
-    if pos == "left":
-        ground_truth  = np.array([[0, 1, 1, 0, 0, 1, 0],
-                                  [1, 0, 1, 0, 0, 0, 0],
-                                  [1, 0, 0, 1, 1, 0, 0],
-                                  [0, 1, 1, 0, 1, 0, 1],
-                                  [0, 0, 0, 1, 0, 1, 0],
-                                  [0, 0, 0, 0, 1, 0, 0],
-                                  [0, 0, 1, 1, 0, 0, 0]])
-    else:
-        ground_truth = np.array([[0, 1, 1, 0, 0, 1, 0],
-                                  [1, 0, 1, 0, 0, 0, 0],
-                                  [1, 0, 0, 1, 1, 0, 0],
-                                  [0, 1, 1, 0, 1, 0, 1],
-                                  [0, 0, 0, 1, 0, 1, 0],
-                                  [0, 0, 0, 0, 1, 0, 0],
-                                  [0, 0, 1, 1, 0, 0, 0]])
-    return ground_truth
