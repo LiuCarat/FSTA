@@ -87,15 +87,15 @@ def train(data_loader, ground_truth, device, opt):
         adj[np.arange(opt.nodes_num), np.arange(opt.nodes_num)] = 0
         opt.threshold = softThres(adj, opt.soft_threshold)
         adj_binary = change01(adj, threshold=opt.threshold)
-        precision, recall, F1, accuracy, SHD = cal_metrics(adj_binary, ground_truth)
+        precision, recall, F1, accuracy, SHD, TP, FP, FN, total_pred = cal_metrics_detailed(adj_binary, ground_truth)
         if epoch_i % 100 == 0:
-            print(f'epoch:{epoch_i}, loss:{train_loss: .3f}, precision:{precision}, recall:{recall}, F1:{F1}, accuracy:{accuracy}, SHD:{SHD}')
+            print(f'epoch:{epoch_i}, loss:{train_loss: .3f}, TP:{TP}, FP:{FP}, FN:{FN}, pred_edges:{total_pred}, SHD:{SHD}')
             print("threshold:", opt.threshold)
             print(adj_init)
             print(adj_binary)
         gc.collect()
         torch.cuda.empty_cache()
-    return adj, precision, recall, F1, accuracy, SHD
+    return adj, TP, FP, FN, total_pred, SHD
 
 def main():
     parser = argparse.ArgumentParser()
@@ -141,7 +141,8 @@ def main():
     parser.add_argument("--weight_decay", default=0.0, type=float, help="weight_decay of adam")
     parser.add_argument("--adam_beta1", default=0.9, type=float, help="adam first beta value")
     parser.add_argument("--adam_beta2", default=0.999, type=float, help="adam second beta value")
-    parser.add_argument("--gpu_id", default="0", type=str, help="gpu_id")
+    parser.add_argument("--gpu_id", default="auto", type=str,
+                        help="GPU device ID: 'auto'=自动选择空闲最多的GPU, '0'/'1'=指定GPU, 'cpu'=CPU")
     parser.add_argument("--variance", default=5, type=float)
 
     opt = parser.parse_args()
@@ -155,7 +156,7 @@ def main():
         np.random.seed(opt.seed)
         random.seed(opt.seed)
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = get_free_device(opt.gpu_id)
 
     #========= Loading Dataset =========#
     opt.d_model = 16
@@ -172,15 +173,20 @@ def main():
     metrics = []
     for i in range(1, runs + 1):
         print('runs:', i)
-        adj, precision, recall, F1, accuracy, SHD = train(data_loader, ground_truth, device, opt)
+        adj, TP, FP, FN, total_pred, SHD = train(data_loader, ground_truth, device, opt)
         path = './out/real/' + opt.pos
         if not os.path.exists(path):
             os.makedirs(path)
-        np.savetxt(path + "/" + str(i + 1) + ".txt", adj, fmt='%.04f', delimiter='\t')
-        metrics.append([precision, recall, F1, accuracy, SHD])
+        # 保存连续值邻接矩阵
+        np.savetxt(path + "/" + str(i) + ".txt", adj, fmt='%.04f', delimiter='\t')
+        metrics.append([TP, FP, FN, total_pred, SHD])
     mu = np.mean(metrics, axis=0)
     std = np.std(metrics, axis=0)
     print(f'mu:{mu}, std:{std}')
+
+    # 保存指标到 CSV
+    headers = ['run', 'TP', 'FP', 'FN', 'pred_edges', 'SHD']
+    save_metrics_csv(path + '/metrics.csv', metrics, headers=headers)
 
 if __name__ == '__main__':
     main()

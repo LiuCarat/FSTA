@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
+*.vscode
+*.claude
 
 # Conda
 .conda-auto
@@ -10,11 +12,21 @@ __pycache__/
 # Output
 out/
 
-# Dataset backups (keep raw backups locally, not in git)
-dataset/sanch/_backup/
-dataset/_backup_fmri/
-
 # IDE
 .idea/
 *.swp
 *.swo
+
+# ucla_cnp 原始 BIDS / fMRIPrep 输出 (85GB, 不纳入 git)
+dataset/ucla_cnp/sub-*/
+dataset/ucla_cnp/derivatives/
+dataset/ucla_cnp/license.txt
+dataset/ucla_cnp/.pipeline_tmp/
+dataset/ucla_cnp/pipeline_logs/
+dataset/ucla_cnp/*_pipeline_done.txt
+
+# ucla_roi 提取后的 ROI 时间序列 (约 40MB, 纳入 git 方便复现)
+!dataset/ucla_roi/
+
+# 旧路径兼容
+!dataset/roi_timeseries/

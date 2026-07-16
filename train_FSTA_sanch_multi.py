@@ -141,7 +141,8 @@ def main():
     parser.add_argument("--weight_decay", default=0.0, type=float, help="weight_decay of adam")
     parser.add_argument("--adam_beta1", default=0.9, type=float, help="adam first beta value")
     parser.add_argument("--adam_beta2", default=0.999, type=float, help="adam second beta value")
-    parser.add_argument("--gpu_id", default="0", type=str, help="gpu_id")
+    parser.add_argument("--gpu_id", default="auto", type=str,
+                        help="GPU device ID: 'auto'=自动选择空闲最多的GPU, '0'/'1'=指定GPU, 'cpu'=CPU")
     parser.add_argument("--variance", default=5, type=float)
 
     opt = parser.parse_args()
@@ -155,7 +156,7 @@ def main():
         np.random.seed(opt.seed)
         random.seed(opt.seed)
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = get_free_device(opt.gpu_id)
 
     #========= Loading Dataset =========#
     opt.d_model = 16
@@ -182,6 +183,9 @@ def main():
     mu = np.mean(metrics, axis=0)
     std = np.std(metrics, axis=0)
     print(f'mu:{mu}, std:{std}')
+
+    # 保存指标到 CSV
+    save_metrics_csv(path + '/metrics.csv', metrics)
 
 if __name__ == '__main__':
     main()

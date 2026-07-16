@@ -1,0 +1,111 @@
+column	label_id	roi_name
+X1	1	Left Frontal Pole
+X2	2	Right Frontal Pole
+X3	3	Left Insular Cortex
+X4	4	Right Insular Cortex
+X5	5	Left Superior Frontal Gyrus
+X6	6	Right Superior Frontal Gyrus
+X7	7	Left Middle Frontal Gyrus
+X8	8	Right Middle Frontal Gyrus
+X9	9	Left Inferior Frontal Gyrus, pars triangularis
+X10	10	Right Inferior Frontal Gyrus, pars triangularis
+X11	11	Left Inferior Frontal Gyrus, pars opercularis
+X12	12	Right Inferior Frontal Gyrus, pars opercularis
+X13	13	Left Precentral Gyrus
+X14	14	Right Precentral Gyrus
+X15	15	Left Temporal Pole
+X16	16	Right Temporal Pole
+X17	17	Left Superior Temporal Gyrus, anterior division
+X18	18	Right Superior Temporal Gyrus, anterior division
+X19	19	Left Superior Temporal Gyrus, posterior division
+X20	20	Right Superior Temporal Gyrus, posterior division
+X21	21	Left Middle Temporal Gyrus, anterior division
+X22	22	Right Middle Temporal Gyrus, anterior division
+X23	23	Left Middle Temporal Gyrus, posterior division
+X24	24	Right Middle Temporal Gyrus, posterior division
+X25	25	Left Middle Temporal Gyrus, temporooccipital part
+X26	26	Right Middle Temporal Gyrus, temporooccipital part
+X27	27	Left Inferior Temporal Gyrus, anterior division
+X28	28	Right Inferior Temporal Gyrus, anterior division
+X29	29	Left Inferior Temporal Gyrus, posterior division
+X30	30	Right Inferior Temporal Gyrus, posterior division
+X31	31	Left Inferior Temporal Gyrus, temporooccipital part
+X32	32	Right Inferior Temporal Gyrus, temporooccipital part
+X33	33	Left Postcentral Gyrus
+X34	34	Right Postcentral Gyrus
+X35	35	Left Superior Parietal Lobule
+X36	36	Right Superior Parietal Lobule
+X37	37	Left Supramarginal Gyrus, anterior division
+X38	38	Right Supramarginal Gyrus, anterior division
+X39	39	Left Supramarginal Gyrus, posterior division
+X40	40	Right Supramarginal Gyrus, posterior division
+X41	41	Left Angular Gyrus
+X42	42	Right Angular Gyrus
+X43	43	Left Lateral Occipital Cortex, superior division
+X44	44	Right Lateral Occipital Cortex, superior division
+X45	45	Left Lateral Occipital Cortex, inferior division
+X46	46	Right Lateral Occipital Cortex, inferior division
+X47	47	Left Intracalcarine Cortex
+X48	48	Right Intracalcarine Cortex
+X49	49	Left Frontal Medial Cortex
+X50	50	Right Frontal Medial Cortex
+X51	51	Left Juxtapositional Lobule Cortex (formerly Supplementary Motor Cortex)
+X52	52	Right Juxtapositional Lobule Cortex (formerly Supplementary Motor Cortex)
+X53	53	Left Subcallosal Cortex
+X54	54	Right Subcallosal Cortex
+X55	55	Left Paracingulate Gyrus
+X56	56	Right Paracingulate Gyrus
+X57	57	Left Cingulate Gyrus, anterior division
+X58	58	Right Cingulate Gyrus, anterior division
+X59	59	Left Cingulate Gyrus, posterior division
+X60	60	Right Cingulate Gyrus, posterior division
+X61	61	Left Precuneous Cortex
+X62	62	Right Precuneous Cortex
+X63	63	Left Cuneal Cortex
+X64	64	Right Cuneal Cortex
+X65	65	Left Frontal Orbital Cortex
+X66	66	Right Frontal Orbital Cortex
+X67	67	Left Parahippocampal Gyrus, anterior division
+X68	68	Right Parahippocampal Gyrus, anterior division
+X69	69	Left Parahippocampal Gyrus, posterior division
+X70	70	Right Parahippocampal Gyrus, posterior division
+X71	71	Left Lingual Gyrus
+X72	72	Right Lingual Gyrus
+X73	73	Left Temporal Fusiform Cortex, anterior division
+X74	74	Right Temporal Fusiform Cortex, anterior division
+X75	75	Left Temporal Fusiform Cortex, posterior division
+X76	76	Right Temporal Fusiform Cortex, posterior division
+X77	77	Left Temporal Occipital Fusiform Cortex
+X78	78	Right Temporal Occipital Fusiform Cortex
+X79	79	Left Occipital Fusiform Gyrus
+X80	80	Right Occipital Fusiform Gyrus
+X81	81	Left Frontal Opercular Cortex
+X82	82	Right Frontal Opercular Cortex
+X83	83	Left Central Opercular Cortex
+X84	84	Right Central Opercular Cortex
+X85	85	Left Parietal Opercular Cortex
+X86	86	Right Parietal Opercular Cortex
+X87	87	Left Planum Polare
+X88	88	Right Planum Polare
+X89	89	Left Heschl's Gyrus (includes H1 and H2)
+X90	90	Right Heschl's Gyrus (includes H1 and H2)
+X91	91	Left Planum Temporale
+X92	92	Right Planum Temporale
+X93	93	Left Supracalcarine Cortex
+X94	94	Right Supracalcarine Cortex
+X95	95	Left Occipital Pole
+X96	96	Right Occipital Pole
+X97	97	Left Thalamus
+X98	98	Left Caudate
+X99	99	Left Putamen
+X100	100	Left Pallidum
+X101	101	Left Hippocampus
+X102	102	Left Amygdala
+X103	103	Left Accumbens
+X104	104	Right Thalamus
+X105	105	Right Caudate
+X106	106	Right Putamen
+X107	107	Right Pallidum
+X108	108	Right Hippocampus
+X109	109	Right Amygdala
+X110	110	Right Accumbens

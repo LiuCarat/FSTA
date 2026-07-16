@@ -11,6 +11,52 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 cuda = True if torch.cuda.is_available() else False
 Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
+
+def get_free_device(gpu_id="auto"):
+    """
+    获取可用的 GPU 设备。
+
+    Args:
+        gpu_id: "auto" = 自动选择空闲显存最多的 GPU;
+                "0", "1", ... = 使用指定编号的 GPU;
+                "cpu" = CPU
+
+    Returns:
+        torch.device
+    """
+    if not torch.cuda.is_available():
+        print("[GPU] CUDA 不可用, 回退到 CPU")
+        return torch.device("cpu")
+
+    num_gpus = torch.cuda.device_count()
+
+    if gpu_id == "auto":
+        # 比较所有 GPU 的可用显存, 选择空闲最多的
+        best_idx = 0
+        max_free = 0
+        for i in range(num_gpus):
+            free_bytes, total_bytes = torch.cuda.mem_get_info(i)
+            free_gb = free_bytes / (1024 ** 3)
+            total_gb = total_bytes / (1024 ** 3)
+            print(f"[GPU] GPU {i} ({torch.cuda.get_device_name(i)}): "
+                  f"空闲 {free_gb:.1f}GB / 总计 {total_gb:.1f}GB")
+            if free_bytes > max_free:
+                max_free = free_bytes
+                best_idx = i
+        print(f"[GPU] 自动选择 GPU {best_idx} (空闲 {max_free/(1024**3):.1f}GB)")
+        return torch.device(f"cuda:{best_idx}")
+    elif gpu_id == "cpu":
+        print("[GPU] 使用 CPU")
+        return torch.device("cpu")
+    else:
+        try:
+            idx = int(gpu_id)
+        except ValueError:
+            print(f"[GPU] 无法解析 gpu_id='{gpu_id}', 回退到 GPU 0")
+            idx = 0
+        print(f"[GPU] 使用指定 GPU {idx} ({torch.cuda.get_device_name(idx)})")
+        return torch.device(f"cuda:{idx}")
+
 # Read all txt file data in the directory, each txt file represents a subject
 def load_data_txt(path):
     '''return: data [M, T, N], M: number of samples'''
@@ -121,6 +167,31 @@ def cal_metrics(pre, ground_truth):
     # print(precision, recall, F1, accuracy, SHD)
     return precision, recall, F1, accuracy, SHD
 
+
+def cal_metrics_detailed(pre, ground_truth):
+    """
+    计算详细评估指标，包含 TP, FP, FN 和预测边总数。
+
+    Returns:
+        precision, recall, F1, accuracy, SHD, TP, FP, FN, total_pred_edges
+    """
+    ground_truth = (ground_truth == 1)
+    pre = (pre == 1)
+    TP = int(np.sum(pre & ground_truth))
+    FP = int(np.sum(pre & (~ground_truth)))
+    FN = int(np.sum((~pre) & ground_truth))
+    TN = int(np.sum((~pre) & (~ground_truth)))
+
+    precision = TP / (TP + FP + 1e-9)
+    recall = TP / (TP + FN + 1e-9)
+    F1 = 2 * precision * recall / (precision + recall + 1e-9)
+    accuracy = (TP + TN) / (TP + FP + FN + TN)
+    SHD = FP + FN
+    total_pred_edges = TP + FP
+
+    return precision, recall, F1, accuracy, SHD, TP, FP, FN, total_pred_edges
+
+
 def softThres(adj, soft_threshold):
     N = adj.shape[0]
     min_value = 10000000
@@ -130,6 +201,35 @@ def softThres(adj, soft_threshold):
             if i !=j and adj[i, j] < min_value:
                 min_value = adj[i, j]
     return min_value + (adj.max() - min_value) * soft_threshold
+
+def save_metrics_csv(csv_path, metrics, headers=None):
+    """
+    将 20 次 run 的评估指标保存为 CSV 文件。
+
+    Args:
+        csv_path:  CSV 文件路径 (e.g. './out/sanch/sim1/metrics.csv')
+        metrics:   list of lists, 每行 = [precision, recall, F1, accuracy, SHD]
+        headers:   列名列表, 默认 ['run', 'precision', 'recall', 'F1', 'accuracy', 'SHD']
+    """
+    import csv
+    if headers is None:
+        headers = ['run', 'precision', 'recall', 'F1', 'accuracy', 'SHD']
+
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        for i, row in enumerate(metrics, 1):
+            writer.writerow([i] + [round(v, 6) for v in row])
+
+        # 末尾追加均值 ± 标准差
+        arr = np.array(metrics)
+        mu = np.mean(arr, axis=0)
+        std = np.std(arr, axis=0)
+        writer.writerow(['mean'] + [round(v, 6) for v in mu.tolist()])
+        writer.writerow(['std'] + [round(v, 6) for v in std.tolist()])
+
+    print(f"[CSV] 指标已保存至 {csv_path}")
+
 
 def real_data_label(pos):
     '''pos is a string'''
