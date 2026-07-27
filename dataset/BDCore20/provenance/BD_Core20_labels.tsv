@@ -1,0 +1,21 @@
+index	name	hemisphere	network	source_atlas	construction	source_labels
+1	vmPFC_mOFC_L	L	Default/valuation	AAL3 (user supplied)	union of source labels	Frontal_Med_Orb_L
+2	vmPFC_mOFC_R	R	Default/valuation	AAL3 (user supplied)	union of source labels	Frontal_Med_Orb_R
+3	dlPFC_L	L	Executive control	AAL3 (user supplied)	union of source labels	Frontal_Mid_2_L
+4	dlPFC_R	R	Executive control	AAL3 (user supplied)	union of source labels	Frontal_Mid_2_R
+5	vlPFC_L	L	Executive control	AAL3 (user supplied)	union of source labels	Frontal_Inf_Oper_L; Frontal_Inf_Tri_L
+6	vlPFC_R	R	Executive control	AAL3 (user supplied)	union of source labels	Frontal_Inf_Oper_R; Frontal_Inf_Tri_R
+7	Anterior_Insula_L	L	Salience/interoception	AAL3 (user supplied)	complete ipsilateral insula; retain only voxels with affine-derived MNI y > 0	Insula_L
+8	Anterior_Insula_R	R	Salience/interoception	AAL3 (user supplied)	complete ipsilateral insula; retain only voxels with affine-derived MNI y > 0	Insula_R
+9	sgACC_L	L	Limbic/mood	AAL3 (user supplied)	union of source labels	ACC_sub_L
+10	sgACC_R	R	Limbic/mood	AAL3 (user supplied)	union of source labels	ACC_sub_R
+11	Amygdala_L	L	Limbic/mood	AAL3 (user supplied)	union of source labels	Amygdala_L
+12	Amygdala_R	R	Limbic/mood	AAL3 (user supplied)	union of source labels	Amygdala_R
+13	NAcc_L	L	Reward	AAL3 (user supplied)	union of source labels	N_Acc_L
+14	NAcc_R	R	Reward	AAL3 (user supplied)	union of source labels	N_Acc_R
+15	Caudate_L	L	Striatal	AAL3 (user supplied)	union of source labels	Caudate_L
+16	Caudate_R	R	Striatal	AAL3 (user supplied)	union of source labels	Caudate_R
+17	Putamen_L	L	Striatal	AAL3 (user supplied)	union of source labels	Putamen_L
+18	Putamen_R	R	Striatal	AAL3 (user supplied)	union of source labels	Putamen_R
+19	Thalamus_L	L	Thalamic	AAL3 (user supplied)	union of source labels	Thal_AV_L; Thal_LP_L; Thal_VA_L; Thal_VL_L; Thal_VPL_L; Thal_IL_L; Thal_Re_L; Thal_MDm_L; Thal_MDl_L; Thal_LGN_L; Thal_MGN_L; Thal_PuI_L; Thal_PuM_L; Thal_PuA_L; Thal_PuL_L
+20	Thalamus_R	R	Thalamic	AAL3 (user supplied)	union of source labels	Thal_AV_R; Thal_LP_R; Thal_VA_R; Thal_VL_R; Thal_VPL_R; Thal_IL_R; Thal_Re_R; Thal_MDm_R; Thal_MDl_R; Thal_LGN_R; Thal_MGN_R; Thal_PuI_R; Thal_PuM_R; Thal_PuA_R; Thal_PuL_R

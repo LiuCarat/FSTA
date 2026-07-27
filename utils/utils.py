@@ -39,7 +39,7 @@ def get_free_device(gpu_id="auto"):
             free_gb = free_bytes / (1024 ** 3)
             total_gb = total_bytes / (1024 ** 3)
             print(f"[GPU] GPU {i} ({torch.cuda.get_device_name(i)}): "
-                  f"空闲 {free_gb:.1f}GB / 总计 {total_gb:.1f}GB")
+                    f"空闲 {free_gb:.1f}GB / 总计 {total_gb:.1f}GB")
             if free_bytes > max_free:
                 max_free = free_bytes
                 best_idx = i
@@ -201,6 +201,26 @@ def softThres(adj, soft_threshold):
             if i !=j and adj[i, j] < min_value:
                 min_value = adj[i, j]
     return min_value + (adj.max() - min_value) * soft_threshold
+
+
+def real_data_label(pos):
+    """7×7 地面真值有向连接矩阵，用于 MTL 数据集的验证。
+    Args:
+        pos: 'left' 或 'right' (相同矩阵，历史遗留)
+
+    Returns:
+        7×7 binary numpy array, A[i,j] = 1 表示 ROI i → ROI j 存在有向边
+    """
+    # 原始 FSTA 论文中基于 MTL 数据集的 7 个 ROI 定义的有向连接
+    ground_truth = np.array([[0, 1, 1, 0, 0, 1, 0],
+                                [1, 0, 1, 0, 0, 0, 0],
+                                [1, 0, 0, 1, 1, 0, 0],
+                                [0, 1, 1, 0, 1, 0, 1],
+                                [0, 0, 0, 1, 0, 1, 0],
+                                [0, 0, 0, 0, 1, 0, 0],
+                                [0, 0, 1, 1, 0, 0, 0]])
+    return ground_truth
+
 
 def save_metrics_csv(csv_path, metrics, headers=None):
     """
