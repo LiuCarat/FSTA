@@ -1,21 +1,41 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
 *.egg-info/
-*.vscode
-*.claude
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
 
-# Conda
+# Python / Conda environments
 .conda-auto
+.venv/
+venv/
+.env
 
-# Output
+# Generated experiment outputs and model checkpoints
 out/
+downstream_abide_i/outputs/
+downstream_bec/outputs/
+*.pt
+*.pth
+*.ckpt
 
 # IDE
+.vscode/
+.claude/
 .idea/
 *.swp
 *.swo
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Local neuroimaging datasets
+dataset/ABIDE-I/
+dataset/ADHD200/
 
 # ucla_cnp 原始 BIDS / fMRIPrep 输出 (85GB, 不纳入 git)
 dataset/ucla_cnp/sub-*/

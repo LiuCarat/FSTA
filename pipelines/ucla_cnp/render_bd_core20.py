@@ -1,18 +1,10 @@
 #!/usr/bin/env python3
 """使用 Matplotlib 绘制 BD-Core20 ROI atlas 的冠状面、矢状面和轴位三维视图。
-
-改进点：
-  1. 仅保留 Matplotlib 渲染流程。
-  2. 使用 fsaverage 的 sulcal depth（脑沟深度）为皮层着色。
-  3. 根据三角面法向量加入方向光照，增强脑回/脑沟层次。
-  4. 默认提高皮层不透明度，并对远近 ROI 添加深度提示。
-  5. 默认使用透视投影；需要标准正投影时可传入 --projection ortho。
-
 用法示例:
-  python render_bd_core20_matplotlib.py
-  python render_bd_core20_matplotlib.py --surface-alpha 0.20
-  python render_bd_core20_matplotlib.py --projection ortho
-  python render_bd_core20_matplotlib.py --mesh fsaverage6 --dpi 400
+    python render_bd_core20_matplotlib.py
+    python render_bd_core20_matplotlib.py --surface-alpha 0.20
+    python render_bd_core20_matplotlib.py --projection ortho
+    python render_bd_core20_matplotlib.py --mesh fsaverage6 --dpi 400
 """
 
 from __future__ import annotations
