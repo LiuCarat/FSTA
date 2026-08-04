@@ -1,9 +1,13 @@
 {
-    "python.defaultInterpreterPath": "/data/users/liulin/miniconda3/envs/default/bin/python",
+    "python.defaultInterpreterPath": "/data/users/liulin/miniconda3/envs/fs2g/bin/python",
     "python.terminal.activateEnvironment": true,
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}"
+    ],
     "terminal.integrated.env.linux": {
-        "CONDA_DEFAULT_ENV": "default"
+        "CONDA_DEFAULT_ENV": "fs2g"
     },
     "python-envs.defaultEnvManager": "ms-python.python:conda",
-    "python-envs.defaultPackageManager": "ms-python.python:conda"
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "Codegeex.RepoIndex": true
 }

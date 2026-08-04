@@ -108,7 +108,7 @@ def fixed_window_starts(time_points, window_length, stride):
 
 
 def build_model(args, device):
-    """使用当前参数构建原始 FSTA 模型，不修改 model/FSTA.py。"""
+    """使用当前参数构建纯 fMRI FSTA 模型。"""
     options = argparse.Namespace(
         **vars(args),
         nodes_num=ROI_COUNT,
@@ -288,14 +288,14 @@ def parse_args():
     parser.add_argument("--derivative", default="rois_aal")
     parser.add_argument(
         "--output_root",
-        default=str(REPO_ROOT / "downstream_abide_i/outputs"),
+        default=str(REPO_ROOT / "downstream_abide_i/outputs/FSTA_BEC"),
     )
     parser.add_argument("--output_dir")
-    parser.add_argument("--loss_mode", choices=SharedWindowLoss.MODES, default="original")
-    parser.add_argument("--loss_alpha", type=float, default=0.8)
+    parser.add_argument("--loss_mode", choices=SharedWindowLoss.MODES, default="entropy")
+    parser.add_argument("--loss_alpha", type=float, default=0.01)
     parser.add_argument("--window_length", type=int, default=78)
     parser.add_argument("--stride", type=int, default=39)
-    parser.add_argument("--epochs", type=int, default=31)
+    parser.add_argument("--epochs", type=int, default=101)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--log_every", type=int, default=5)
     parser.add_argument("--subject_log_every", type=int, default=100)
@@ -369,7 +369,7 @@ def main():
     )
     print(
         f"Loaded {len(records)} subjects; one random [{args.window_length},90] "
-        f"window per subject per epoch; device={device}"
+        f"window per subject per epoch; model=FSTA_BEC; device={device}"
     )
     # 训练共享 FSTA 模型，并保存模型参数。
     model, final_training_metrics = train_shared_model(args, dataset, device)
@@ -397,6 +397,7 @@ def main():
         "result": {
             "subjects": len(records),
             "atlas": "AAL90",
+            "model_variant": "FSTA_BEC",
             "bec_path": str(output_dir / "subject_bec.npz"),
             "transductive_shared_training": True,
             "final_training_metrics": final_training_metrics,
