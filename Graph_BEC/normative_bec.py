@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+# 将输入的数据转换为 NumPy 的二维数组格式。如果输入的数据已经是二维数组，则直接返回；如果输入的数据是一维数组，则在第二个维度上添加一个维度；如果输入的数据不是二维数组，则抛出一个 ValueError 异常。
 def _as_2d(values, name):
     values = np.asarray(values)
     if values.ndim == 1:
@@ -16,22 +17,25 @@ def _as_2d(values, name):
     return values
 
 
+# 用于对连续值数据进行标准化处理，通过计算每个特征的中位数、均值和标准差来生成缩放参数
 def fit_continuous_scaler(values):
-    values = _as_2d(values, "continuous values").astype(np.float64)
-    median = np.nanmedian(values, axis=0)
-    median[~np.isfinite(median)] = 0.0
-    filled = np.where(np.isfinite(values), values, median)
-    mean, std = filled.mean(axis=0), filled.std(axis=0)
-    std[~np.isfinite(std) | (std < 1e-6)] = 1.0
+    values = _as_2d(values, "continuous values").astype(np.float64) # 确保输入数据是二维数组格式，并将数据类型转换为 float64
+    median = np.nanmedian(values, axis=0) # 计算每个特征的中位数
+    median[~np.isfinite(median)] = 0.0 # 将非有限值的中位数设置为 0
+    filled = np.where(np.isfinite(values), values, median) # 将非有限值替换为对应特征的中位数
+    mean, std = filled.mean(axis=0), filled.std(axis=0) # 计算每个特征的均值和标准差
+    std[~np.isfinite(std) | (std < 1e-6)] = 1.0 # 将非有限值或小于 1e-6 的标准差设置为 1
     return {"median": median.astype(np.float32), "mean": mean.astype(np.float32), "std": std.astype(np.float32)}
 
 
+# 用于对连续值数据进行标准化处理，将非有限值替换为中位数，并将数据转换为均值为0、标准差为1的标准化形式
 def apply_continuous_scaler(values, scaler):
     values = _as_2d(values, "continuous values").astype(np.float32)
-    filled = np.where(np.isfinite(values), values, scaler["median"])
-    return ((filled - scaler["mean"]) / scaler["std"]).astype(np.float32)
+    filled = np.where(np.isfinite(values), values, scaler["median"]) # 将非有限值替换为对应特征的中位数
+    return ((filled - scaler["mean"]) / scaler["std"]).astype(np.float32) # 将数据标准化为均值为 0，标准差为 1
 
 
+# 从CSV文件中加载指定的分类变量表型数据，并将其进行整数编码
 def load_categorical_phenotypes(phenotype_csv, subject_ids, columns=("SEX", "SITE_ID")):
     subject_ids = np.asarray(subject_ids).astype(str)
     with open(phenotype_csv, newline="", encoding="utf-8-sig") as handle:

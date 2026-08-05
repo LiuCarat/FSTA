@@ -2,8 +2,29 @@
 from __future__ import annotations
 
 import numpy as np
-from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
-from downstream_bec.evaluation.metrics import select_youden_threshold
+from sklearn.metrics import (
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+    roc_curve,
+)
+
+
+def select_youden_threshold(labels, probabilities, fallback=0.5):
+    labels = np.asarray(labels, dtype=np.int64)
+    probabilities = np.asarray(probabilities, dtype=np.float64)
+    if np.unique(labels).size < 2:
+        return float(fallback)
+    false_positive_rate, true_positive_rate, thresholds = roc_curve(
+        labels, probabilities
+    )
+    finite = np.isfinite(thresholds)
+    if not finite.any():
+        return float(fallback)
+    scores = true_positive_rate[finite] - false_positive_rate[finite]
+    finite_thresholds = thresholds[finite]
+    return float(finite_thresholds[np.argmax(scores)])
 
 
 def classification_metrics(labels, probabilities, threshold=0.5):

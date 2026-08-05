@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from .fsta_components import FSTA, ScheduledOptim
-from .losses import FSTAWindowLoss
+from .par_bec import FSTAWindowLoss
 from Graph_BEC.data import RandomSubjectWindowDataset, set_seed
 
 

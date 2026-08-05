@@ -17,14 +17,14 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
-from Graph_BEC.analysis import bec_separability, edge_effect_sizes
+from Graph_BEC.normative_bec import bec_separability, edge_effect_sizes
 from Graph_BEC.data import (
     load_subject_dataset, load_bec_archive, make_stratified_splits,
     prepare_fold_arrays, select_device, set_seed,
 )
 from Graph_BEC.downstream import train_classifier
 from Graph_BEC.model import MatrixGateRefiner, PGRBECStatic, train_fsta, extract_subject_bec
-from Graph_BEC.model.losses import anchor_loss, gate_sparsity_loss, variance_retention_loss
+from Graph_BEC.model.par_bec import anchor_loss, gate_sparsity_loss, variance_retention_loss
 from Graph_BEC.model.pgr_bec_static import static_refinement_loss
 from Graph_BEC.phenotype import load_phenotypes, build_reference_bec
 
@@ -58,7 +58,7 @@ def parse_args():
     parser.add_argument("--loss-mode", choices=["original", "entropy"], default="entropy")
     parser.add_argument("--loss-alpha", type=float, default=0.01)
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--log-every", type=int, default=5)
+    parser.add_argument("--log-every", type=int, default=10)
     parser.add_argument("--d-model", type=int, default=16)
     parser.add_argument("--d-inner-hid", type=int, default=64)
     parser.add_argument("--d-k", type=int, default=8)
@@ -80,14 +80,14 @@ def parse_args():
 
     parser.add_argument("--refiner-epochs", type=int, default=80)
     parser.add_argument("--refiner-lr", type=float, default=1e-2)
-    parser.add_argument("--gate-init", type=float, default=-3.0)
+    parser.add_argument("--gate-init", type=float, default=-1.0)
     parser.add_argument("--refiner-mode", choices=["static", "legacy"], default="static")
-    parser.add_argument("--gate-max", type=float, default=0.2)
+    parser.add_argument("--gate-max", type=float, default=0.5)
     parser.add_argument("--gate-l1-weight", type=float, default=1e-3)
     parser.add_argument("--anchor-weight", type=float, default=1.0)
     parser.add_argument("--variance-weight", type=float, default=1.0)
     parser.add_argument("--variance-retention", type=float, default=0.85)
-    parser.add_argument("--reference-k", type=int, default=8)
+    parser.add_argument("--reference-k", type=int, default=10)
     parser.add_argument("--reference-bandwidth", type=float, default=1.0)
     parser.add_argument("--categorical-penalty", type=float, default=4.0)
     parser.add_argument("--continuous-weights", type=float, nargs=2, default=[1.0, 0.3])
@@ -129,22 +129,27 @@ def load_pipeline_data(args, device):
 
 
 def build_fold_reference(args, arrays):
+    # 创建一个包含常用参数的字典，这些参数将在后续函数调用中使用
     common = dict(k=args.reference_k, bandwidth=args.reference_bandwidth,
                   categorical_penalty=args.categorical_penalty,
                   continuous_weights=args.continuous_weights,
                   permute=args.permute_phenotype, seed=args.seed)
+    # 使用训练集数据构建参考邻居和全局表示，并获取训练集的邻居关系
     train_neighbor, train_global, _ = build_reference_bec(
         arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
         arrays["train_cont"], arrays["train_cat"], **common
     )
+    # 使用训练集数据作为参考，验证集数据作为目标，构建验证集的邻居关系
     val_neighbor, _, _ = build_reference_bec(
         arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
         arrays["val_cont"], arrays["val_cat"], **common
     )
+    # 使用训练集数据作为参考，测试集数据作为目标，构建测试集的邻居关系和诊断信息
     test_neighbor, _, diagnostics = build_reference_bec(
         arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
         arrays["test_cont"], arrays["test_cat"], **common
     )
+    # 返回一个包含各种邻居关系和偏差值的字典
     return {
         "train_neighbor": train_neighbor, "val_neighbor": val_neighbor,
         "test_neighbor": test_neighbor, "train_dev": train_neighbor - train_global,
@@ -272,6 +277,7 @@ def save_results(args, fold_results, fsta_metrics):
 
 def main():
     args = parse_args(); set_seed(args.seed); device = select_device(args.gpu_id)
+    print(f"Loading data from {args.data_root} with phenotype {args.phenotype_csv}...")
     data, fsta_metrics = load_pipeline_data(args, device)
     if np.unique(data["labels"]).size != 2:
         raise ValueError(
