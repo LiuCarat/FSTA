@@ -3,8 +3,6 @@ from __future__ import annotations
 import csv
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 
 # 将输入的数据转换为 NumPy 的二维数组格式。如果输入的数据已经是二维数组，则直接返回；如果输入的数据是一维数组，则在第二个维度上添加一个维度；如果输入的数据不是二维数组，则抛出一个 ValueError 异常。
@@ -112,40 +110,6 @@ def to_directed_channels(bec):
     if bec.ndim != 3:
         raise ValueError(f"Expected BEC [N, nodes, nodes], got {tuple(bec.shape)}")
     return torch.stack((bec, bec.transpose(-1, -2)), dim=1)
-
-
-class MatrixGateRefiner(nn.Module):
-    """Bounded edge-level correction that never receives diagnosis labels."""
-    def __init__(self, nodes_num, gate_init=-3.0, gate_max=0.2, share_gate=False):
-        super().__init__()
-        self.nodes_num, self.gate_max = int(nodes_num), float(gate_max)
-        shape = (1, 1) if share_gate else (nodes_num, nodes_num)
-        self.gate_logits = nn.Parameter(torch.full(shape, float(gate_init)))
-        self.delta_scale = nn.Parameter(torch.tensor(-2.0))
-
-    def forward(self, bec, reference_deviation, return_parts=False):
-        if bec.ndim != 3 or reference_deviation.shape != bec.shape:
-            raise ValueError("BEC and reference_deviation must both be [N, nodes, nodes]")
-        gate = (self.gate_max * torch.sigmoid(self.gate_logits)).expand_as(bec)
-        delta = torch.tanh(self.delta_scale) * reference_deviation
-        refined = bec + gate * delta
-        diagonal = torch.eye(self.nodes_num, device=bec.device, dtype=torch.bool)[None]
-        refined = refined.masked_fill(diagonal, 0.0)
-        return (refined, gate, delta) if return_parts else refined
-
-
-def anchor_loss(refined, original):
-    return F.smooth_l1_loss(refined, original.detach())
-
-
-def gate_sparsity_loss(gate):
-    return gate.abs().mean()
-
-
-def variance_retention_loss(refined, original, retention=0.85):
-    original_variance = original.flatten(1).var(dim=0, unbiased=False).mean()
-    refined_variance = refined.flatten(1).var(dim=0, unbiased=False).mean()
-    return F.relu(float(retention) * original_variance - refined_variance)
 
 
 def bec_separability(bec, labels, tc_label=1):

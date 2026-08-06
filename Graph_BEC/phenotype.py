@@ -62,11 +62,12 @@ def load_aligned_phenotypes(csv_path, subject_ids, columns):
 
 
 def load_phenotypes(phenotype_csv, subject_ids, site_ids):
+    """Load SEX as categorical and FIQ/PIQ as continuous graph features."""
     values = load_aligned_phenotypes(
-        phenotype_csv, subject_ids, ["AGE_AT_SCAN", "SEX", "FIQ"]
+        phenotype_csv, subject_ids, ["SEX", "FIQ", "PIQ"]
     )
-    continuous = values[:, [0, 2]].astype(np.float32)
-    sex = np.where(np.isfinite(values[:, 1]), values[:, 1], -1).astype(str)[:, None]
+    sex = np.where(np.isfinite(values[:, 0]), values[:, 0], -1).astype(str)[:, None]
+    continuous = values[:, [1, 2]].astype(np.float32)
     return {
         "continuous": continuous,
         "categorical_raw": sex,
@@ -94,35 +95,6 @@ def prepare_phenotype_fold(train_cont, val_cont, test_cont, train_cat,
         "test_cat": encode(test_cat)[:, None],
         "scaler": scaler,
     }
-
-
-def build_reference_deviation(train_bec, train_cont, train_cat, query_cont,
-                              query_cat, k=20, bandwidth=1.0,
-                              categorical_penalty=4.0,
-                              continuous_weights=(1.0, 0.3), permute=False,
-                              seed=2026):
-    """Build a train-only, diagnosis-free phenotype reference deviation."""
-    train_cont = np.asarray(train_cont).copy()
-    train_cat = np.asarray(train_cat).copy()
-    if permute:
-        order = np.random.default_rng(seed).permutation(len(train_cont))
-        train_cont, train_cat = train_cont[order], train_cat[order]
-    common = {
-        "reference_continuous": train_cont,
-        "reference_categorical": train_cat,
-        "k": k,
-        "bandwidth": bandwidth,
-        "categorical_penalty": categorical_penalty,
-        "continuous_weights": np.asarray(continuous_weights),
-    }
-    self_indices = np.arange(len(train_cont), dtype=np.int64)
-    train_weights = reference_weights(
-        train_cont, train_cat, self_indices=self_indices, **common
-    )
-    query_weights = reference_weights(query_cont, query_cat, **common)
-    _, global_mean = normative_reference(train_bec, train_weights)
-    query_mean, _ = normative_reference(train_bec, query_weights)
-    return query_mean - global_mean, reference_diagnostics(query_weights)
 
 
 def build_reference_bec(train_bec, train_cont, train_cat, query_cont, query_cat,

@@ -1,4 +1,4 @@
-"""FSTA core with an optional externally supplied spatial BEC path."""
+"""FSTA core model."""
 import torch
 import torch.nn as nn
 from .st_multi_head_att import PositionalEncoding, STMultiHeadAtt, PositionwiseFeedForward
@@ -48,20 +48,3 @@ class FSTA(nn.Module):
             spatial_features, temporal_features, spatial_attention
         )
         return reconstruction, spatial_attention
-
-    def forward_with_bec(self, inputs, bec):
-        """Reconstruct with an external BEC in extractor convention.
-
-        `bec[:, source, target]` is transposed back to the internal attention
-        multiplication convention. The input must be raw attention-space BEC,
-        not a fold-standardized classifier feature.
-        """
-        spatial_features, temporal_features = self._encode(inputs)
-        spatial_attention = bec.transpose(-1, -2).clamp_min(0.0)
-        spatial_attention = spatial_attention / spatial_attention.sum(
-            dim=-1, keepdim=True
-        ).clamp_min(1e-8)
-        reconstruction = self._decode_with_spatial_attention(
-            spatial_features, temporal_features, spatial_attention
-        )
-        return reconstruction

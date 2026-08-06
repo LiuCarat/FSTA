@@ -23,14 +23,16 @@ from Graph_BEC.data import (
     prepare_fold_arrays, select_device, set_seed,
 )
 from Graph_BEC.downstream import train_classifier
-from Graph_BEC.model import MatrixGateRefiner, PGRBECStatic, train_fsta, extract_subject_bec
-from Graph_BEC.model.par_bec import anchor_loss, gate_sparsity_loss, variance_retention_loss
+from Graph_BEC.model import (
+    PGRBECStatic,
+    train_fsta, extract_subject_bec,
+)
 from Graph_BEC.model.pgr_bec_static import static_refinement_loss
 from Graph_BEC.phenotype import load_phenotypes, build_reference_bec
 
 DEFAULT_BEC = ROOT / "downstream_abide_i/outputs/entropy/loss_alpha_0.01/seed_42/epochs_101/subject_bec.npz"
 DEFAULT_DATA_ROOT = ROOT / "dataset/ABIDE-I"
-DEFAULT_PHENOTYPE = ROOT / "dataset/ABIDE-I/Phenotypic_Processing.csv"
+DEFAULT_PHENOTYPE = ROOT / "dataset/ABIDE-I/Phenotypic_Processing_filled.csv"
 DEFAULT_OUTPUT = ROOT / "Graph_BEC/outputs"
 
 
@@ -80,21 +82,20 @@ def parse_args():
 
     parser.add_argument("--refiner-epochs", type=int, default=80)
     parser.add_argument("--refiner-lr", type=float, default=1e-2)
-    parser.add_argument("--gate-init", type=float, default=-1.0)
-    parser.add_argument("--refiner-mode", choices=["static", "legacy"], default="static")
-    parser.add_argument("--gate-max", type=float, default=0.5)
+    parser.add_argument("--gate-max", type=float, default=0.5) #0.5
     parser.add_argument("--gate-l1-weight", type=float, default=1e-3)
     parser.add_argument("--anchor-weight", type=float, default=1.0)
     parser.add_argument("--variance-weight", type=float, default=1.0)
     parser.add_argument("--variance-retention", type=float, default=0.85)
-    parser.add_argument("--reference-k", type=int, default=10)
-    parser.add_argument("--reference-bandwidth", type=float, default=1.0)
-    parser.add_argument("--categorical-penalty", type=float, default=4.0)
+    parser.add_argument("--reference-k", type=int, default=20)
+    parser.add_argument("--reference-bandwidth", type=float, default=2.0) # 2
+    parser.add_argument("--categorical-penalty", type=float, default=4.0) # 4
+    # The two continuous weights correspond to FIQ and PIQ, respectively.
     parser.add_argument("--continuous-weights", type=float, nargs=2, default=[1.0, 0.3])
     parser.add_argument("--permute-phenotype", action="store_true")
 
-    parser.add_argument("--classifier-epochs", type=int, default=80)
-    parser.add_argument("--classifier-patience", type=int, default=12)
+    parser.add_argument("--classifier-epochs", type=int, default=100)
+    parser.add_argument("--classifier-patience", type=int, default=20)
     parser.add_argument("--classifier-lr", type=float, default=1e-3)
     parser.add_argument("--classifier-repeats", type=int, default=1)
     parser.add_argument("--tc-label", type=int, default=1, choices=[0, 1])
@@ -108,7 +109,11 @@ def load_pipeline_data(args, device):
         print(f"Training FSTA from {len(subjects['records'])} subject time series...")
         fsta_model, fsta_metrics = train_fsta(args, subjects["time_series"], device)
         extracted = extract_subject_bec(fsta_model, subjects["records"], subjects["time_series"], args.window_length, args.stride, device)
-        data = {"bec": extracted["bec"], "labels": subjects["labels"], "subject_ids": subjects["subject_ids"], "site_ids": subjects["site_ids"], "reconstruction_mse": extracted["reconstruction_mse"]}
+        data = {
+            "bec": extracted["bec"], "labels": subjects["labels"],
+            "subject_ids": subjects["subject_ids"], "site_ids": subjects["site_ids"],
+            "reconstruction_mse": extracted["reconstruction_mse"],
+        }
         if args.bec_path.is_file():
             archived = load_bec_archive(args.bec_path)
             if np.array_equal(data["subject_ids"].astype(str), archived["subject_ids"].astype(str)):
@@ -129,75 +134,66 @@ def load_pipeline_data(args, device):
 
 
 def build_fold_reference(args, arrays):
-    # 创建一个包含常用参数的字典，这些参数将在后续函数调用中使用
-    common = dict(k=args.reference_k, bandwidth=args.reference_bandwidth,
-                  categorical_penalty=args.categorical_penalty,
-                  continuous_weights=args.continuous_weights,
-                  permute=args.permute_phenotype, seed=args.seed)
-    # 使用训练集数据构建参考邻居和全局表示，并获取训练集的邻居关系
-    train_neighbor, train_global, _ = build_reference_bec(
+    common = dict(
+        k=args.reference_k, bandwidth=args.reference_bandwidth,
+        categorical_penalty=args.categorical_penalty,
+        continuous_weights=args.continuous_weights,
+        permute=args.permute_phenotype, seed=args.seed,
+    )
+    train_neighbor, _, _ = build_reference_bec(
         arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
         arrays["train_cont"], arrays["train_cat"], **common
     )
-    # 使用训练集数据作为参考，验证集数据作为目标，构建验证集的邻居关系
     val_neighbor, _, _ = build_reference_bec(
         arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
         arrays["val_cont"], arrays["val_cat"], **common
     )
-    # 使用训练集数据作为参考，测试集数据作为目标，构建测试集的邻居关系和诊断信息
     test_neighbor, _, diagnostics = build_reference_bec(
         arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
         arrays["test_cont"], arrays["test_cat"], **common
     )
-    # 返回一个包含各种邻居关系和偏差值的字典
     return {
-        "train_neighbor": train_neighbor, "val_neighbor": val_neighbor,
-        "test_neighbor": test_neighbor, "train_dev": train_neighbor - train_global,
-        "val_dev": val_neighbor - train_global, "test_dev": test_neighbor - train_global,
+        "train_neighbor": train_neighbor,
+        "val_neighbor": val_neighbor,
+        "test_neighbor": test_neighbor,
         "diagnostics": diagnostics,
     }
 
 
-def train_refiner(args, bec, neighbor, deviation, device):
-    if args.refiner_mode == "static":
-        model = PGRBECStatic(bec.shape[-1], hidden_channels=16, gate_max=args.gate_max).to(device)
-        original = torch.from_numpy(bec).float().to(device)
-        neighbor_tensor = torch.from_numpy(neighbor).float().to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.refiner_lr)
-        best_state, best_loss, metrics = None, float("inf"), {}
-        for _ in range(args.refiner_epochs):
-            optimizer.zero_grad()
-            refined, gate, _ = model(original, neighbor_tensor, return_parts=True)
-            total, parts = static_refinement_loss(
-                refined, original, gate, args.variance_retention,
-                args.anchor_weight, args.gate_l1_weight, args.variance_weight
-            )
-            total.backward(); optimizer.step()
-            metrics = {"refiner_loss": float(total.item()), **{key: float(value.item()) for key, value in parts.items()}}
-            if metrics["refiner_loss"] < best_loss:
-                best_loss, best_state = metrics["refiner_loss"], copy.deepcopy(model.state_dict())
-        model.load_state_dict(best_state)
-        model.eval()
-        with torch.no_grad():
-            refined, gate, _ = model(original, neighbor_tensor, return_parts=True)
-    else:
-        model = MatrixGateRefiner(bec.shape[-1], args.gate_init, args.gate_max).to(device)
-        original = torch.from_numpy(bec).float().to(device)
-        deviation_tensor = torch.from_numpy(deviation).float().to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.refiner_lr)
-        best_state, best_loss, metrics = None, float("inf"), {}
-        for _ in range(args.refiner_epochs):
-            optimizer.zero_grad(); refined, gate, _ = model(original, deviation_tensor, return_parts=True)
-            anchor = anchor_loss(refined, original); sparse = gate_sparsity_loss(gate)
-            variance = variance_retention_loss(refined, original, args.variance_retention)
-            total = args.anchor_weight * anchor + args.gate_l1_weight * sparse + args.variance_weight * variance
-            total.backward(); optimizer.step()
-            metrics = {"refiner_loss": float(total.item()), "anchor_loss": float(anchor.item()), "sparse_loss": float(sparse.item()), "variance_loss": float(variance.item())}
-            if metrics["refiner_loss"] < best_loss:
-                best_loss, best_state = metrics["refiner_loss"], copy.deepcopy(model.state_dict())
-        model.load_state_dict(best_state); model.eval()
-        with torch.no_grad(): refined, gate, _ = model(original, deviation_tensor, return_parts=True)
-    metrics.update({"gate_mean": float(gate.mean()), "gate_max": float(gate.max()), "gate_fraction_above_0p01": float((gate > 0.01).float().mean())})
+def train_refiner(args, bec, neighbor, device):
+    """Train the label-free Static phenotype gate."""
+    model = PGRBECStatic(
+        bec.shape[-1], hidden_channels=16, gate_max=args.gate_max
+    ).to(device)
+    original = torch.from_numpy(bec).float().to(device)
+    neighbor_tensor = torch.from_numpy(neighbor).float().to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.refiner_lr)
+    best_state, best_loss, metrics = None, float("inf"), {}
+    for _ in range(args.refiner_epochs):
+        optimizer.zero_grad()
+        refined, gate, _ = model(original, neighbor_tensor, return_parts=True)
+        total, parts = static_refinement_loss(
+            refined, original, gate, args.variance_retention,
+            args.anchor_weight, args.gate_l1_weight, args.variance_weight
+        )
+        total.backward()
+        optimizer.step()
+        metrics = {
+            "refiner_loss": float(total.item()),
+            **{key: float(value.item()) for key, value in parts.items()},
+        }
+        if metrics["refiner_loss"] < best_loss:
+            best_loss = metrics["refiner_loss"]
+            best_state = copy.deepcopy(model.state_dict())
+    model.load_state_dict(best_state)
+    model.eval()
+    with torch.no_grad():
+        refined, gate, _ = model(original, neighbor_tensor, return_parts=True)
+    metrics.update({
+        "gate_mean": float(gate.mean()),
+        "gate_max": float(gate.max()),
+        "gate_fraction_above_0p01": float((gate > 0.01).float().mean()),
+    })
     return model, refined.cpu().numpy(), metrics
 
 
@@ -210,11 +206,18 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         data["categorical_raw"][train_index], data["categorical_raw"][val_index], data["categorical_raw"][test_index],
     )
     reference = build_fold_reference(args, arrays)
-    refiner_input = reference["train_neighbor"] if args.refiner_mode == "static" else reference["train_dev"]
-    refiner, train_refined, refinement_metrics = train_refiner(args, arrays["train_bec"], refiner_input, reference["train_dev"], device)
+    refiner, train_refined, refinement_metrics = train_refiner(
+        args, arrays["train_bec"], reference["train_neighbor"], device
+    )
     with torch.no_grad():
-        val_refined = refiner(torch.from_numpy(arrays["val_bec"]).float().to(device), torch.from_numpy(((reference["val_neighbor"] if args.refiner_mode == "static" else reference["val_dev"])).astype(np.float32)).float().to(device)).cpu().numpy()
-        test_refined = refiner(torch.from_numpy(arrays["test_bec"]).float().to(device), torch.from_numpy(((reference["test_neighbor"] if args.refiner_mode == "static" else reference["test_dev"])).astype(np.float32)).float().to(device)).cpu().numpy()
+        val_refined = refiner(
+            torch.from_numpy(arrays["val_bec"]).float().to(device),
+            torch.from_numpy(reference["val_neighbor"]).float().to(device),
+        ).cpu().numpy()
+        test_refined = refiner(
+            torch.from_numpy(arrays["test_bec"]).float().to(device),
+            torch.from_numpy(reference["test_neighbor"]).float().to(device),
+        ).cpu().numpy()
     train_labels, test_labels = data["labels"][train_index], data["labels"][test_index]
     classifier_args = dict(device=device, max_epochs=args.classifier_epochs, patience=args.classifier_patience, batch_size=args.batch_size, learning_rate=args.classifier_lr)
     original_runs, refined_runs = [], []

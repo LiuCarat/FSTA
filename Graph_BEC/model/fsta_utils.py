@@ -9,53 +9,10 @@ import torch
 import torch.nn as nn
 
 from Graph_BEC.data import fixed_window_starts
-from Graph_BEC.normative_bec import (
-    MatrixGateRefiner,
-    anchor_loss,
-    gate_sparsity_loss,
-    variance_retention_loss,
-)
-
-from .fsta_components import FSTA
 
 
 # ---------------------------------------------------------------------------
-# 1.  FSTA + phenotype-guided BEC refinement  (was fsta_graph_bec)
-# ---------------------------------------------------------------------------
-
-class FSTAGraphBEC(nn.Module):
-    """The proposed model; classification is intentionally outside this class."""
-
-    def __init__(
-        self,
-        fsta_options,
-        window_length=78,
-        nodes_num=90,
-        d_model=16,
-        d_inner=64,
-        n_head=2,
-        d_k=8,
-        d_v=8,
-        dropout=0.2,
-        gate_init=-3.0,
-        gate_max=0.2,
-        share_gate=False,
-    ):
-        super().__init__()
-        self.fsta = FSTA(
-            fsta_options, window_length, d_model, d_inner, n_head, d_k, d_v, dropout
-        )
-        self.refiner = MatrixGateRefiner(nodes_num, gate_init, gate_max, share_gate)
-
-    def forward_fsta(self, windows):
-        return self.fsta(windows)
-
-    def refine_bec(self, bec, phenotype_deviation, return_parts=False):
-        return self.refiner(bec, phenotype_deviation, return_parts=return_parts)
-
-
-# ---------------------------------------------------------------------------
-# 2.  Unsupervised FSTA window loss  (was losses)
+# 1.  Unsupervised FSTA window loss  (was losses)
 # ---------------------------------------------------------------------------
 
 class FSTAWindowLoss(nn.Module):
@@ -88,7 +45,7 @@ class FSTAWindowLoss(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# 3.  Subject-level BEC extraction  (was bec_extractor)
+# 2.  Subject-level BEC extraction  (was bec_extractor)
 # ---------------------------------------------------------------------------
 
 @torch.no_grad()

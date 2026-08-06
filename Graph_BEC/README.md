@@ -13,7 +13,6 @@ ROI time series -> FSTA -> initial directed BEC
 - `data.py`: dataset loading, windows, preprocessing, splits, deterministic seeds.
 - `phenotype.py`: phenotype loading and train-only patient graph.
 - `model/pgr_bec_static.py`: Static subject-specific edge gate.
-- `model/pgr_bec_dynamic.py`: Dynamic gate with frozen FSTA reconstruction.
 - `downstream/`: BrainNetCNN and evaluation.
 - `analysis/`: BEC and edge statistics.
 
@@ -39,24 +38,9 @@ python Graph_BEC/FSTA_Graph_BEC.py --input-mode bec --seed 42
 ## Refinement variants
 
 - `--refiner-mode static`: new subject-specific gate from `[A, N, |N-A|]`.
-- `--refiner-mode legacy`: previous shared matrix gate, retained as an ablation.
-- `model/pgr_bec_dynamic.py`: dynamic version for raw attention-space BEC and
-  aligned ROI windows. It must not receive fold-standardized classifier BEC.
 
 ## Recommended robust comparison
 
 Do not select the classifier seed that gives the largest refined AUC. Run
 paired repeats: original and refined BEC use exactly the same classifier seed
 in every repeat, and report the mean paired AUC change.
-
-```bash
-python Graph_BEC/FSTA_Graph_BEC.py \
-  --input-mode bec \
-  --bec-path downstream_abide_i/outputs/entropy/loss_alpha_0.01/seed_2026/epochs_101/subject_bec.npz \
-  --seed 2026 \
-  --refiner-mode legacy \
-  --classifier-repeats 5
-```
-
-This reproduces the old BEC archive and split definition while using the
-strict validation-based classifier protocol.
