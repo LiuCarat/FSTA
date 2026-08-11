@@ -39,7 +39,6 @@ def classification_metrics(labels, probabilities, threshold=0.5):
     total = len(labels)
     return {
         "ACC": float((true_positive + true_negative) / total) if total else 0.0,
-        "SEN": float(true_positive / (true_positive + false_negative)) if true_positive + false_negative else 0.0,
         "SPE": float(true_negative / (true_negative + false_positive)) if true_negative + false_positive else 0.0,
         "AUC": float(roc_auc_score(labels, probabilities)) if np.unique(labels).size == 2 else float("nan"),
         "Precision": float(precision_score(labels, predictions, zero_division=0)),

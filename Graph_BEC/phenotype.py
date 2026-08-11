@@ -1,4 +1,4 @@
-"""Phenotype loading and diagnosis-free patient graph construction."""
+"""Phenotype loading, fMRI FC features, and multi-view patient graph construction."""
 
 from __future__ import annotations
 
@@ -101,6 +101,20 @@ def build_reference_bec(train_bec, train_cont, train_cat, query_cont, query_cat,
                         k=20, bandwidth=1.0, categorical_penalty=4.0,
                         continuous_weights=(1.0, 0.3), permute=False, seed=2026):
     """Return the phenotype-neighbor BEC itself, without any diagnosis label."""
+    train_weights, query_weights, _ = build_reference_graph(
+        train_cont, train_cat, query_cont, query_cat,
+        k=k, bandwidth=bandwidth, categorical_penalty=categorical_penalty,
+        continuous_weights=continuous_weights, permute=permute, seed=seed,
+    )
+    _, global_mean = normative_reference(train_bec, train_weights)
+    query_mean, _ = normative_reference(train_bec, query_weights)
+    return query_mean, global_mean, reference_diagnostics(query_weights)
+
+
+def build_reference_graph(train_cont, train_cat, query_cont, query_cat,
+                           k=20, bandwidth=1.0, categorical_penalty=4.0,
+                           continuous_weights=(1.0, 0.3), permute=False, seed=2026):
+    """Return train/query phenotype graph weights for multi-view fusion."""
     train_cont = np.asarray(train_cont).copy()
     train_cat = np.asarray(train_cat).copy()
     if permute:
@@ -119,6 +133,77 @@ def build_reference_bec(train_bec, train_cont, train_cat, query_cont, query_cat,
         train_cont, train_cat, self_indices=self_indices, **common
     )
     query_weights = reference_weights(query_cont, query_cat, **common)
-    _, global_mean = normative_reference(train_bec, train_weights)
-    query_mean, _ = normative_reference(train_bec, query_weights)
-    return query_mean, global_mean, reference_diagnostics(query_weights)
+    return train_weights, query_weights, reference_diagnostics(query_weights)
+
+
+# ---------------------------------------------------------------------------
+#  fMRI 功能连接特征 & 多视图图融合  (was multiview_validation/validate_graph)
+# ---------------------------------------------------------------------------
+
+def subject_fc_features(time_series):
+    """Convert each [T, 90] ROI series into its 4005-D FC upper triangle."""
+    features = []
+    upper = np.triu_indices(90, k=1)
+    for index, series in enumerate(time_series, 1):
+        values = np.asarray(series, dtype=np.float64)
+        centered = values - values.mean(axis=0, keepdims=True)
+        covariance = centered.T @ centered / max(values.shape[0] - 1, 1)
+        standard_deviation = np.sqrt(np.maximum(np.diag(covariance), 0.0))
+        denominator = standard_deviation[:, None] * standard_deviation[None, :]
+        correlation = np.divide(
+            covariance,
+            denominator,
+            out=np.zeros_like(covariance),
+            where=denominator > 1e-12,
+        )
+        np.fill_diagonal(correlation, 1.0)
+        features.append(correlation[upper])
+        if index == 1 or index == len(time_series) or index % 100 == 0:
+            print(f"fMRI features [{index}/{len(time_series)}]")
+    return np.asarray(features, dtype=np.float32)
+
+
+def topk_graph(reference, query, neighbors, exclude_self=False):
+    """Build row-normalized cosine top-k query-to-reference weights."""
+    reference = np.asarray(reference, dtype=np.float32)
+    query = np.asarray(query, dtype=np.float32)
+    reference = reference / np.maximum(
+        np.linalg.norm(reference, axis=1, keepdims=True), 1e-8
+    )
+    query = query / np.maximum(
+        np.linalg.norm(query, axis=1, keepdims=True), 1e-8
+    )
+    similarity = np.clip(query @ reference.T, 0.0, 1.0)
+    if exclude_self and len(reference) == len(query):
+        similarity[np.arange(len(query)), np.arange(len(reference))] = -np.inf
+    count = min(max(1, int(neighbors)), len(reference) - int(exclude_self))
+    graph = np.zeros_like(similarity, dtype=np.float32)
+    for row in range(len(query)):
+        indices = np.argpartition(similarity[row], -count)[-count:]
+        values = np.maximum(similarity[row, indices], 0.0)
+        if values.sum() <= 1e-8:
+            values = np.ones_like(values)
+        graph[row, indices] = values / values.sum()
+    return graph
+
+
+def fused_graph(fmri_graph, phenotype_graph, beta, neighbors):
+    """Fuse two row-normalized graphs and retain a common top-k size."""
+    if not 0.0 <= float(beta) <= 1.0:
+        raise ValueError(f"fusion beta must be in [0, 1], got {beta}")
+    fmri_graph = np.asarray(fmri_graph, dtype=np.float32)
+    phenotype_graph = np.asarray(phenotype_graph, dtype=np.float32)
+    if fmri_graph.shape != phenotype_graph.shape:
+        raise ValueError(
+            f"Graph shapes must match, got {fmri_graph.shape} and {phenotype_graph.shape}"
+        )
+    scores = float(beta) * fmri_graph + (1.0 - float(beta)) * phenotype_graph
+    count = min(max(1, int(neighbors)), scores.shape[1])
+    fused = np.zeros_like(scores, dtype=np.float32)
+    for row in range(len(scores)):
+        indices = np.argpartition(scores[row], -count)[-count:]
+        values = np.maximum(scores[row, indices], 0.0)
+        if values.sum() <= 1e-8:
+            values = np.ones_like(values)
+        fused[row, indices] = values / values.sum()
+    return fused

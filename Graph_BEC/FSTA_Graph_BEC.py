@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """End-to-end FSTA-Graph-BEC experiment runner.
 
-Raw mode: ROI time series -> FSTA -> BEC -> label-free phenotype refinement.
-BEC mode: existing subject_bec.npz -> label-free phenotype refinement.
+Raw mode: ROI time series -> FSTA -> BEC -> label-free graph refinement.
+BEC mode: existing subject_bec.npz -> label-free graph refinement.
 Diagnosis labels are used only in final statistics and downstream classification.
 """
 from __future__ import annotations
@@ -17,7 +17,9 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
-from Graph_BEC.normative_bec import bec_separability, edge_effect_sizes
+from Graph_BEC.normative_bec import (
+    bec_separability, edge_effect_sizes, normative_reference, reference_diagnostics,
+)
 from Graph_BEC.data import (
     load_subject_dataset, load_bec_archive, make_stratified_splits,
     prepare_fold_arrays, select_device, set_seed,
@@ -28,77 +30,90 @@ from Graph_BEC.model import (
     train_fsta, extract_subject_bec,
 )
 from Graph_BEC.model.pgr_bec_static import static_refinement_loss
-from Graph_BEC.phenotype import load_phenotypes, build_reference_bec
+from Graph_BEC.phenotype import (
+    build_reference_bec, build_reference_graph,
+    fused_graph, load_phenotypes,
+    subject_fc_features, topk_graph,
+)
 
 DEFAULT_BEC = ROOT / "downstream_abide_i/outputs/entropy/loss_alpha_0.01/seed_42/epochs_101/subject_bec.npz"
+# downstream_abide_i/outputs/original/loss_alpha_0.8/seed_42/epochs_31/subject_bec.npz
 DEFAULT_DATA_ROOT = ROOT / "dataset/ABIDE-I"
 DEFAULT_PHENOTYPE = ROOT / "dataset/ABIDE-I/Phenotypic_Processing_filled.csv"
 DEFAULT_OUTPUT = ROOT / "Graph_BEC/outputs"
 
 
 def parse_args():
+    # =========================== 数据 & 实验配置 ===========================
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-mode", choices=["bec", "raw"], default="bec")
     parser.add_argument("--bec-path", type=Path, default=DEFAULT_BEC)
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--phenotype-csv", type=Path, default=DEFAULT_PHENOTYPE)
-    parser.add_argument("--pipeline", default="cpac")
+    parser.add_argument("--pipeline", default="cpac") # 预处理流水线名称
     parser.add_argument("--strategy", default="filt_noglobal")
     parser.add_argument("--derivative", default="rois_aal")
-    parser.add_argument("--standardize", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--max-subjects", type=int)
+    parser.add_argument("--standardize", action=argparse.BooleanOptionalAction, default=True) # 是否标准化
+    parser.add_argument("--max-subjects", type=int, default=None) # 限制加载的受试者数量上限（None=全部） 
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--n-splits", type=int, default=10)
-    parser.add_argument("--validation-size", type=float, default=0.2)
+    parser.add_argument("--validation-size", type=float, default=0.2) # 验证集比例
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--gpu-id", default="auto")
 
+    # =========================== FSTA 训练参数 ===========================
     parser.add_argument("--window-length", type=int, default=78)
     parser.add_argument("--stride", type=int, default=39)
     parser.add_argument("--epochs", type=int, default=101)
     parser.add_argument("--fsta-checkpoint", choices=["final", "best"], default="final")
-    parser.add_argument("--loss-mode", choices=["original", "entropy"], default="entropy")
-    parser.add_argument("--loss-alpha", type=float, default=0.01)
+    parser.add_argument("--loss-mode", choices=["original", "entropy"], default="entropy") # 损失函数类型
+    parser.add_argument("--loss-alpha", type=float, default=0.01) # 损失函数权重
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--log-every", type=int, default=10)
-    parser.add_argument("--d-model", type=int, default=16)
-    parser.add_argument("--d-inner-hid", type=int, default=64)
-    parser.add_argument("--d-k", type=int, default=8)
+    parser.add_argument("--d-model", type=int, default=16) # FSTA Transformer 隐藏层维度
+    parser.add_argument("--d-inner-hid", type=int, default=64) # FFN 内部隐藏层维度，通常为 d_model 的 4 倍
+    parser.add_argument("--d-k", type=int, default=8) # FSTA Transformer key 的维度
     parser.add_argument("--d-v", type=int, default=8)
     parser.add_argument("--n-head", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.2)
-    parser.add_argument("--n-warmup-steps", type=int, default=4000)
-    parser.add_argument("--lr-mul", type=float, default=1.2)
-    parser.add_argument("--weight-decay", type=float, default=0.0)
-    parser.add_argument("--adam-beta1", type=float, default=0.9)
+    parser.add_argument("--n-warmup-steps", type=int, default=4000) # AdamW 的预热步数
+    parser.add_argument("--lr-mul", type=float, default=1.2) # 学习率倍数
+    parser.add_argument("--weight-decay", type=float, default=0.0) # 权重衰减，0 表示不用
+    parser.add_argument("--adam-beta1", type=float, default=0.9) # AdamW 的 beta1 参数（一阶动量衰减率）
     parser.add_argument("--adam-beta2", type=float, default=0.98)
-    parser.add_argument("--num-hidden-layers", type=int, default=1)
+    parser.add_argument("--num-hidden-layers", type=int, default=1) # FourierAtt 编码层数量
     parser.add_argument("--num-attention-heads", type=int, default=2)
-    parser.add_argument("--hidden-act", default="gelu")
+    parser.add_argument("--hidden-act", default="gelu") # 前馈层激活函数
     parser.add_argument("--attention-probs-dropout-prob", type=float, default=0.5)
     parser.add_argument("--hidden-dropout-prob", type=float, default=0.5)
-    parser.add_argument("--initializer-range", type=float, default=0.02)
-    parser.add_argument("--no-filters", action="store_true")
+    parser.add_argument("--initializer-range", type=float, default=0.02) # 初始化范围
+    parser.add_argument("--no-filters", action="store_true") # 不使用傅里叶注意力
 
-    parser.add_argument("--refiner-epochs", type=int, default=80)
+    # =========================== PGR-BEC 修正模块 ===========================
+    parser.add_argument("--refiner-epochs", type=int, default=80) # 修正模块训练轮数
     parser.add_argument("--refiner-lr", type=float, default=1e-2)
-    parser.add_argument("--gate-max", type=float, default=0.5) #0.5
-    parser.add_argument("--gate-l1-weight", type=float, default=1e-3)
-    parser.add_argument("--anchor-weight", type=float, default=1.0)
-    parser.add_argument("--variance-weight", type=float, default=1.0)
+    parser.add_argument("--gate-max", type=float, default=0.5) # 门控输出的最大值，0.5
+    parser.add_argument("--gate-l1-weight", type=float, default=1e-3) # 门控损失权重，增大稀疏，减小密集
+    parser.add_argument("--anchor-weight", type=float, default=1.0) # 锚定损失权重，增大保守，减小激进
+    parser.add_argument("--variance-weight", type=float, default=1.0) # 方差损失权重，增大保守，减小激进
     parser.add_argument("--variance-retention", type=float, default=0.85)
-    parser.add_argument("--reference-k", type=int, default=20)
-    parser.add_argument("--reference-bandwidth", type=float, default=2.0) # 2
-    parser.add_argument("--categorical-penalty", type=float, default=4.0) # 4
-    # The two continuous weights correspond to FIQ and PIQ, respectively.
-    parser.add_argument("--continuous-weights", type=float, nargs=2, default=[1.0, 0.3])
-    parser.add_argument("--permute-phenotype", action="store_true")
 
+    # =========================== 表型邻域参考图 ===========================
+    parser.add_argument("--reference-k", type=int, default=20)
+    parser.add_argument("--graph-mode", choices=["phenotype", "fusion"], default="fusion")
+    parser.add_argument("--fusion-beta", type=float, default=0.60)
+    parser.add_argument("--reference-bandwidth", type=float, default=2.0) # 2 减小: 只有最近邻获得显著权重
+    # 与 --reference-k 配合：大 k+小 σ=稀疏大邻域，小 k+大 σ=均匀小邻域
+    parser.add_argument("--categorical-penalty", type=float, default=4.0) # 4 增大: 不同性别的受试者更难成为邻居
+    parser.add_argument("--continuous-weights", type=float, nargs=2, default=[1.0, 0.3]) # [1.0, 0.3] 表示 FIQ 主导、PIQ 辅助构建邻域
+    parser.add_argument("--permute-phenotype", action="store_true") # 随机打乱训练集的表型-受试者对应关系，以增加鲁棒性
+
+     # =========================== BrainNetCNN 分类器 ===========================
     parser.add_argument("--classifier-epochs", type=int, default=100)
     parser.add_argument("--classifier-patience", type=int, default=20)
     parser.add_argument("--classifier-lr", type=float, default=1e-3)
-    parser.add_argument("--classifier-repeats", type=int, default=1)
-    parser.add_argument("--tc-label", type=int, default=1, choices=[0, 1])
+    parser.add_argument("--classifier-repeats", type=int, default=1) # 重复训练次数
+    parser.add_argument("--tc-label", type=int, default=1, choices=[0, 1]) # ASD=1, TC=0
     return parser.parse_args()
 
 
@@ -126,6 +141,27 @@ def load_pipeline_data(args, device):
         data = load_bec_archive(args.bec_path)
         if args.max_subjects is not None:
             data = {key: value[:args.max_subjects] if hasattr(value, "__len__") and len(value) == len(data["bec"]) else value for key, value in data.items()}
+    if args.graph_mode == "fusion":
+        if args.input_mode == "raw":
+            graph_time_series = subjects["time_series"]
+        else:
+            graph_subjects = load_subject_dataset(
+                args.data_root, args.pipeline, args.strategy, args.derivative,
+                args.standardize, args.max_subjects,
+            )
+            by_subject = {
+                str(subject_id): series
+                for subject_id, series in zip(
+                    graph_subjects["subject_ids"], graph_subjects["time_series"]
+                )
+            }
+            try:
+                graph_time_series = [by_subject[str(subject_id)] for subject_id in data["subject_ids"]]
+            except KeyError as error:
+                raise ValueError(
+                    "Fusion mode requires raw ROI time series for every BEC subject"
+                ) from error
+        data["fmri_features"] = subject_fc_features(graph_time_series)
     phenotype = load_phenotypes(args.phenotype_csv, data["subject_ids"], data["site_ids"])
     data.update(phenotype)
     data["bec"] = np.asarray(data["bec"], dtype=np.float32)
@@ -133,30 +169,79 @@ def load_pipeline_data(args, device):
     return data, fsta_metrics
 
 
-def build_fold_reference(args, arrays):
+def build_fold_reference(args, arrays, fmri_arrays=None):
     common = dict(
         k=args.reference_k, bandwidth=args.reference_bandwidth,
         categorical_penalty=args.categorical_penalty,
         continuous_weights=args.continuous_weights,
         permute=args.permute_phenotype, seed=args.seed,
     )
-    train_neighbor, _, _ = build_reference_bec(
-        arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
+    if args.graph_mode == "phenotype":
+        train_neighbor, _, _ = build_reference_bec(
+            arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
+            arrays["train_cont"], arrays["train_cat"], **common
+        )
+        val_neighbor, _, _ = build_reference_bec(
+            arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
+            arrays["val_cont"], arrays["val_cat"], **common
+        )
+        test_neighbor, _, diagnostics = build_reference_bec(
+            arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
+            arrays["test_cont"], arrays["test_cat"], **common
+        )
+        return {
+            "train_neighbor": train_neighbor,
+            "val_neighbor": val_neighbor,
+            "test_neighbor": test_neighbor,
+            "diagnostics": diagnostics,
+        }
+    if fmri_arrays is None:
+        raise ValueError("Fusion graph mode requires fold fMRI features")
+    train_fmri, val_fmri, test_fmri = fmri_arrays
+    fmri_mean = train_fmri.mean(axis=0)
+    fmri_std = train_fmri.std(axis=0)
+    fmri_std[~np.isfinite(fmri_std) | (fmri_std < 1e-6)] = 1.0
+    train_fmri = ((train_fmri - fmri_mean) / fmri_std).astype(np.float32)
+    val_fmri = ((val_fmri - fmri_mean) / fmri_std).astype(np.float32)
+    test_fmri = ((test_fmri - fmri_mean) / fmri_std).astype(np.float32)
+    phenotype_train_weights, phenotype_val_weights, _ = build_reference_graph(
+        arrays["train_cont"], arrays["train_cat"],
         arrays["train_cont"], arrays["train_cat"], **common
     )
-    val_neighbor, _, _ = build_reference_bec(
-        arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
+    _, phenotype_val_weights, _ = build_reference_graph(
+        arrays["train_cont"], arrays["train_cat"],
         arrays["val_cont"], arrays["val_cat"], **common
     )
-    test_neighbor, _, diagnostics = build_reference_bec(
-        arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
+    _, phenotype_test_weights, _ = build_reference_graph(
+        arrays["train_cont"], arrays["train_cat"],
         arrays["test_cont"], arrays["test_cat"], **common
     )
+    fmri_train_weights = topk_graph(
+        train_fmri, train_fmri, args.reference_k, exclude_self=True
+    )
+    fmri_val_weights = topk_graph(train_fmri, val_fmri, args.reference_k)
+    fmri_test_weights = topk_graph(train_fmri, test_fmri, args.reference_k)
+    fused_train_weights = fused_graph(
+        fmri_train_weights, phenotype_train_weights, args.fusion_beta, args.reference_k
+    )
+    fused_val_weights = fused_graph(
+        fmri_val_weights, phenotype_val_weights, args.fusion_beta, args.reference_k
+    )
+    fused_test_weights = fused_graph(
+        fmri_test_weights, phenotype_test_weights, args.fusion_beta, args.reference_k
+    )
+    train_neighbor, _ = normative_reference(arrays["train_bec"], fused_train_weights)
+    val_neighbor, _ = normative_reference(arrays["train_bec"], fused_val_weights)
+    test_neighbor, _ = normative_reference(arrays["train_bec"], fused_test_weights)
     return {
         "train_neighbor": train_neighbor,
         "val_neighbor": val_neighbor,
         "test_neighbor": test_neighbor,
-        "diagnostics": diagnostics,
+        "diagnostics": {
+            **reference_diagnostics(fused_test_weights),
+            "graph_mode": args.graph_mode,
+            "fusion_beta": float(args.fusion_beta),
+        },
     }
 
 
@@ -205,7 +290,14 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         data["continuous"][train_index], data["continuous"][val_index], data["continuous"][test_index],
         data["categorical_raw"][train_index], data["categorical_raw"][val_index], data["categorical_raw"][test_index],
     )
-    reference = build_fold_reference(args, arrays)
+    fmri_arrays = None
+    if args.graph_mode == "fusion":
+        fmri_arrays = (
+            data["fmri_features"][train_index],
+            data["fmri_features"][val_index],
+            data["fmri_features"][test_index],
+        )
+    reference = build_fold_reference(args, arrays, fmri_arrays)
     refiner, train_refined, refinement_metrics = train_refiner(
         args, arrays["train_bec"], reference["train_neighbor"], device
     )
@@ -265,7 +357,7 @@ def save_results(args, fold_results, fsta_metrics):
         row.update({key: value for key, value in result.items() if key not in {"original", "refined"}}); rows.append(row)
     summary = {"config": vars(args), "fsta_training": fsta_metrics, "folds": rows}
     for name in ("original", "refined"):
-        for metric in ("ACC", "SEN", "SPE", "AUC", "Precision", "Recall", "F1"):
+        for metric in ("ACC", "SPE", "AUC", "Precision", "Recall", "F1"):
             values = [row[f"{name}_{metric}"] for row in rows]
             summary[f"{name}_{metric}_mean"] = float(np.mean(values)); summary[f"{name}_{metric}_std"] = float(np.std(values))
             summary[f"{name}_{metric}_display"] = f"{100 * summary[f'{name}_{metric}_mean']:.2f}±{100 * summary[f'{name}_{metric}_std']:.2f}"
@@ -287,13 +379,16 @@ def main():
             "The selected subjects contain only one diagnosis class. "
             "Use the full dataset or choose a max-subjects subset containing both labels."
         )
-    print(f"Input={args.input_mode}; subjects={len(data['bec'])}; BEC={data['bec'].shape}; labels={np.bincount(data['labels'])}; device={device}")
+    print(
+        f"Input={args.input_mode}; graph={args.graph_mode}; subjects={len(data['bec'])}; "
+        f"BEC={data['bec'].shape}; labels={np.bincount(data['labels'])}; device={device}"
+    )
     results = []
     for fold, train_index, val_index, test_index in make_stratified_splits(data["labels"], args.n_splits, args.seed, args.validation_size):
         result = run_fold(args, fold, data, train_index, val_index, test_index, device); results.append(result)
         print(f"fold {fold}: original AUC={result['original']['AUC']:.4f}, refined AUC={result['refined']['AUC']:.4f}, original Fisher={result['original_bec_fisher_ratio']:.4f}, refined Fisher={result['refined_bec_fisher_ratio']:.4f}")
     summary = save_results(args, results, fsta_metrics)
-    report_metrics = ("ACC", "SEN", "SPE", "AUC", "Precision", "Recall", "F1")
+    report_metrics = ("ACC", "SPE", "AUC", "Precision", "Recall", "F1")
     print("\nmean±std (%)")
     print("representation | " + " | ".join(report_metrics))
     for name in ("original", "refined"):
