@@ -1,0 +1,30 @@
+{
+  "current_sex_fiq_piq": {
+    "nodes": 871,
+    "edges_nonzero": 10874,
+    "mean_degree": 24.969001148105626,
+    "weighted_same_label_fraction": 0.551693856716156,
+    "same_to_different_edge_weight_ratio": 1.2306188344955444,
+    "neighbor_label_purity": 0.5516939163208008,
+    "ARI": -0.0030710520568518686,
+    "NMI": 0.005442338166903485,
+    "homogeneity": 0.004488608372560532,
+    "completeness": 0.006910711109796173,
+    "purity": 0.5373134328358209,
+    "silhouette_embedding": 0.1976662427186966
+  },
+  "deepasd_like_equal_multiview": {
+    "nodes": 871,
+    "edges_nonzero": 36390,
+    "mean_degree": 83.55912743972445,
+    "weighted_same_label_fraction": 0.5096787214279175,
+    "same_to_different_edge_weight_ratio": 1.0394792556762695,
+    "neighbor_label_purity": 0.5096787214279175,
+    "ARI": -0.0014800061230760353,
+    "NMI": 0.0012060697545927062,
+    "homogeneity": 0.0011588029913305487,
+    "completeness": 0.0012573564442465808,
+    "purity": 0.5373134328358209,
+    "silhouette_embedding": 0.4034368097782135
+  }
+}

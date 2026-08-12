@@ -100,7 +100,7 @@ def parse_args():
 
     # =========================== 表型邻域参考图 ===========================
     parser.add_argument("--reference-k", type=int, default=20)
-    parser.add_argument("--graph-mode", choices=["phenotype", "fusion"], default="fusion")
+    parser.add_argument("--graph-mode", choices=["phenotype", "fusion"], default="phenotype")
     parser.add_argument("--fusion-beta", type=float, default=0.60)
     parser.add_argument("--reference-bandwidth", type=float, default=2.0) # 2 减小: 只有最近邻获得显著权重
     # 与 --reference-k 配合：大 k+小 σ=稀疏大邻域，小 k+大 σ=均匀小邻域
