@@ -18,7 +18,7 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
 from Graph_BEC.normative_bec import (
-    bec_separability, edge_effect_sizes, normative_reference, reference_diagnostics,
+    bec_separability, edge_effect_sizes, normative_reference,
 )
 from Graph_BEC.data import (
     load_subject_dataset, load_bec_archive, make_stratified_splits,
@@ -30,8 +30,15 @@ from Graph_BEC.model import (
     train_fsta, extract_subject_bec,
 )
 from Graph_BEC.model.pgr_bec_static import static_refinement_loss
+from Graph_BEC.qc import (
+    compute_qc_confidence,
+    DEFAULT_QC_COLUMNS,
+    fit_qc_mismatch_threshold,
+    load_aligned_qc,
+    prepare_qc_fold,
+)
 from Graph_BEC.phenotype import (
-    build_reference_bec, build_reference_graph,
+    build_reference_graph,
     fused_graph, load_phenotypes,
     subject_fc_features, topk_graph,
 )
@@ -100,15 +107,22 @@ def parse_args():
 
     # =========================== 表型邻域参考图 ===========================
     parser.add_argument("--reference-k", type=int, default=20)
-    parser.add_argument("--graph-mode", choices=["phenotype", "fusion"], default="phenotype")
-    parser.add_argument("--fusion-beta", type=float, default=0.60)
+    parser.add_argument("--graph-mode", choices=["phenotype", "fusion"], default="fusion")
+    parser.add_argument("--fusion-beta", type=float, default=0.6)
     parser.add_argument("--reference-bandwidth", type=float, default=2.0) # 2 减小: 只有最近邻获得显著权重
     # 与 --reference-k 配合：大 k+小 σ=稀疏大邻域，小 k+大 σ=均匀小邻域
     parser.add_argument("--categorical-penalty", type=float, default=4.0) # 4 增大: 不同性别的受试者更难成为邻居
     parser.add_argument("--continuous-weights", type=float, nargs=2, default=[1.0, 0.3]) # [1.0, 0.3] 表示 FIQ 主导、PIQ 辅助构建邻域
     parser.add_argument("--permute-phenotype", action="store_true") # 随机打乱训练集的表型-受试者对应关系，以增加鲁棒性
 
-     # =========================== BrainNetCNN 分类器 ===========================
+    # =========================== QC confidence gate ===========================
+    parser.add_argument("--qc-mode", choices=["none", "confidence"], default="confidence")
+    parser.add_argument("--qc-columns", nargs="+", default=list(DEFAULT_QC_COLUMNS))
+    parser.add_argument("--qc-lambda", type=float, default=0.75)
+    parser.add_argument("--qc-min-confidence", type=float, default=0.75)
+    parser.add_argument("--qc-threshold-quantile", type=float, default=0.7)
+
+    # =========================== BrainNetCNN 分类器 ===========================
     parser.add_argument("--classifier-epochs", type=int, default=100)
     parser.add_argument("--classifier-patience", type=int, default=20)
     parser.add_argument("--classifier-lr", type=float, default=1e-3)
@@ -164,6 +178,10 @@ def load_pipeline_data(args, device):
         data["fmri_features"] = subject_fc_features(graph_time_series)
     phenotype = load_phenotypes(args.phenotype_csv, data["subject_ids"], data["site_ids"])
     data.update(phenotype)
+    if args.qc_mode == "confidence":
+        data["qc"] = load_aligned_qc(
+            args.phenotype_csv, data["subject_ids"], args.qc_columns
+        )
     data["bec"] = np.asarray(data["bec"], dtype=np.float32)
     data["labels"] = np.asarray(data["labels"], dtype=np.int64)
     return data, fsta_metrics
@@ -177,23 +195,28 @@ def build_fold_reference(args, arrays, fmri_arrays=None):
         permute=args.permute_phenotype, seed=args.seed,
     )
     if args.graph_mode == "phenotype":
-        train_neighbor, _, _ = build_reference_bec(
-            arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
+        train_weights, _ = build_reference_graph(
+            arrays["train_cont"], arrays["train_cat"],
             arrays["train_cont"], arrays["train_cat"], **common
         )
-        val_neighbor, _, _ = build_reference_bec(
-            arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
+        _, val_weights = build_reference_graph(
+            arrays["train_cont"], arrays["train_cat"],
             arrays["val_cont"], arrays["val_cat"], **common
         )
-        test_neighbor, _, diagnostics = build_reference_bec(
-            arrays["train_bec"], arrays["train_cont"], arrays["train_cat"],
+        _, test_weights = build_reference_graph(
+            arrays["train_cont"], arrays["train_cat"],
             arrays["test_cont"], arrays["test_cat"], **common
         )
+        train_neighbor, _ = normative_reference(arrays["train_bec"], train_weights)
+        val_neighbor, _ = normative_reference(arrays["train_bec"], val_weights)
+        test_neighbor, _ = normative_reference(arrays["train_bec"], test_weights)
         return {
             "train_neighbor": train_neighbor,
             "val_neighbor": val_neighbor,
             "test_neighbor": test_neighbor,
-            "diagnostics": diagnostics,
+            "train_weights": train_weights,
+            "val_weights": val_weights,
+            "test_weights": test_weights,
         }
     if fmri_arrays is None:
         raise ValueError("Fusion graph mode requires fold fMRI features")
@@ -204,15 +227,15 @@ def build_fold_reference(args, arrays, fmri_arrays=None):
     train_fmri = ((train_fmri - fmri_mean) / fmri_std).astype(np.float32)
     val_fmri = ((val_fmri - fmri_mean) / fmri_std).astype(np.float32)
     test_fmri = ((test_fmri - fmri_mean) / fmri_std).astype(np.float32)
-    phenotype_train_weights, phenotype_val_weights, _ = build_reference_graph(
+    phenotype_train_weights, _ = build_reference_graph(
         arrays["train_cont"], arrays["train_cat"],
         arrays["train_cont"], arrays["train_cat"], **common
     )
-    _, phenotype_val_weights, _ = build_reference_graph(
+    _, phenotype_val_weights = build_reference_graph(
         arrays["train_cont"], arrays["train_cat"],
         arrays["val_cont"], arrays["val_cat"], **common
     )
-    _, phenotype_test_weights, _ = build_reference_graph(
+    _, phenotype_test_weights = build_reference_graph(
         arrays["train_cont"], arrays["train_cat"],
         arrays["test_cont"], arrays["test_cat"], **common
     )
@@ -222,13 +245,16 @@ def build_fold_reference(args, arrays, fmri_arrays=None):
     fmri_val_weights = topk_graph(train_fmri, val_fmri, args.reference_k)
     fmri_test_weights = topk_graph(train_fmri, test_fmri, args.reference_k)
     fused_train_weights = fused_graph(
-        fmri_train_weights, phenotype_train_weights, args.fusion_beta, args.reference_k
+        fmri_train_weights, phenotype_train_weights, args.fusion_beta,
+        args.reference_k,
     )
     fused_val_weights = fused_graph(
-        fmri_val_weights, phenotype_val_weights, args.fusion_beta, args.reference_k
+        fmri_val_weights, phenotype_val_weights, args.fusion_beta,
+        args.reference_k,
     )
     fused_test_weights = fused_graph(
-        fmri_test_weights, phenotype_test_weights, args.fusion_beta, args.reference_k
+        fmri_test_weights, phenotype_test_weights, args.fusion_beta,
+        args.reference_k,
     )
     train_neighbor, _ = normative_reference(arrays["train_bec"], fused_train_weights)
     val_neighbor, _ = normative_reference(arrays["train_bec"], fused_val_weights)
@@ -237,11 +263,9 @@ def build_fold_reference(args, arrays, fmri_arrays=None):
         "train_neighbor": train_neighbor,
         "val_neighbor": val_neighbor,
         "test_neighbor": test_neighbor,
-        "diagnostics": {
-            **reference_diagnostics(fused_test_weights),
-            "graph_mode": args.graph_mode,
-            "fusion_beta": float(args.fusion_beta),
-        },
+        "train_weights": fused_train_weights,
+        "val_weights": fused_val_weights,
+        "test_weights": fused_test_weights,
     }
 
 
@@ -282,6 +306,23 @@ def train_refiner(args, bec, neighbor, device):
     return model, refined.cpu().numpy(), metrics
 
 
+def apply_refiner(model, bec, neighbor, device, gate_scale):
+    """Apply a trained PGR model with a subject-level QC gate scale."""
+    original = torch.from_numpy(bec).float().to(device)
+    neighbor_tensor = torch.from_numpy(neighbor).float().to(device)
+    scale = torch.from_numpy(np.asarray(gate_scale, dtype=np.float32)).to(device)
+    refined, gate, _ = model(
+        original,
+        neighbor_tensor,
+        gate_scale=scale,
+        return_parts=True,
+    )
+    return refined.cpu().numpy(), {
+        "gate_mean": float(gate.mean().item()),
+        "gate_max": float(gate.max().item()),
+    }
+
+
 def run_fold(args, fold, data, train_index, val_index, test_index, device):
     fold_seed = args.seed + fold * 1000
     set_seed(fold_seed)
@@ -297,70 +338,202 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
             data["fmri_features"][val_index],
             data["fmri_features"][test_index],
         )
-    reference = build_fold_reference(args, arrays, fmri_arrays)
-    refiner, train_refined, refinement_metrics = train_refiner(
-        args, arrays["train_bec"], reference["train_neighbor"], device
+    qc_fold = None
+    if args.qc_mode == "confidence":
+        qc_fold = prepare_qc_fold(
+            data["qc"][train_index],
+            data["qc"][val_index],
+            data["qc"][test_index],
+        )
+    # Train one PGR model; QC only scales its gate during inference.
+    base_reference = build_fold_reference(args, arrays, fmri_arrays)
+    set_seed(fold_seed)
+    base_refiner, train_base_refined, base_refinement_metrics = train_refiner(
+        args, arrays["train_bec"], base_reference["train_neighbor"], device,
     )
     with torch.no_grad():
-        val_refined = refiner(
+        val_base_refined = base_refiner(
             torch.from_numpy(arrays["val_bec"]).float().to(device),
-            torch.from_numpy(reference["val_neighbor"]).float().to(device),
+            torch.from_numpy(base_reference["val_neighbor"]).float().to(device),
         ).cpu().numpy()
-        test_refined = refiner(
+        test_base_refined = base_refiner(
             torch.from_numpy(arrays["test_bec"]).float().to(device),
-            torch.from_numpy(reference["test_neighbor"]).float().to(device),
+            torch.from_numpy(base_reference["test_neighbor"]).float().to(device),
         ).cpu().numpy()
+
+    representations = {
+        "original": {
+            "train": arrays["train_bec"],
+            "val": arrays["val_bec"],
+            "test": arrays["test_bec"],
+            "reference": base_reference,
+            "refinement": {},
+        },
+        "fusion_refined" if args.graph_mode == "fusion" else "refined": {
+            "train": train_base_refined,
+            "val": val_base_refined,
+            "test": test_base_refined,
+            "reference": base_reference,
+            "refinement": base_refinement_metrics,
+        },
+    }
+
+    if args.qc_mode == "confidence":
+        threshold = fit_qc_mismatch_threshold(
+            base_reference["train_weights"],
+            qc_fold["train"],
+            quantile=args.qc_threshold_quantile,
+        )
+        train_confidence, _ = compute_qc_confidence(
+            base_reference["train_weights"],
+            qc_fold["train"],
+            qc_fold["train"],
+            qc_lambda=args.qc_lambda,
+            min_confidence=args.qc_min_confidence,
+            mismatch_threshold=threshold,
+        )
+        val_confidence, _ = compute_qc_confidence(
+            base_reference["val_weights"],
+            qc_fold["val"],
+            qc_fold["train"],
+            qc_lambda=args.qc_lambda,
+            min_confidence=args.qc_min_confidence,
+            mismatch_threshold=threshold,
+        )
+        test_confidence, test_qc_metrics = compute_qc_confidence(
+            base_reference["test_weights"],
+            qc_fold["test"],
+            qc_fold["train"],
+            qc_lambda=args.qc_lambda,
+            min_confidence=args.qc_min_confidence,
+            mismatch_threshold=threshold,
+        )
+        with torch.no_grad():
+            train_qc_refined, _ = apply_refiner(
+                base_refiner,
+                arrays["train_bec"],
+                base_reference["train_neighbor"],
+                device,
+                train_confidence,
+            )
+            val_qc_refined, _ = apply_refiner(
+                base_refiner,
+                arrays["val_bec"],
+                base_reference["val_neighbor"],
+                device,
+                val_confidence,
+            )
+            test_qc_refined, test_qc_gate_metrics = apply_refiner(
+                base_refiner,
+                arrays["test_bec"],
+                base_reference["test_neighbor"],
+                device,
+                test_confidence,
+            )
+        qc_name = (
+            "qc_refined"
+            if args.graph_mode == "fusion" else "qc_confidence_refined"
+        )
+        representations[qc_name] = {
+            "train": train_qc_refined,
+            "val": val_qc_refined,
+            "test": test_qc_refined,
+            "reference": base_reference,
+            "refinement": {
+                **base_refinement_metrics,
+                **{
+                    f"qc_{key}": value
+                    for key, value in test_qc_metrics.items()
+                },
+                "qc_threshold": float(threshold),
+                "qc_gate_mean": test_qc_gate_metrics["gate_mean"],
+                "qc_gate_max": test_qc_gate_metrics["gate_max"],
+            },
+        }
+        result_qc_metrics = {
+            "qc_threshold": float(threshold),
+            **{
+                f"qc_{key}": value
+                for key, value in test_qc_metrics.items()
+            },
+        }
+    else:
+        result_qc_metrics = {}
     train_labels, test_labels = data["labels"][train_index], data["labels"][test_index]
     classifier_args = dict(device=device, max_epochs=args.classifier_epochs, patience=args.classifier_patience, batch_size=args.batch_size, learning_rate=args.classifier_lr)
-    original_runs, refined_runs = [], []
+    metric_runs = {name: [] for name in representations}
     for repeat in range(args.classifier_repeats):
         classifier_seed = fold_seed + repeat + 1
-        original_metrics, _ = train_classifier(
-            arrays["train_bec"], train_labels, arrays["val_bec"], data["labels"][val_index],
-            arrays["test_bec"], test_labels, seed=classifier_seed, **classifier_args
+        for name, representation in representations.items():
+            metrics, _ = train_classifier(
+                representation["train"], train_labels,
+                representation["val"], data["labels"][val_index],
+                representation["test"], test_labels,
+                seed=classifier_seed, **classifier_args
+            )
+            metric_runs[name].append(metrics)
+    metrics_by_name = {}
+    for name, runs in metric_runs.items():
+        metric_names = runs[0].keys()
+        metrics_by_name[name] = {
+            key: float(np.mean([run[key] for run in runs]))
+            for key in metric_names
+        }
+
+    result = {name: metrics for name, metrics in metrics_by_name.items()}
+    original_test = representations["original"]["test"]
+    original_edge, original_effect = edge_effect_sizes(
+        original_test, test_labels, args.tc_label
+    )
+    for name, representation in representations.items():
+        group = bec_separability(representation["test"], test_labels, args.tc_label)
+        edge, effect = edge_effect_sizes(
+            representation["test"], test_labels, args.tc_label
         )
-        refined_metrics, _ = train_classifier(
-            train_refined, train_labels, val_refined, data["labels"][val_index],
-            test_refined, test_labels, seed=classifier_seed, **classifier_args
+        result.update({f"{name}_{key}": value for key, value in group.items()})
+        result.update({f"{name}_{key}": value for key, value in edge.items()})
+        result[f"{name}_variance_retention"] = float(
+            np.var(representation["test"])
+            / max(np.var(original_test), 1e-12)
         )
-        original_runs.append(original_metrics)
-        refined_runs.append(refined_metrics)
-    metric_names = original_runs[0].keys()
-    original_metrics = {key: float(np.mean([run[key] for run in original_runs])) for key in metric_names}
-    refined_metrics = {key: float(np.mean([run[key] for run in refined_runs])) for key in metric_names}
-    auc_deltas = np.asarray([
-        refined["AUC"] - original["AUC"]
-        for original, refined in zip(original_runs, refined_runs)
-    ])
-    original_group = bec_separability(arrays["test_bec"], test_labels, args.tc_label)
-    refined_group = bec_separability(test_refined, test_labels, args.tc_label)
-    original_edge, original_effect = edge_effect_sizes(arrays["test_bec"], test_labels, args.tc_label)
-    refined_edge, refined_effect = edge_effect_sizes(test_refined, test_labels, args.tc_label)
-    return {"original": original_metrics, "refined": refined_metrics,
-            **{f"original_{key}": value for key, value in original_group.items()},
-            **{f"refined_{key}": value for key, value in refined_group.items()},
-            **{f"original_{key}": value for key, value in original_edge.items()},
-            **{f"refined_{key}": value for key, value in refined_edge.items()},
-            "edge_abs_d_change": float(np.mean(np.abs(refined_effect)) - np.mean(np.abs(original_effect))),
-            "variance_retention": float(np.var(test_refined) / max(np.var(arrays["test_bec"]), 1e-12)),
-            "paired_auc_delta_mean": float(auc_deltas.mean()),
-            "paired_auc_delta_std": float(auc_deltas.std()),
-            **refinement_metrics, **reference["diagnostics"]}
+        result[f"{name}_edge_abs_d_change"] = float(
+            np.mean(np.abs(effect)) - np.mean(np.abs(original_effect))
+        )
+        result[f"{name}_paired_auc_delta_mean"] = float(
+            metrics_by_name[name]["AUC"] - metrics_by_name["original"]["AUC"]
+        )
+        result.update({
+            f"{name}_{key}": value
+            for key, value in representation["refinement"].items()
+        })
+    result.update({"qc_mode": args.qc_mode, **result_qc_metrics})
+    return result
 
 
 def save_results(args, fold_results, fsta_metrics):
     rows = []
     for fold, result in enumerate(fold_results, 1):
         row = {"fold": fold}
-        for name in ("original", "refined"):
+        representation_names = [
+            name for name, value in result.items() if isinstance(value, dict)
+        ]
+        for name in representation_names:
             row.update({f"{name}_{key}": value for key, value in result[name].items()})
-        row.update({key: value for key, value in result.items() if key not in {"original", "refined"}}); rows.append(row)
+        row.update({
+            key: value for key, value in result.items()
+            if key not in representation_names
+        })
+        rows.append(row)
     summary = {"config": vars(args), "fsta_training": fsta_metrics, "folds": rows}
-    for name in ("original", "refined"):
+    representation_names = [
+        name for name, value in fold_results[0].items() if isinstance(value, dict)
+    ]
+    for name in representation_names:
         for metric in ("ACC", "SPE", "AUC", "Precision", "Recall", "F1"):
             values = [row[f"{name}_{metric}"] for row in rows]
             summary[f"{name}_{metric}_mean"] = float(np.mean(values)); summary[f"{name}_{metric}_std"] = float(np.std(values))
             summary[f"{name}_{metric}_display"] = f"{100 * summary[f'{name}_{metric}_mean']:.2f}±{100 * summary[f'{name}_{metric}_std']:.2f}"
+    summary["representations"] = representation_names
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for path in args.output_dir.iterdir():
         if path.is_file() and path.name not in {"experiment_summary.csv", "summary.json"}: path.unlink()
@@ -386,14 +559,25 @@ def main():
     results = []
     for fold, train_index, val_index, test_index in make_stratified_splits(data["labels"], args.n_splits, args.seed, args.validation_size):
         result = run_fold(args, fold, data, train_index, val_index, test_index, device); results.append(result)
-        print(f"fold {fold}: original AUC={result['original']['AUC']:.4f}, refined AUC={result['refined']['AUC']:.4f}, original Fisher={result['original_bec_fisher_ratio']:.4f}, refined Fisher={result['refined_bec_fisher_ratio']:.4f}")
+        fold_report = " | ".join(
+            f"{name} AUC={result[name]['AUC']:.4f}"
+            for name, value in result.items() if isinstance(value, dict)
+        )
+        print(f"fold {fold}: {fold_report}")
     summary = save_results(args, results, fsta_metrics)
     report_metrics = ("ACC", "SPE", "AUC", "Precision", "Recall", "F1")
+    print(
+        "\nQC configuration: "
+        f"columns={','.join(args.qc_columns)}; "
+        f"lambda={args.qc_lambda:g}; "
+        f"min_confidence={args.qc_min_confidence:g}; "
+        f"threshold_quantile={args.qc_threshold_quantile:g}"
+    )
     print("\nmean±std (%)")
     print("representation | " + " | ".join(report_metrics))
-    for name in ("original", "refined"):
+    for name in summary["representations"]:
         values = [summary[f"{name}_{metric}_display"] for metric in report_metrics]
-        print(f"{name:13s} | " + " | ".join(values))
+        print(f"{name:20s} | " + " | ".join(values))
 
 
 if __name__ == "__main__": main()

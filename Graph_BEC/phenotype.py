@@ -8,10 +8,6 @@ from pathlib import Path
 import numpy as np
 
 from Graph_BEC.normative_bec import (
-    apply_continuous_scaler,
-    fit_continuous_scaler,
-    normative_reference,
-    reference_diagnostics,
     reference_weights,
 )
 
@@ -75,42 +71,6 @@ def load_phenotypes(phenotype_csv, subject_ids, site_ids):
     }
 
 
-def prepare_phenotype_fold(train_cont, val_cont, test_cont, train_cat,
-                           val_cat, test_cat):
-    scaler = fit_continuous_scaler(train_cont)
-    categories = {
-        value: index
-        for index, value in enumerate(sorted(set(np.asarray(train_cat).astype(str))))
-    }
-    unknown = len(categories)
-    encode = lambda values: np.asarray([
-        categories.get(value, unknown) for value in np.asarray(values).astype(str)
-    ])
-    return {
-        "train_cont": apply_continuous_scaler(train_cont, scaler),
-        "val_cont": apply_continuous_scaler(val_cont, scaler),
-        "test_cont": apply_continuous_scaler(test_cont, scaler),
-        "train_cat": encode(train_cat)[:, None],
-        "val_cat": encode(val_cat)[:, None],
-        "test_cat": encode(test_cat)[:, None],
-        "scaler": scaler,
-    }
-
-
-def build_reference_bec(train_bec, train_cont, train_cat, query_cont, query_cat,
-                        k=20, bandwidth=1.0, categorical_penalty=4.0,
-                        continuous_weights=(1.0, 0.3), permute=False, seed=2026):
-    """Return the phenotype-neighbor BEC itself, without any diagnosis label."""
-    train_weights, query_weights, _ = build_reference_graph(
-        train_cont, train_cat, query_cont, query_cat,
-        k=k, bandwidth=bandwidth, categorical_penalty=categorical_penalty,
-        continuous_weights=continuous_weights, permute=permute, seed=seed,
-    )
-    _, global_mean = normative_reference(train_bec, train_weights)
-    query_mean, _ = normative_reference(train_bec, query_weights)
-    return query_mean, global_mean, reference_diagnostics(query_weights)
-
-
 def build_reference_graph(train_cont, train_cat, query_cont, query_cat,
                            k=20, bandwidth=1.0, categorical_penalty=4.0,
                            continuous_weights=(1.0, 0.3), permute=False, seed=2026):
@@ -133,7 +93,7 @@ def build_reference_graph(train_cont, train_cat, query_cont, query_cat,
         train_cont, train_cat, self_indices=self_indices, **common
     )
     query_weights = reference_weights(query_cont, query_cat, **common)
-    return train_weights, query_weights, reference_diagnostics(query_weights)
+    return train_weights, query_weights
 
 
 # ---------------------------------------------------------------------------
@@ -176,18 +136,33 @@ def topk_graph(reference, query, neighbors, exclude_self=False):
     similarity = np.clip(query @ reference.T, 0.0, 1.0)
     if exclude_self and len(reference) == len(query):
         similarity[np.arange(len(query)), np.arange(len(reference))] = -np.inf
-    count = min(max(1, int(neighbors)), len(reference) - int(exclude_self))
-    graph = np.zeros_like(similarity, dtype=np.float32)
-    for row in range(len(query)):
-        indices = np.argpartition(similarity[row], -count)[-count:]
-        values = np.maximum(similarity[row, indices], 0.0)
+    return topk_row_normalize(similarity, neighbors, exclude_self=exclude_self)
+
+
+def topk_row_normalize(scores, neighbors, exclude_self=False):
+    """Select the largest scores in each row and row-normalize them."""
+    scores = np.asarray(scores, dtype=np.float32).copy()
+    if scores.ndim != 2:
+        raise ValueError(f"scores must be [queries, references], got {scores.shape}")
+    if exclude_self and len(scores) == scores.shape[1]:
+        scores[np.arange(len(scores)), np.arange(scores.shape[1])] = -np.inf
+    count = min(max(1, int(neighbors)), scores.shape[1] - int(exclude_self))
+    output = np.zeros_like(scores, dtype=np.float32)
+    for row in range(len(scores)):
+        indices = np.argpartition(scores[row], -count)[-count:]
+        values = np.maximum(scores[row, indices], 0.0)
         if values.sum() <= 1e-8:
             values = np.ones_like(values)
-        graph[row, indices] = values / values.sum()
-    return graph
+        output[row, indices] = values / values.sum()
+    return output
 
 
-def fused_graph(fmri_graph, phenotype_graph, beta, neighbors):
+def fused_graph(
+    fmri_graph,
+    phenotype_graph,
+    beta,
+    neighbors,
+):
     """Fuse two row-normalized graphs and retain a common top-k size."""
     if not 0.0 <= float(beta) <= 1.0:
         raise ValueError(f"fusion beta must be in [0, 1], got {beta}")
@@ -198,12 +173,4 @@ def fused_graph(fmri_graph, phenotype_graph, beta, neighbors):
             f"Graph shapes must match, got {fmri_graph.shape} and {phenotype_graph.shape}"
         )
     scores = float(beta) * fmri_graph + (1.0 - float(beta)) * phenotype_graph
-    count = min(max(1, int(neighbors)), scores.shape[1])
-    fused = np.zeros_like(scores, dtype=np.float32)
-    for row in range(len(scores)):
-        indices = np.argpartition(scores[row], -count)[-count:]
-        values = np.maximum(scores[row, indices], 0.0)
-        if values.sum() <= 1e-8:
-            values = np.ones_like(values)
-        fused[row, indices] = values / values.sum()
-    return fused
+    return topk_row_normalize(scores, neighbors)
