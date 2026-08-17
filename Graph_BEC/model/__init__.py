@@ -5,6 +5,7 @@ from .fsta_utils import (
 )
 from .fsta_training import train_fsta, build_fsta
 from .pgr_bec_static import PGRBECStatic
+from .qsr_bec import QSRBECRefiner
 
 __all__ = [
     "FSTA",
@@ -14,4 +15,5 @@ __all__ = [
     "train_fsta",
     "build_fsta",
     "PGRBECStatic",
+    "QSRBECRefiner",
 ]

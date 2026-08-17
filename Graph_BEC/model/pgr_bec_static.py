@@ -23,17 +23,12 @@ class PGRBECStatic(nn.Module):
             nn.Conv2d(hidden_channels, 1, kernel_size=1),
         )
 
-    def forward(self, initial_bec, neighbor_bec, gate_scale=None, return_parts=False):
+    def forward(self, initial_bec, neighbor_bec, return_parts=False):
         difference = neighbor_bec - initial_bec
         gate_input = torch.stack(
             (initial_bec, neighbor_bec, difference.abs()), dim=1
         )
         gate = self.gate_max * torch.sigmoid(self.gate_network(gate_input)).squeeze(1)
-        if gate_scale is not None:
-            scale = torch.as_tensor(gate_scale, device=gate.device, dtype=gate.dtype)
-            if scale.numel() != initial_bec.shape[0]:
-                raise ValueError("gate_scale must contain one value per subject")
-            gate = gate * scale.reshape(-1, 1, 1)
         diagonal = torch.eye(self.nodes_num, device=initial_bec.device, dtype=torch.bool)[None]
         gate = gate.masked_fill(diagonal, 0.0)
         refined = (initial_bec + gate * difference).masked_fill(diagonal, 0.0)

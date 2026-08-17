@@ -26,20 +26,27 @@ from Graph_BEC.data import (
 )
 from Graph_BEC.downstream import train_classifier
 from Graph_BEC.model import (
-    PGRBECStatic,
+    PGRBECStatic, QSRBECRefiner,
     train_fsta, extract_subject_bec,
 )
 from Graph_BEC.model.pgr_bec_static import static_refinement_loss
+from Graph_BEC.model.qsr_bec import qsr_refinement_loss
 from Graph_BEC.qc import (
-    compute_qc_confidence,
     DEFAULT_QC_COLUMNS,
-    fit_qc_mismatch_threshold,
+    build_confound_design,
+    build_pseudo_target,
+    build_qc_sensitive_map,
+    fit_qc_artifact_basis,
+    fit_qc_scaler,
     load_aligned_qc,
-    prepare_qc_fold,
+    qc_corrupt,
+    relative_change,
+    sample_joint_qc_delta,
+    transform_qc_badness,
 )
 from Graph_BEC.phenotype import (
     build_reference_graph,
-    fused_graph, load_phenotypes,
+    fused_graph, load_aligned_phenotypes, load_phenotypes,
     subject_fc_features, topk_graph,
 )
 
@@ -115,12 +122,19 @@ def parse_args():
     parser.add_argument("--continuous-weights", type=float, nargs=2, default=[1.0, 0.3]) # [1.0, 0.3] 表示 FIQ 主导、PIQ 辅助构建邻域
     parser.add_argument("--permute-phenotype", action="store_true") # 随机打乱训练集的表型-受试者对应关系，以增加鲁棒性
 
-    # =========================== QC confidence gate ===========================
-    parser.add_argument("--qc-mode", choices=["none", "confidence"], default="confidence")
-    parser.add_argument("--qc-columns", nargs="+", default=list(DEFAULT_QC_COLUMNS))
-    parser.add_argument("--qc-lambda", type=float, default=0.75)
-    parser.add_argument("--qc-min-confidence", type=float, default=0.75)
-    parser.add_argument("--qc-threshold-quantile", type=float, default=0.7)
+    # =========================== QSR-BEC QC 弱监督 ===========================
+    parser.add_argument("--qsr-qc-columns", nargs="+", default=list(DEFAULT_QC_COLUMNS))
+    parser.add_argument("--qsr-epochs", type=int, default=80)
+    parser.add_argument("--qsr-lr", type=float, default=3e-3) # 3e-3
+    parser.add_argument("--qsr-hidden-channels", type=int, default=8) # 8
+    parser.add_argument("--qsr-eta", type=float, default=0.15)
+    parser.add_argument("--qsr-r-max", type=float, default=0.03)
+    parser.add_argument("--qsr-corruption-scale", type=float, default=0.5)
+    parser.add_argument("--qsr-gate-max", type=float, default=0.5) # 0.5
+    parser.add_argument("--qsr-gate-weight", type=float, default=1e-3) # 1e-3
+    parser.add_argument("--qsr-variance-weight", type=float, default=0.1)
+    parser.add_argument("--qsr-variance-retention", type=float, default=0.85)
+    parser.add_argument("--qsr-basis-ridge", type=float, default=1e-3)
 
     # =========================== BrainNetCNN 分类器 ===========================
     parser.add_argument("--classifier-epochs", type=int, default=100)
@@ -178,10 +192,14 @@ def load_pipeline_data(args, device):
         data["fmri_features"] = subject_fc_features(graph_time_series)
     phenotype = load_phenotypes(args.phenotype_csv, data["subject_ids"], data["site_ids"])
     data.update(phenotype)
-    if args.qc_mode == "confidence":
-        data["qc"] = load_aligned_qc(
-            args.phenotype_csv, data["subject_ids"], args.qc_columns
-        )
+    data["qsr_qc"] = load_aligned_qc(
+        args.phenotype_csv, data["subject_ids"], args.qsr_qc_columns
+    )
+    data["qsr_confound_values"] = load_aligned_phenotypes(
+        args.phenotype_csv,
+        data["subject_ids"],
+        ["AGE_AT_SCAN", "SEX", "FIQ", "PIQ"],
+    ).astype(np.float32)
     data["bec"] = np.asarray(data["bec"], dtype=np.float32)
     data["labels"] = np.asarray(data["labels"], dtype=np.int64)
     return data, fsta_metrics
@@ -306,21 +324,90 @@ def train_refiner(args, bec, neighbor, device):
     return model, refined.cpu().numpy(), metrics
 
 
-def apply_refiner(model, bec, neighbor, device, gate_scale):
-    """Apply a trained PGR model with a subject-level QC gate scale."""
+def train_qsr_refiner(args, bec, neighbor, train_qc, confound_values, site_ids, device, seed):
+    """Train QSR using QC only within this training fold."""
+    qc_scaler = fit_qc_scaler(train_qc)
+    qc_badness = transform_qc_badness(train_qc, qc_scaler)
+    confounds = build_confound_design(site_ids, confound_values)
+    qc_basis = fit_qc_artifact_basis(
+        bec, qc_badness, confounds, ridge=args.qsr_basis_ridge
+    )
+    qc_sensitive_map = build_qc_sensitive_map(qc_basis)
+    pseudo_target = build_pseudo_target(
+        bec, qc_badness, qc_basis, args.qsr_eta, args.qsr_r_max
+    )
+
+    model = QSRBECRefiner(
+        bec.shape[-1], args.qsr_hidden_channels, args.qsr_gate_max
+    ).to(device)
     original = torch.from_numpy(bec).float().to(device)
     neighbor_tensor = torch.from_numpy(neighbor).float().to(device)
-    scale = torch.from_numpy(np.asarray(gate_scale, dtype=np.float32)).to(device)
-    refined, gate, _ = model(
-        original,
-        neighbor_tensor,
-        gate_scale=scale,
-        return_parts=True,
-    )
-    return refined.cpu().numpy(), {
-        "gate_mean": float(gate.mean().item()),
-        "gate_max": float(gate.max().item()),
-    }
+    pseudo_tensor = torch.from_numpy(pseudo_target).float().to(device)
+    sensitive_tensor = torch.from_numpy(qc_sensitive_map).float().to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.qsr_lr)
+    rng = np.random.default_rng(seed)
+    best_state, best_loss, metrics = None, float("inf"), {}
+    for _ in range(args.qsr_epochs):
+        qc_delta = sample_joint_qc_delta(qc_badness, rng)
+        corrupted = qc_corrupt(
+            pseudo_target, qc_basis, qc_delta, args.qsr_corruption_scale,
+            maximum_ratio=max(2.0 * args.qsr_r_max, args.qsr_r_max),
+        )
+        corrupted_tensor = torch.from_numpy(corrupted).float().to(device)
+        optimizer.zero_grad()
+        original_refined, original_gate, _, _ = model(
+            original, neighbor_tensor, sensitive_tensor, return_parts=True
+        )
+        corrupted_refined, corrupted_gate, _, _ = model(
+            corrupted_tensor, neighbor_tensor, sensitive_tensor, return_parts=True
+        )
+        total, parts = qsr_refinement_loss(
+            original_refined, corrupted_refined, pseudo_tensor, original,
+            original_gate, corrupted_gate,
+            args.qsr_variance_retention, args.qsr_gate_weight,
+            args.qsr_variance_weight,
+        )
+        total.backward()
+        optimizer.step()
+        metrics = {
+            "qsr_loss": float(total.item()),
+            **{key: float(value.item()) for key, value in parts.items()},
+        }
+        if metrics["qsr_loss"] < best_loss:
+            best_loss = metrics["qsr_loss"]
+            best_state = copy.deepcopy(model.state_dict())
+    model.load_state_dict(best_state)
+    model.eval()
+    with torch.no_grad():
+        refined, gate, direction, _ = model(
+            original, neighbor_tensor, sensitive_tensor, return_parts=True
+        )
+    effective_coefficient = gate * direction
+    refined_array = refined.cpu().numpy()
+    metrics.update({
+        "qsr_gate_mean": float(gate.mean().item()),
+        "qsr_gate_max": float(gate.max().item()),
+        "qsr_direction_abs_mean": float(direction.abs().mean().item()),
+        "qsr_effective_coefficient_mean": float(effective_coefficient.mean().item()),
+        "qsr_effective_coefficient_abs_mean": float(
+            effective_coefficient.abs().mean().item()
+        ),
+        "qsr_pseudo_relative_change": relative_change(bec, pseudo_target),
+        "qsr_refined_relative_change": relative_change(bec, refined_array),
+        "qsr_sensitive_map_mean": float(qc_sensitive_map.mean()),
+        "qsr_basis_abs_mean": float(np.abs(qc_basis).mean()),
+    })
+    return model, refined_array, qc_sensitive_map, metrics
+
+
+def apply_qsr_refiner(model, bec, neighbor, qc_sensitive_map, device):
+    """Apply a trained QSR model without reading validation/test QC."""
+    with torch.no_grad():
+        return model(
+            torch.from_numpy(bec).float().to(device),
+            torch.from_numpy(neighbor).float().to(device),
+            torch.from_numpy(qc_sensitive_map).float().to(device),
+        ).cpu().numpy()
 
 
 def run_fold(args, fold, data, train_index, val_index, test_index, device):
@@ -338,14 +425,7 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
             data["fmri_features"][val_index],
             data["fmri_features"][test_index],
         )
-    qc_fold = None
-    if args.qc_mode == "confidence":
-        qc_fold = prepare_qc_fold(
-            data["qc"][train_index],
-            data["qc"][val_index],
-            data["qc"][test_index],
-        )
-    # Train one PGR model; QC only scales its gate during inference.
+    # Fusion/phenotype graph is fixed independently of QC for all three outputs.
     base_reference = build_fold_reference(args, arrays, fmri_arrays)
     set_seed(fold_seed)
     base_refiner, train_base_refined, base_refinement_metrics = train_refiner(
@@ -369,7 +449,7 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
             "reference": base_reference,
             "refinement": {},
         },
-        "fusion_refined" if args.graph_mode == "fusion" else "refined": {
+        "refined": {
             "train": train_base_refined,
             "val": val_base_refined,
             "test": test_base_refined,
@@ -377,90 +457,48 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
             "refinement": base_refinement_metrics,
         },
     }
-
-    if args.qc_mode == "confidence":
-        threshold = fit_qc_mismatch_threshold(
-            base_reference["train_weights"],
-            qc_fold["train"],
-            quantile=args.qc_threshold_quantile,
-        )
-        train_confidence, _ = compute_qc_confidence(
-            base_reference["train_weights"],
-            qc_fold["train"],
-            qc_fold["train"],
-            qc_lambda=args.qc_lambda,
-            min_confidence=args.qc_min_confidence,
-            mismatch_threshold=threshold,
-        )
-        val_confidence, _ = compute_qc_confidence(
-            base_reference["val_weights"],
-            qc_fold["val"],
-            qc_fold["train"],
-            qc_lambda=args.qc_lambda,
-            min_confidence=args.qc_min_confidence,
-            mismatch_threshold=threshold,
-        )
-        test_confidence, test_qc_metrics = compute_qc_confidence(
-            base_reference["test_weights"],
-            qc_fold["test"],
-            qc_fold["train"],
-            qc_lambda=args.qc_lambda,
-            min_confidence=args.qc_min_confidence,
-            mismatch_threshold=threshold,
-        )
-        with torch.no_grad():
-            train_qc_refined, _ = apply_refiner(
-                base_refiner,
-                arrays["train_bec"],
-                base_reference["train_neighbor"],
-                device,
-                train_confidence,
-            )
-            val_qc_refined, _ = apply_refiner(
-                base_refiner,
-                arrays["val_bec"],
-                base_reference["val_neighbor"],
-                device,
-                val_confidence,
-            )
-            test_qc_refined, test_qc_gate_metrics = apply_refiner(
-                base_refiner,
-                arrays["test_bec"],
-                base_reference["test_neighbor"],
-                device,
-                test_confidence,
-            )
-        qc_name = (
-            "qc_refined"
-            if args.graph_mode == "fusion" else "qc_confidence_refined"
-        )
-        representations[qc_name] = {
-            "train": train_qc_refined,
-            "val": val_qc_refined,
-            "test": test_qc_refined,
-            "reference": base_reference,
-            "refinement": {
-                **base_refinement_metrics,
-                **{
-                    f"qc_{key}": value
-                    for key, value in test_qc_metrics.items()
-                },
-                "qc_threshold": float(threshold),
-                "qc_gate_mean": test_qc_gate_metrics["gate_mean"],
-                "qc_gate_max": test_qc_gate_metrics["gate_max"],
-            },
-        }
-        result_qc_metrics = {
-            "qc_threshold": float(threshold),
-            **{
-                f"qc_{key}": value
-                for key, value in test_qc_metrics.items()
-            },
-        }
-    else:
-        result_qc_metrics = {}
+    set_seed(fold_seed + 1)
+    qsr_refiner, train_qsr_refined, qc_sensitive_map, qsr_metrics = train_qsr_refiner(
+        args,
+        arrays["train_bec"],
+        base_reference["train_neighbor"],
+        data["qsr_qc"][train_index],
+        data["qsr_confound_values"][train_index],
+        data["site_ids"][train_index],
+        device,
+        fold_seed + 1,
+    )
+    print(
+        f"fold {fold}: QSR loss={qsr_metrics['qsr_loss']:.6f}, "
+        f"pseudo={qsr_metrics['pseudo_loss']:.6f}, "
+        f"restore={qsr_metrics['restore_loss']:.6f}, "
+        f"gate_mean={qsr_metrics['qsr_gate_mean']:.6f}, "
+        f"direction_abs_mean={qsr_metrics['qsr_direction_abs_mean']:.6f}, "
+        f"effective_abs_mean={qsr_metrics['qsr_effective_coefficient_abs_mean']:.6f}, "
+        f"refined_change={100.0 * qsr_metrics['qsr_refined_relative_change']:.2f}%, "
+        f"pseudo_change={100.0 * qsr_metrics['qsr_pseudo_relative_change']:.2f}%"
+    )
+    val_qsr_refined = apply_qsr_refiner(
+        qsr_refiner, arrays["val_bec"], base_reference["val_neighbor"],
+        qc_sensitive_map, device,
+    )
+    test_qsr_refined = apply_qsr_refiner(
+        qsr_refiner, arrays["test_bec"], base_reference["test_neighbor"],
+        qc_sensitive_map, device,
+    )
+    representations["qc_refined"] = {
+        "train": train_qsr_refined,
+        "val": val_qsr_refined,
+        "test": test_qsr_refined,
+        "reference": base_reference,
+        "refinement": qsr_metrics,
+    }
     train_labels, test_labels = data["labels"][train_index], data["labels"][test_index]
-    classifier_args = dict(device=device, max_epochs=args.classifier_epochs, patience=args.classifier_patience, batch_size=args.batch_size, learning_rate=args.classifier_lr)
+    classifier_args = dict(
+        device=device, max_epochs=args.classifier_epochs,
+        patience=args.classifier_patience, batch_size=args.batch_size,
+        learning_rate=args.classifier_lr,
+    )
     metric_runs = {name: [] for name in representations}
     for repeat in range(args.classifier_repeats):
         classifier_seed = fold_seed + repeat + 1
@@ -506,7 +544,6 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
             f"{name}_{key}": value
             for key, value in representation["refinement"].items()
         })
-    result.update({"qc_mode": args.qc_mode, **result_qc_metrics})
     return result
 
 
@@ -567,11 +604,17 @@ def main():
     summary = save_results(args, results, fsta_metrics)
     report_metrics = ("ACC", "SPE", "AUC", "Precision", "Recall", "F1")
     print(
-        "\nQC configuration: "
-        f"columns={','.join(args.qc_columns)}; "
-        f"lambda={args.qc_lambda:g}; "
-        f"min_confidence={args.qc_min_confidence:g}; "
-        f"threshold_quantile={args.qc_threshold_quantile:g}"
+        "\nQSR-BEC QC weak-supervision configuration:\n"
+        f"  QC columns: {', '.join(args.qsr_qc_columns)}\n"
+        f"  Training: epochs={args.qsr_epochs}; lr={args.qsr_lr:g}; "
+        f"hidden_channels={args.qsr_hidden_channels}\n"
+        f"  Pseudo-target: eta={args.qsr_eta:g}; r_max={args.qsr_r_max:g}\n"
+        f"  Synthetic corruption: scale={args.qsr_corruption_scale:g}\n"
+        f"  Refiner: gate_max={args.qsr_gate_max:g}; "
+        f"gate_weight={args.qsr_gate_weight:g}\n"
+        f"  Variance: weight={args.qsr_variance_weight:g}; "
+        f"retention={args.qsr_variance_retention:g}\n"
+        f"  QC basis: ridge={args.qsr_basis_ridge:g}"
     )
     print("\nmean±std (%)")
     print("representation | " + " | ".join(report_metrics))
