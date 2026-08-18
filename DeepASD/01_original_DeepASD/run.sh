@@ -1,1 +1,0 @@
-python main.py --model DeepASD --dataset ABIDE_A --d 128 --d_hid 32 --d_dis_hidden 128 --lr_GC 0.01 --lr_MP 0.0005

@@ -31,7 +31,7 @@ if str(ROOT) not in sys.path:
 from Graph_BEC.phenotype import load_phenotypes
 from Graph_BEC.normative_bec import reference_weights
 
-DEFAULT_BEC = ROOT / "downstream_abide_i/outputs/entropy/loss_alpha_0.01/seed_42/epochs_101/subject_bec.npz"
+DEFAULT_BEC = ROOT / "Graph_BEC/outputs/entropy/loss_alpha_0.01/seed_42/epochs_101/subject_bec.npz"
 DEFAULT_PHENOTYPE = ROOT / "dataset/ABIDE-I/Phenotypic_Processing_filled.csv"
 DEFAULT_OUTPUT = ROOT / "Graph_BEC/analysis/outputs"
 

@@ -22,7 +22,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BEC = (
     ROOT
-    / "downstream_abide_i/outputs/original/loss_alpha_0.8/seed_42/epochs_101/subject_bec.npz"
+    / "Graph_BEC/outputs/original/loss_alpha_0.8/seed_42/epochs_101/subject_bec.npz"
 )
 DEFAULT_OUTPUT = ROOT / "Graph_BEC/analysis/outputs/original_group_bec"
 

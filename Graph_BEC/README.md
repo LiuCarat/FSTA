@@ -120,7 +120,7 @@ site_ids
 当前默认 BEC 文件为：
 
 ```text
-downstream_abide_i/outputs/entropy/loss_alpha_0.01/seed_42/epochs_101/subject_bec.npz
+Graph_BEC/outputs/entropy/loss_alpha_0.01/seed_42/epochs_101/subject_bec.npz
 ```
 
 bec 模式不重新训练 FSTA，只在已有 BEC 上执行后续患者图构建、BEC 修正和分类验证，因此适合快速比较不同图参数或 refiner 参数。
@@ -154,7 +154,7 @@ loss_alpha = 0.01
 
 ### 4.2 FSTA 内部结构
 
-当前 `Graph_BEC/model/fsta_components/fsta.py` 中，FSTA 主要包含：
+当前 `Graph_BEC/baseline/FSTA_EC/fsta_components/fsta.py` 中，FSTA 主要包含：
 
 ```text
 输入时间序列
@@ -697,7 +697,7 @@ summary.json
 - `mean±std` 展示字符串；
 - BEC 群体差异和方差保留结果。
 
-主程序在保存前会清理输出目录中除 `experiment_summary.csv` 和 `summary.json` 以外的普通文件。
+主程序在保存结果前会保留 `.npz` BEC 归档，只清理其他非结果普通文件。
 
 ## 14. 常用运行方式
 

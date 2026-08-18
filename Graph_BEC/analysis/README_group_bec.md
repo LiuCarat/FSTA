@@ -33,14 +33,14 @@ python Graph_BEC/analysis/group_bec_descriptive.py
 默认输入是：
 
 ```text
-downstream_abide_i/outputs/original/loss_alpha_0.8/seed_42/epochs_101/subject_bec.npz
+Graph_BEC/outputs/original/loss_alpha_0.8/seed_42/epochs_101/subject_bec.npz
 ```
 
 如需更换 Original BEC 版本：
 
 ```bash
 python Graph_BEC/analysis/group_bec_descriptive.py \
-  --bec-path downstream_abide_i/outputs/original/loss_alpha_0.7/seed_42/epochs_101/subject_bec.npz \
+  --bec-path Graph_BEC/outputs/original/loss_alpha_0.7/seed_42/epochs_101/subject_bec.npz \
   --output-dir Graph_BEC/analysis/outputs/original_group_bec_alpha07
 ```
 
