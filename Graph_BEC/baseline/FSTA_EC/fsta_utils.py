@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from Graph_BEC.data import fixed_window_starts
+from Graph_BEC.utils import fixed_window_starts
 
 
 # ---------------------------------------------------------------------------

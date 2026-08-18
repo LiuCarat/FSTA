@@ -10,6 +10,9 @@ from sklearn.model_selection import StratifiedKFold
 
 
 PRIMARY_METRICS = ("precision", "recall", "f1")
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_BEC_PATH = ROOT / "Graph_BEC/outputs/fstc_ec_v3_subject_ec.npz"
+DEFAULT_OUTPUT_DIR = ROOT / "Graph_BEC/outputs/fstc_ec_random_forest"
 
 
 def parse_args():
@@ -18,14 +21,10 @@ def parse_args():
     )
     parser.add_argument(
         "--bec_path",
-        default="/data/users/liulin/PythonCode/ST-MRI/FSTA/downstream_abide_i/outputs/phenotype_conditioned/original/loss_alpha_0.9/seed_42/epochs_101/subject_bec.npz",
-        help="FSTA_BEC.py 或 Phenotype_FSTA_BEC.py 生成的 subject_bec.npz",
+        type=Path,
+        default=DEFAULT_BEC_PATH,
     )
-    parser.add_argument(
-        "--output_dir",
-        default="downstream_abide_i/outputs/random_forest_10fold/phenotype_conditioned/original/loss_alpha_0.9/seed_42/epochs_101",
-        help="分类指标输出目录",
-    )
+    parser.add_argument("--output_dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--n_splits", type=int, default=10)
     parser.add_argument("--n_estimators", type=int, default=1000)
     parser.add_argument("--n_jobs", type=int, default=-1)
@@ -159,8 +158,8 @@ def write_results(output_dir, fold_rows, summary):
 
 def main():
     args = parse_args()
-    bec_path = Path(args.bec_path)
-    output_dir = Path(args.output_dir)
+    bec_path = _resolve_repository_path(args.bec_path)
+    output_dir = _resolve_repository_path(args.output_dir)
     if not bec_path.is_file():
         raise FileNotFoundError(f"BEC file not found: {bec_path}")
 
@@ -226,6 +225,11 @@ def main():
         f"Recall={format_mean_std(means[1], stds[1])} "
         f"F1={format_mean_std(means[2], stds[2])}"
     )
+
+
+def _resolve_repository_path(path):
+    path = Path(path)
+    return path if path.is_absolute() else ROOT / path
 
 
 if __name__ == "__main__":

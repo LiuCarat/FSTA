@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 from .fsta_components import FSTA, ScheduledOptim
 from .fsta_utils import FSTAWindowLoss
-from Graph_BEC.data import RandomSubjectWindowDataset, set_seed
+from Graph_BEC.utils import RandomSubjectWindowDataset, set_seed
 
 
 def build_fsta(args, device):

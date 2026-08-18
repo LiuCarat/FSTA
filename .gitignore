@@ -17,6 +17,7 @@ venv/
 # Generated experiment outputs and model checkpoints
 out/
 downstream_abide_i/outputs/
+downstream_adhd200/outputs/
 downstream_bec/outputs/
 DeepASD/02_individual_BEC_AAL90/results/
 *.pt
