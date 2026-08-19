@@ -44,7 +44,7 @@ from Graph_BEC.phenotype import (
 )
 
 DEFAULT_BEC = ROOT / "Graph_BEC/outputs/seed_42/subject_bec.npz"
-DEFAULT_FSTC_BEC = ROOT / "Graph_BEC/outputs/fstc_ec_causal_subject_ec.npz"
+DEFAULT_DTS_BEC = ROOT / "Graph_BEC/outputs/dts_ec_subject_ec.npz"
 DEFAULT_DATA_ROOT = ROOT / "dataset/ABIDE-I"
 DEFAULT_PHENOTYPE = ROOT / "dataset/ABIDE-I/Phenotypic_Processing_filled.csv"
 DEFAULT_OUTPUT = ROOT / "Graph_BEC/outputs"
@@ -55,7 +55,14 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-mode", choices=["bec", "raw"], default="bec")
     parser.add_argument("--bec-path", type=Path, default=DEFAULT_BEC)
-    parser.add_argument("--fstc-bec-path", type=Path, default=DEFAULT_FSTC_BEC)
+    parser.add_argument(
+        "--dts-bec-path",
+        "--fstc-bec-path",
+        dest="dts_bec_path",
+        type=Path,
+        default=DEFAULT_DTS_BEC,
+        help="DTS-EC subject-level BEC archive (legacy --fstc-bec-path is accepted).",
+    )
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--phenotype-csv", type=Path, default=DEFAULT_PHENOTYPE)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
@@ -604,9 +611,10 @@ def main():
             f"Loading data from {run_args.data_root} with phenotype {run_args.phenotype_csv}..."
         )
         data, fsta_metrics = load_pipeline_data(run_args, device)
-        fstc_archive = load_bec_archive(run_args.fstc_bec_path)
-        _validate_matching_bec_archive(data, fstc_archive, run_args.fstc_bec_path)
-        data["fstc_bec"] = np.asarray(fstc_archive["bec"], dtype=np.float32)
+        dts_archive = load_bec_archive(run_args.dts_bec_path)
+        _validate_matching_bec_archive(data, dts_archive, run_args.dts_bec_path)
+        # Keep the internal key stable for the existing refinement reports.
+        data["fstc_bec"] = np.asarray(dts_archive["bec"], dtype=np.float32)
         if np.unique(data["labels"]).size != 2:
             raise ValueError(
                 "The selected subjects contain only one diagnosis class. "

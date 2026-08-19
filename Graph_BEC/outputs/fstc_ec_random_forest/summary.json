@@ -11,10 +11,10 @@
     "0": 403,
     "1": 468
   },
-  "precision_mean_percent": "66.21",
-  "precision_std_percent": "5.07",
-  "recall_mean_percent": "65.10",
-  "recall_std_percent": "3.80",
-  "f1_mean_percent": "63.65",
-  "f1_std_percent": "3.90"
+  "precision_mean_percent": "64.72",
+  "precision_std_percent": "4.40",
+  "recall_mean_percent": "64.06",
+  "recall_std_percent": "3.82",
+  "f1_mean_percent": "62.58",
+  "f1_std_percent": "4.44"
 }

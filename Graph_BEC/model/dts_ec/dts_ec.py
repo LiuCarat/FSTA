@@ -1,4 +1,4 @@
-"""Factorized FSTA temporal encoder with a directed spatial EC adapter."""
+"""DTS-EC: decoupled temporal-spatial effective connectivity model."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from .st_multi_head_att import (
 )
 
 
-class FSTCECReconstruction(nn.Module):
+class DTSEC(nn.Module):
     """Estimate directed window BEC and use it for signal reconstruction.
 
     ``bec`` uses source-by-target orientation: ``bec[:, source, target]``.
@@ -73,7 +73,7 @@ class FSTCECReconstruction(nn.Module):
 
         self.source_projection = nn.Linear(hidden_dim, ec_dim, bias=False)
         self.target_projection = nn.Linear(hidden_dim, ec_dim, bias=False)
-        self.value_projection = nn.Linear(hidden_dim, hidden_dim)
+        self.value_projection = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.signal_norm = nn.LayerNorm(hidden_dim, eps=1e-6)
         self.decoder_feed_forward = PositionwiseFeedForward(
             hidden_dim, hidden_dim * 4, dropout=dropout
@@ -100,7 +100,7 @@ class FSTCECReconstruction(nn.Module):
         aggregated_logits = aggregated_logits.masked_fill(
             diagonal, torch.finfo(aggregated_logits.dtype).min
         )
-        bec = torch.softmax(aggregated_logits / self.ec_temperature, dim=-1)
+        bec = torch.softmax(aggregated_logits / self.ec_temperature, dim=-2)
         return bec.masked_fill(diagonal, 0.0)
 
     def _signal_flow(

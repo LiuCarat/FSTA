@@ -1,4 +1,4 @@
-"""Data loading, windowing, and runtime helpers for FSTC-EC."""
+"""Data loading, windowing, and runtime helpers for DTS-EC."""
 
 from __future__ import annotations
 

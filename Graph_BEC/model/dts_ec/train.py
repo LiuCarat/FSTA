@@ -1,4 +1,4 @@
-"""Train factorized FSTA-EC and export subject-level BEC matrices."""
+"""Train DTS-EC and export subject-level BEC matrices."""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ import torch
 PACKAGE_DIR = Path(__file__).resolve().parent
 if __package__ in (None, ""):
     sys.path.insert(0, str(PACKAGE_DIR.parent))
-    from fstc_ec.fstc_ec import FSTCECReconstruction
-    from fstc_ec.losses import reconstruction_stage_loss
-    from fstc_ec.utils import (
+    from dts_ec.dts_ec import DTSEC
+    from dts_ec.losses import reconstruction_stage_loss
+    from dts_ec.utils import (
         fixed_window_starts,
         load_subject_dataset,
         make_window_loader,
@@ -24,7 +24,7 @@ if __package__ in (None, ""):
         split_series,
     )
 else:
-    from .fstc_ec import FSTCECReconstruction
+    from .dts_ec import DTSEC
     from .losses import reconstruction_stage_loss
     from .utils import (
         fixed_window_starts,
@@ -46,36 +46,28 @@ ROOT = (
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, default=ROOT / "dataset/ABIDE-I")
-    parser.add_argument(
-        "--checkpoint",
-        type=Path,
-        default=ROOT / "Graph_BEC/outputs/factorized_fsta_ec.pt",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=ROOT / "Graph_BEC/outputs/factorized_fsta_ec_subject_ec.npz",
-    )
+    parser.add_argument("--checkpoint", type=Path, default=ROOT / "Graph_BEC/outputs/dts_ec.pt")
+    parser.add_argument("--output", type=Path, default=ROOT / "Graph_BEC/outputs/dts_ec_subject_ec.npz")
     parser.add_argument("--window-length", type=int, default=78)
     parser.add_argument("--stride", type=int, default=39)
-    parser.add_argument("--epochs", type=int, default=200)
+    parser.add_argument("--epochs", type=int, default=201)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--hidden-dim", type=int, default=32)
-    parser.add_argument("--n-heads", type=int, default=4)
+    parser.add_argument("--n-heads", type=int, default=8)
     parser.add_argument("--ec-dim", type=int, default=16)
     parser.add_argument("--ec-temperature", type=float, default=0.25)
     parser.add_argument("--dropout", type=float, default=0.2)
     parser.add_argument("--entropy-weight", type=float, default=0.05)
     parser.add_argument("--validation-size", type=float, default=0.2)
-    parser.add_argument("--checkpoint-selection", choices=["best", "final"], default="best")
+    parser.add_argument("--checkpoint-selection", choices=["best", "final"], default="final")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--gpu-id", default="auto")
     return parser.parse_args()
 
 
 def make_model(args, device):
-    return FSTCECReconstruction(
+    return DTSEC(
         window_length=args.window_length,
         hidden_dim=args.hidden_dim,
         n_heads=args.n_heads,
@@ -88,11 +80,21 @@ def make_model(args, device):
 @torch.no_grad()
 def evaluate(model, series, args, device):
     model.eval()
-    losses = []
-    for windows in make_window_loader(series, args.window_length, args.batch_size, args.seed, 0):
-        windows = windows.to(device)
-        losses.append(torch.mean((model(windows)["reconstruction"] - windows) ** 2).item())
-    return float(np.mean(losses))
+    squared_error = 0.0
+    value_count = 0
+    for subject_series in series:
+        subject_series = pad_series(subject_series, args.window_length)
+        windows = [
+            subject_series[start : start + args.window_length]
+            for start in fixed_window_starts(
+                subject_series.shape[0], args.window_length, args.stride
+            )
+        ]
+        windows = torch.from_numpy(np.stack(windows)).float().to(device)
+        error = model(windows)["reconstruction"] - windows
+        squared_error += error.pow(2).sum().item()
+        value_count += error.numel()
+    return squared_error / value_count
 
 
 def train_model(model, series, args, device):
@@ -181,21 +183,24 @@ def save_ec_archive(path, subjects, ec, reconstruction_mse):
         subject_ids=subjects["subject_ids"],
         site_ids=subjects["site_ids"],
         reconstruction_mse=reconstruction_mse,
-        model_version=np.asarray("factorized_fsta_ec_v1"),
+        model_version=np.asarray("dts_ec_v1"),
         bec_direction=np.asarray("source_to_target_rows_to_columns"),
     )
 
 
 def summarize_ec(ec):
-    incoming = ec.transpose(0, 2, 1)
-    probability = np.clip(incoming, 1e-12, None)
-    entropy = -(probability * np.log(probability)).sum(axis=-1)
-    entropy /= np.log(float(incoming.shape[-1] - 1))
+    incoming_sum = ec.sum(axis=1)
+    probability = np.clip(ec, 1e-12, None)
+    entropy = -(probability * np.log(probability)).sum(axis=1)
+    entropy /= np.log(float(ec.shape[1] - 1))
     return {
-        "incoming_sum_mean": float(incoming.sum(axis=-1).mean()),
-        "incoming_sum_std": float(incoming.sum(axis=-1).std()),
+        "incoming_sum_mean": float(incoming_sum.mean()),
+        "incoming_sum_std": float(incoming_sum.std()),
         "entropy_mean": float(entropy.mean()),
-        "peak_mean": float(incoming.max(axis=-1).mean()),
+        "peak_mean": float(ec.max(axis=1).mean()),
+        "ec_abs_mean": float(np.abs(ec).mean()),
+        "between_subject_edge_std": float(ec.std(axis=0).mean()),
+        "asymmetry": float(np.abs(ec - ec.transpose(0, 2, 1)).mean()),
     }
 
 
@@ -205,7 +210,7 @@ def main():
     device = select_device(args.gpu_id)
     subjects = load_subject_dataset(args.data_root)
     model = make_model(args, device)
-    print(f"Factorized FSTA-EC subjects={len(subjects['time_series'])}; device={device}")
+    print(f"DTS-EC subjects={len(subjects['time_series'])}; device={device}")
     metrics = train_model(model, subjects["time_series"], args, device)
 
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
@@ -214,7 +219,7 @@ def main():
             "training_metrics": metrics,
             "model_state": model.state_dict(),
             "model_config": vars(args),
-            "model_type": "Factorized FSTA temporal encoder + directed EC adapter + signal flow",
+            "model_type": "DTS-EC: decoupled temporal-spatial EC with signal-flow reconstruction",
         },
         args.checkpoint,
     )
@@ -227,7 +232,9 @@ def main():
     print(
         f"Exported EC: incoming_sum={summary['incoming_sum_mean']:.4f}±"
         f"{summary['incoming_sum_std']:.4f}; entropy={summary['entropy_mean']:.4f}; "
-        f"peak={summary['peak_mean']:.4f}"
+        f"peak={summary['peak_mean']:.4f}; ec_abs_mean={summary['ec_abs_mean']:.4f}; "
+        f"between_subject_edge_std={summary['between_subject_edge_std']:.6f}; "
+        f"asymmetry={summary['asymmetry']:.4f}"
     )
 
 
