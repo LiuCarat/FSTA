@@ -11,7 +11,8 @@ from sklearn.model_selection import StratifiedKFold
 
 PRIMARY_METRICS = ("precision", "recall", "f1")
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_BEC_PATH = ROOT / "Graph_BEC/outputs/fstc_ec_v3_subject_ec.npz"
+# /data/users/liulin/PythonCode/ST-MRI/FSTA/Graph_BEC/outputs/seed_42/subject_bec.npz
+DEFAULT_BEC_PATH = ROOT / "Graph_BEC/outputs/factorized_fsta_ec_subject_ec.npz"
 DEFAULT_OUTPUT_DIR = ROOT / "Graph_BEC/outputs/fstc_ec_random_forest"
 
 

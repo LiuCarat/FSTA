@@ -1,6 +1,6 @@
 {
   "metric_average": "weighted",
-  "bec_path": "/storage/users/liulin/PythonCode/ST-MRI/FSTA/Graph_BEC/outputs/fstc_ec_v3_subject_ec.npz",
+  "bec_path": "/storage/users/liulin/PythonCode/ST-MRI/FSTA/Graph_BEC/outputs/factorized_fsta_ec_subject_ec.npz",
   "n_splits": 10,
   "n_estimators": 1000,
   "seed": 42,
@@ -11,10 +11,10 @@
     "0": 403,
     "1": 468
   },
-  "precision_mean_percent": "59.59",
-  "precision_std_percent": "7.07",
-  "recall_mean_percent": "59.12",
-  "recall_std_percent": "5.88",
-  "f1_mean_percent": "57.65",
-  "f1_std_percent": "5.50"
+  "precision_mean_percent": "66.21",
+  "precision_std_percent": "5.07",
+  "recall_mean_percent": "65.10",
+  "recall_std_percent": "3.80",
+  "f1_mean_percent": "63.65",
+  "f1_std_percent": "3.90"
 }

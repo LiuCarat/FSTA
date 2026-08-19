@@ -18,8 +18,7 @@ venv/
 out/
 downstream_abide_i/outputs/
 downstream_adhd200/outputs/
-downstream_bec/outputs/
-DeepASD/02_individual_BEC_AAL90/results/
+Graph_BEC/outputs
 *.pt
 *.pth
 *.ckpt

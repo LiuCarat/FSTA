@@ -1,4 +1,4 @@
-"""Training losses for the lagged FSTC-EC model."""
+"""Reconstruction and directed-EC regularization losses."""
 
 from __future__ import annotations
 
@@ -6,21 +6,15 @@ import torch
 from torch.nn import functional as F
 
 
-def sparse_bec_loss(bec):
-    """Mean off-diagonal L1 penalty for directed BEC."""
-    if bec.ndim != 3 or bec.shape[-1] != bec.shape[-2]:
-        raise ValueError("bec must have shape [batch, roi, roi]")
-    roi_count = bec.shape[-1]
-    mask = ~torch.eye(roi_count, dtype=torch.bool, device=bec.device)
-    return bec[:, mask].abs().mean()
+def reconstruction_stage_loss(output, target, entropy_weight=0.05):
+    reconstruction = F.mse_loss(output["reconstruction"], target)
+    bec = output["bec"].clamp_min(1e-8)
+    entropy = -(bec * bec.log()).sum(dim=-1).mean()
+    entropy = entropy / torch.log(
+        torch.tensor(float(bec.shape[-1] - 1), device=bec.device)
+    ).clamp_min(1e-8)
+    total = reconstruction + entropy_weight * entropy
+    return total, {"reconstruction": reconstruction, "entropy": entropy}
 
 
-def fstc_ec_loss(output, delta_target, lambda_sparse: float = 1e-6):
-    """Predict one-step BOLD changes from lagged directed EC."""
-    delta_loss = F.mse_loss(output["delta_prediction"], delta_target)
-    sparse_loss = sparse_bec_loss(output["bec"])
-    total = delta_loss + lambda_sparse * sparse_loss
-    return total, {"delta": delta_loss, "sparse": sparse_loss}
-
-
-__all__ = ["fstc_ec_loss", "sparse_bec_loss"]
+__all__ = ["reconstruction_stage_loss"]

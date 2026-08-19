@@ -20,7 +20,7 @@ if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
 from Graph_BEC.normative_bec import (
     bec_separability, edge_effect_sizes, normative_reference,
 )
-from Graph_BEC.data import load_pipeline_data
+from Graph_BEC.data import load_bec_archive, load_pipeline_data
 from Graph_BEC.utils import make_stratified_splits, prepare_fold_arrays, select_device, set_seed
 from Graph_BEC.downstream import train_classifier
 from Graph_BEC.baseline.FSTA_EC import add_fsta_arguments
@@ -44,6 +44,7 @@ from Graph_BEC.phenotype import (
 )
 
 DEFAULT_BEC = ROOT / "Graph_BEC/outputs/seed_42/subject_bec.npz"
+DEFAULT_FSTC_BEC = ROOT / "Graph_BEC/outputs/fstc_ec_causal_subject_ec.npz"
 DEFAULT_DATA_ROOT = ROOT / "dataset/ABIDE-I"
 DEFAULT_PHENOTYPE = ROOT / "dataset/ABIDE-I/Phenotypic_Processing_filled.csv"
 DEFAULT_OUTPUT = ROOT / "Graph_BEC/outputs"
@@ -54,6 +55,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-mode", choices=["bec", "raw"], default="bec")
     parser.add_argument("--bec-path", type=Path, default=DEFAULT_BEC)
+    parser.add_argument("--fstc-bec-path", type=Path, default=DEFAULT_FSTC_BEC)
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--phenotype-csv", type=Path, default=DEFAULT_PHENOTYPE)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
@@ -127,6 +129,23 @@ def resolve_run_bec_path(args, base_bec_path, multiple_seeds):
             return args.output_dir / base_bec_path.name
         return seeded_path
     return base_bec_path
+
+
+def _validate_matching_bec_archive(data, archive, archive_path):
+    """Ensure the additional BEC archive has the same subject ordering."""
+    for key in ("subject_ids", "labels", "site_ids"):
+        current = np.asarray(data[key]).astype(str)
+        additional = np.asarray(archive[key]).astype(str)
+        if current.shape != additional.shape or not np.array_equal(current, additional):
+            raise ValueError(
+                f"FSTC archive does not match the main BEC archive for {key}: "
+                f"{archive_path}"
+            )
+    bec = np.asarray(archive["bec"])
+    if bec.ndim != 3 or bec.shape[0] != len(data["bec"]):
+        raise ValueError(
+            f"FSTC archive must contain [subjects, nodes, nodes] BEC data: {archive_path}"
+        )
 
 
 def print_summary_table(summary, title="mean±std (%)"):
@@ -389,6 +408,47 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
             "reference": base_reference,
             "refinement": base_refinement_metrics,
         },
+        "original-fstc": {
+            "train": data["fstc_bec"][train_index],
+            "val": data["fstc_bec"][val_index],
+            "test": data["fstc_bec"][test_index],
+            "reference": None,
+            "refinement": {},
+        },
+    }
+    fstc_train_bec = data["fstc_bec"][train_index]
+    fstc_train_neighbor, _ = normative_reference(
+        fstc_train_bec, base_reference["train_weights"]
+    )
+    fstc_val_neighbor, _ = normative_reference(
+        fstc_train_bec, base_reference["val_weights"]
+    )
+    fstc_test_neighbor, _ = normative_reference(
+        fstc_train_bec, base_reference["test_weights"]
+    )
+    set_seed(fold_seed + 2)
+    fstc_refiner, train_fstc_refined, fstc_refinement_metrics = train_refiner(
+        args, fstc_train_bec, fstc_train_neighbor, device,
+    )
+    with torch.no_grad():
+        val_fstc_refined = fstc_refiner(
+            torch.from_numpy(data["fstc_bec"][val_index]).float().to(device),
+            torch.from_numpy(fstc_val_neighbor).float().to(device),
+        ).cpu().numpy()
+        test_fstc_refined = fstc_refiner(
+            torch.from_numpy(data["fstc_bec"][test_index]).float().to(device),
+            torch.from_numpy(fstc_test_neighbor).float().to(device),
+        ).cpu().numpy()
+    representations["refined-fstc"] = {
+        "train": train_fstc_refined,
+        "val": val_fstc_refined,
+        "test": test_fstc_refined,
+        "reference": {
+            "train_neighbor": fstc_train_neighbor,
+            "val_neighbor": fstc_val_neighbor,
+            "test_neighbor": fstc_test_neighbor,
+        },
+        "refinement": fstc_refinement_metrics,
     }
     set_seed(fold_seed + 1)
     qsr_refiner, train_qsr_refined, qc_sensitive_map, qsr_metrics = train_qsr_refiner(
@@ -544,6 +604,9 @@ def main():
             f"Loading data from {run_args.data_root} with phenotype {run_args.phenotype_csv}..."
         )
         data, fsta_metrics = load_pipeline_data(run_args, device)
+        fstc_archive = load_bec_archive(run_args.fstc_bec_path)
+        _validate_matching_bec_archive(data, fstc_archive, run_args.fstc_bec_path)
+        data["fstc_bec"] = np.asarray(fstc_archive["bec"], dtype=np.float32)
         if np.unique(data["labels"]).size != 2:
             raise ValueError(
                 "The selected subjects contain only one diagnosis class. "
