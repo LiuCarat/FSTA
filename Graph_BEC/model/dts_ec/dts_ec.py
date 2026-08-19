@@ -1,17 +1,12 @@
-"""DTS-EC: decoupled temporal-spatial effective connectivity model."""
+"""DTS-EC: temporal dynamics and directed effective connectivity."""
 
 from __future__ import annotations
-
-from types import SimpleNamespace
 
 import torch
 from torch import nn
 
-from .fourier_att import FourierAtt
-from .st_multi_head_att import (
-    PositionwiseFeedForward,
-    PositionalEncoding,
-)
+from .positional_encoding import PositionalEncoding
+from .spectral_filter import SpectralFilter
 from .temporal_mixer import TemporalDynamicsMixer
 
 
@@ -26,60 +21,72 @@ class DTSEC(nn.Module):
         window_length: int = 78,
         roi_count: int = 90,
         hidden_dim: int = 32,
+        temporal_dim: int | None = None,
         ec_dim: int = 16,
+        decoder_hidden_dim: int = 0,
         ec_temperature: float = 0.25,
         dropout: float = 0.2,
     ):
         super().__init__()
         if ec_dim <= 0:
             raise ValueError("ec_dim must be positive")
+        if temporal_dim is not None and temporal_dim <= 0:
+            raise ValueError("temporal_dim must be positive when provided")
+        if decoder_hidden_dim < 0:
+            raise ValueError("decoder_hidden_dim must be non-negative")
         if ec_temperature <= 0:
             raise ValueError("ec_temperature must be positive")
 
         self.window_length = window_length
         self.roi_count = roi_count
         self.hidden_dim = hidden_dim
+        self.temporal_dim = temporal_dim or hidden_dim
         self.ec_dim = ec_dim
+        self.decoder_hidden_dim = decoder_hidden_dim
         self.ec_temperature = ec_temperature
-        fourier_options = SimpleNamespace(
-            nodes_num=roi_count,
-            time_num=window_length,
-            d_model=hidden_dim,
-            num_hidden_layers=1,
-            no_filters=False,
-            hidden_act="gelu",
-            hidden_dropout_prob=dropout,
-            attention_probs_dropout_prob=dropout,
-            initializer_range=0.02,
-        )
-
         self.input_projection = nn.Conv2d(1, hidden_dim, kernel_size=1)
         self.position_encoding = PositionalEncoding(
-            d_hid=hidden_dim, n_position=window_length
+            hidden_dim=hidden_dim, max_length=window_length
         )
         self.input_dropout = nn.Dropout(dropout)
         self.input_norm = nn.LayerNorm(hidden_dim, eps=1e-6)
-        self.fourier_attention = FourierAtt(fourier_options)
+        self.spectral_filter = SpectralFilter(
+            window_length=window_length,
+            roi_count=roi_count,
+            hidden_dim=hidden_dim,
+            dropout=dropout,
+        )
         self.temporal_encoder = TemporalDynamicsMixer(
             hidden_dim=hidden_dim,
             dropout=dropout,
         )
-
-        self.source_projection = nn.Linear(hidden_dim, ec_dim, bias=False)
-        self.target_projection = nn.Linear(hidden_dim, ec_dim, bias=False)
-        self.value_projection = nn.Linear(hidden_dim, hidden_dim, bias=False)
-        self.signal_norm = nn.LayerNorm(hidden_dim, eps=1e-6)
-        self.decoder_feed_forward = PositionwiseFeedForward(
-            hidden_dim, hidden_dim * 4, dropout=dropout
+        self.temporal_projection = (
+            nn.Identity()
+            if self.temporal_dim == hidden_dim
+            else nn.Linear(hidden_dim, self.temporal_dim, bias=False)
         )
-        self.output_projection = nn.Conv2d(hidden_dim, 1, kernel_size=1)
+
+        self.source_projection = nn.Linear(self.temporal_dim, ec_dim, bias=False)
+        self.target_projection = nn.Linear(self.temporal_dim, ec_dim, bias=False)
+        self.value_projection = nn.Linear(self.temporal_dim, ec_dim, bias=False)
+        self.output_projection = self._make_decoder(decoder_hidden_dim, dropout)
+
+    def _make_decoder(self, decoder_hidden_dim: int, dropout: float) -> nn.Module:
+        if decoder_hidden_dim == 0:
+            return nn.Linear(self.ec_dim, 1, bias=False)
+        return nn.Sequential(
+            nn.Linear(self.ec_dim, decoder_hidden_dim, bias=False),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(decoder_hidden_dim, 1, bias=False),
+        )
 
     def _temporal_features(self, inputs: torch.Tensor) -> torch.Tensor:
         embedded = self.input_projection(inputs.unsqueeze(1)).permute(0, 2, 3, 1)
         position = self.position_encoding(embedded).unsqueeze(2).expand_as(embedded)
         encoded = self.input_norm(self.input_dropout(embedded + position))
-        fourier_features = self.fourier_attention(encoded)
-        return self.temporal_encoder(fourier_features)
+        spectral_features = self.spectral_filter(encoded)
+        return self.temporal_projection(self.temporal_encoder(spectral_features))
 
     def _directed_ec(self, temporal_features: torch.Tensor) -> torch.Tensor:
         source = self.source_projection(temporal_features)
@@ -91,19 +98,17 @@ class DTSEC(nn.Module):
         aggregated_logits = aggregated_logits.masked_fill(
             diagonal, torch.finfo(aggregated_logits.dtype).min
         )
-        bec = torch.softmax(aggregated_logits / self.ec_temperature, dim=-2)
+        bec = torch.softmax(aggregated_logits / self.ec_temperature, dim=-1)
         return bec.masked_fill(diagonal, 0.0)
 
     def _signal_flow(
         self, temporal_features: torch.Tensor, bec: torch.Tensor
     ) -> torch.Tensor:
         values = self.value_projection(temporal_features)
-        propagated = torch.einsum("bij,btid->btjd", bec, values)
-        return self.signal_norm(propagated)
+        return torch.einsum("bij,btid->btjd", bec, values)
 
     def _decode(self, features: torch.Tensor) -> torch.Tensor:
-        decoded = self.decoder_feed_forward(features)
-        return self.output_projection(decoded.permute(0, 3, 1, 2)).squeeze(1)
+        return self.output_projection(features).squeeze(-1)
 
     def forward(self, inputs: torch.Tensor):
         if inputs.ndim != 3:

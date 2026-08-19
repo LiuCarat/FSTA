@@ -28,6 +28,12 @@ class TemporalDynamicsMixer(nn.Module):
             groups=hidden_dim,
             bias=False,
         )
+        self.channel_mixer = nn.Conv1d(
+            hidden_dim,
+            hidden_dim,
+            kernel_size=1,
+            bias=False,
+        )
         self.gate = nn.Conv1d(
             hidden_dim,
             hidden_dim,
@@ -48,6 +54,7 @@ class TemporalDynamicsMixer(nn.Module):
         local = self.local_conv(roi_sequences)
         context = self.context_conv(roi_sequences)
         update = self.activation(local + context)
+        update = self.channel_mixer(update)
         gate = torch.sigmoid(self.gate(roi_sequences))
         mixed = roi_sequences + self.dropout(gate * update)
         outputs = mixed.reshape(batch_size, roi_count, hidden_dim, time_points)

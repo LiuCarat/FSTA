@@ -57,11 +57,12 @@ def parse_args():
     parser.add_argument("--bec-path", type=Path, default=DEFAULT_BEC)
     parser.add_argument(
         "--dts-bec-path",
+        "--dta-bec-path",
         "--fstc-bec-path",
         dest="dts_bec_path",
         type=Path,
         default=DEFAULT_DTS_BEC,
-        help="DTS-EC subject-level BEC archive (legacy --fstc-bec-path is accepted).",
+        help="DTS-EC subject-level BEC archive (legacy aliases are accepted).",
     )
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--phenotype-csv", type=Path, default=DEFAULT_PHENOTYPE)

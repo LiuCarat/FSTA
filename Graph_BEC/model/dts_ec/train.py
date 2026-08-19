@@ -46,18 +46,22 @@ ROOT = (
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, default=ROOT / "dataset/ABIDE-I")
-    parser.add_argument("--checkpoint", type=Path, default=ROOT / "Graph_BEC/outputs/dts_ec_mixer.pt")
-    parser.add_argument("--output", type=Path, default=ROOT / "Graph_BEC/outputs/dts_ec_mixer_subject_ec.npz")
+    parser.add_argument("--checkpoint", type=Path, default=ROOT / "Graph_BEC/outputs/dts_ec.pt")
+    parser.add_argument("--output", type=Path, default=ROOT / "Graph_BEC/outputs/dts_ec_subject_ec.npz")
     parser.add_argument("--window-length", type=int, default=78)
     parser.add_argument("--stride", type=int, default=39)
-    parser.add_argument("--epochs", type=int, default=201)
+    parser.add_argument("--epochs", type=int, default=301)
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr", type=float, default=5e-4)
+
     parser.add_argument("--hidden-dim", type=int, default=32)
-    parser.add_argument("--ec-dim", type=int, default=16)
+    parser.add_argument("--temporal-dim", type=int, default=64)
+    parser.add_argument("--ec-dim", type=int, default=32)
+    parser.add_argument("--decoder-hidden-dim", type=int, default=64)
     parser.add_argument("--ec-temperature", type=float, default=0.25)
     parser.add_argument("--dropout", type=float, default=0.2)
-    parser.add_argument("--entropy-weight", type=float, default=0.05)
+    parser.add_argument("--entropy-weight", type=float, default=0.01)
+
     parser.add_argument("--validation-size", type=float, default=0.2)
     parser.add_argument("--checkpoint-selection", choices=["best", "final"], default="final")
     parser.add_argument("--seed", type=int, default=42)
@@ -69,7 +73,9 @@ def make_model(args, device):
     return DTSEC(
         window_length=args.window_length,
         hidden_dim=args.hidden_dim,
+        temporal_dim=args.temporal_dim,
         ec_dim=args.ec_dim,
+        decoder_hidden_dim=args.decoder_hidden_dim,
         ec_temperature=args.ec_temperature,
         dropout=args.dropout,
     ).to(device)
@@ -187,15 +193,15 @@ def save_ec_archive(path, subjects, ec, reconstruction_mse):
 
 
 def summarize_ec(ec):
-    incoming_sum = ec.sum(axis=1)
+    outgoing_sum = ec.sum(axis=2)
     probability = np.clip(ec, 1e-12, None)
-    entropy = -(probability * np.log(probability)).sum(axis=1)
-    entropy /= np.log(float(ec.shape[1] - 1))
+    entropy = -(probability * np.log(probability)).sum(axis=2)
+    entropy /= np.log(float(ec.shape[2] - 1))
     return {
-        "incoming_sum_mean": float(incoming_sum.mean()),
-        "incoming_sum_std": float(incoming_sum.std()),
+        "outgoing_sum_mean": float(outgoing_sum.mean()),
+        "outgoing_sum_std": float(outgoing_sum.std()),
         "entropy_mean": float(entropy.mean()),
-        "peak_mean": float(ec.max(axis=1).mean()),
+        "peak_mean": float(ec.max(axis=2).mean()),
         "ec_abs_mean": float(np.abs(ec).mean()),
         "between_subject_edge_std": float(ec.std(axis=0).mean()),
         "asymmetry": float(np.abs(ec - ec.transpose(0, 2, 1)).mean()),
@@ -208,7 +214,11 @@ def main():
     device = select_device(args.gpu_id)
     subjects = load_subject_dataset(args.data_root)
     model = make_model(args, device)
-    print(f"DTS-EC subjects={len(subjects['time_series'])}; device={device}")
+    print(
+        f"DTS-EC subjects={len(subjects['time_series'])}; device={device}; "
+        f"hidden={args.hidden_dim}; temporal={args.temporal_dim or args.hidden_dim}; "
+        f"ec={args.ec_dim}; decoder_hidden={args.decoder_hidden_dim}"
+    )
     metrics = train_model(model, subjects["time_series"], args, device)
 
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
@@ -217,7 +227,7 @@ def main():
             "training_metrics": metrics,
             "model_state": model.state_dict(),
             "model_config": vars(args),
-            "model_type": "DTS-EC: Fourier encoder + temporal dynamics mixer + directed EC signal flow",
+            "model_type": "DTS-EC: spectral filter + temporal mixer + directed EC + signal-flow decoder",
         },
         args.checkpoint,
     )
@@ -228,8 +238,8 @@ def main():
     print(f"Saved EC archive: {args.output.resolve()} | shape={ec.shape}")
     print(f"Selected validation reconstruction MSE: {metrics['selected_validation_mse']:.6f}")
     print(
-        f"Exported EC: incoming_sum={summary['incoming_sum_mean']:.4f}±"
-        f"{summary['incoming_sum_std']:.4f}; entropy={summary['entropy_mean']:.4f}; "
+        f"Exported EC: outgoing_sum={summary['outgoing_sum_mean']:.4f}±"
+        f"{summary['outgoing_sum_std']:.4f}; entropy={summary['entropy_mean']:.4f}; "
         f"peak={summary['peak_mean']:.4f}; ec_abs_mean={summary['ec_abs_mean']:.4f}; "
         f"between_subject_edge_std={summary['between_subject_edge_std']:.6f}; "
         f"asymmetry={summary['asymmetry']:.4f}"
