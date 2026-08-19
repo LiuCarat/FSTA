@@ -46,15 +46,14 @@ ROOT = (
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, default=ROOT / "dataset/ABIDE-I")
-    parser.add_argument("--checkpoint", type=Path, default=ROOT / "Graph_BEC/outputs/dts_ec.pt")
-    parser.add_argument("--output", type=Path, default=ROOT / "Graph_BEC/outputs/dts_ec_subject_ec.npz")
+    parser.add_argument("--checkpoint", type=Path, default=ROOT / "Graph_BEC/outputs/dts_ec_mixer.pt")
+    parser.add_argument("--output", type=Path, default=ROOT / "Graph_BEC/outputs/dts_ec_mixer_subject_ec.npz")
     parser.add_argument("--window-length", type=int, default=78)
     parser.add_argument("--stride", type=int, default=39)
     parser.add_argument("--epochs", type=int, default=201)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--hidden-dim", type=int, default=32)
-    parser.add_argument("--n-heads", type=int, default=8)
     parser.add_argument("--ec-dim", type=int, default=16)
     parser.add_argument("--ec-temperature", type=float, default=0.25)
     parser.add_argument("--dropout", type=float, default=0.2)
@@ -70,7 +69,6 @@ def make_model(args, device):
     return DTSEC(
         window_length=args.window_length,
         hidden_dim=args.hidden_dim,
-        n_heads=args.n_heads,
         ec_dim=args.ec_dim,
         ec_temperature=args.ec_temperature,
         dropout=args.dropout,
@@ -219,7 +217,7 @@ def main():
             "training_metrics": metrics,
             "model_state": model.state_dict(),
             "model_config": vars(args),
-            "model_type": "DTS-EC: decoupled temporal-spatial EC with signal-flow reconstruction",
+            "model_type": "DTS-EC: Fourier encoder + temporal dynamics mixer + directed EC signal flow",
         },
         args.checkpoint,
     )

@@ -11,8 +11,8 @@ from .fourier_att import FourierAtt
 from .st_multi_head_att import (
     PositionwiseFeedForward,
     PositionalEncoding,
-    STMultiHeadAtt,
 )
+from .temporal_mixer import TemporalDynamicsMixer
 
 
 class DTSEC(nn.Module):
@@ -26,14 +26,11 @@ class DTSEC(nn.Module):
         window_length: int = 78,
         roi_count: int = 90,
         hidden_dim: int = 32,
-        n_heads: int = 4,
         ec_dim: int = 16,
         ec_temperature: float = 0.25,
         dropout: float = 0.2,
     ):
         super().__init__()
-        if hidden_dim % n_heads != 0:
-            raise ValueError("hidden_dim must be divisible by n_heads")
         if ec_dim <= 0:
             raise ValueError("ec_dim must be positive")
         if ec_temperature <= 0:
@@ -44,7 +41,6 @@ class DTSEC(nn.Module):
         self.hidden_dim = hidden_dim
         self.ec_dim = ec_dim
         self.ec_temperature = ec_temperature
-        head_dim = hidden_dim // n_heads
         fourier_options = SimpleNamespace(
             nodes_num=roi_count,
             time_num=window_length,
@@ -64,11 +60,9 @@ class DTSEC(nn.Module):
         self.input_dropout = nn.Dropout(dropout)
         self.input_norm = nn.LayerNorm(hidden_dim, eps=1e-6)
         self.fourier_attention = FourierAtt(fourier_options)
-        self.temporal_attention = STMultiHeadAtt(
-            hidden_dim, n_heads, head_dim, head_dim, dropout=dropout
-        )
-        self.temporal_feed_forward = PositionwiseFeedForward(
-            hidden_dim, hidden_dim * 4, dropout=dropout
+        self.temporal_encoder = TemporalDynamicsMixer(
+            hidden_dim=hidden_dim,
+            dropout=dropout,
         )
 
         self.source_projection = nn.Linear(hidden_dim, ec_dim, bias=False)
@@ -85,10 +79,7 @@ class DTSEC(nn.Module):
         position = self.position_encoding(embedded).unsqueeze(2).expand_as(embedded)
         encoded = self.input_norm(self.input_dropout(embedded + position))
         fourier_features = self.fourier_attention(encoded)
-        temporal_input = fourier_features.transpose(1, 2)
-        temporal_features, _ = self.temporal_attention(temporal_input)
-        temporal_features = self.temporal_feed_forward(temporal_features)
-        return temporal_features.transpose(1, 2)
+        return self.temporal_encoder(fourier_features)
 
     def _directed_ec(self, temporal_features: torch.Tensor) -> torch.Tensor:
         source = self.source_projection(temporal_features)
