@@ -50,9 +50,9 @@ def parse_args():
     parser.add_argument("--output", type=Path, default=ROOT / "Graph_BEC/outputs/dts_ec_subject_ec.npz")
     parser.add_argument("--window-length", type=int, default=78)
     parser.add_argument("--stride", type=int, default=39)
-    parser.add_argument("--epochs", type=int, default=301)
+    parser.add_argument("--epochs", type=int, default=201)
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=5e-4)
+    parser.add_argument("--lr", type=float, default=1e-3)
 
     parser.add_argument("--hidden-dim", type=int, default=32)
     parser.add_argument("--temporal-dim", type=int, default=64)
