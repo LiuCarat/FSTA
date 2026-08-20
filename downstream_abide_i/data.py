@@ -6,8 +6,12 @@ import numpy as np
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DX_TO_LABEL = {1: 0, 2: 1}
-LABEL_TO_GROUP = {0: "HC", 1: "ASD"} # 诊断标签映射
+# Canonical diagnosis labels shared with Graph_BEC:
+# 0 = TC/control, 1 = ASD.
+TC_LABEL = 0
+ASD_LABEL = 1
+DX_TO_LABEL = {1: TC_LABEL, 2: ASD_LABEL}
+LABEL_TO_GROUP = {TC_LABEL: "TC", ASD_LABEL: "ASD"}
 SOURCE_ROI_COUNT = 116 # 原始脑区数量
 ROI_COUNT = 90 # 目标脑区数量
 ROI_INDICES = np.arange(ROI_COUNT, dtype=np.int64)

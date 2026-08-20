@@ -5,7 +5,7 @@
         "${workspaceFolder}"
     ],
     "terminal.integrated.env.linux": {
-        "CONDA_DEFAULT_ENV": "fs2g"
+        "CONDA_DEFAULT_ENV": "defualt"
     },
     "python-envs.defaultEnvManager": "ms-python.python:conda",
     "python-envs.defaultPackageManager": "ms-python.python:conda",

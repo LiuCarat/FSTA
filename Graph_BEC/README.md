@@ -13,6 +13,18 @@
 - **BEC 的生成与修正**：不使用 `DX_GROUP`，避免模型直接制造 ASD/TC 的组间差异。
 - **BEC 的验证**：使用 `DX_GROUP` 进行最终的组间统计和分类，因为分类是检验 BEC 是否具有诊断判别价值的下游工具。
 
+PGR-BEC 与 QC 弱监督属于模型阶段。运行：
+
+```bash
+python Graph_BEC/main.py
+```
+
+程序在每个交叉验证 fold 内只用训练受试者拟合 PGR/QC，并立即将该 fold 的
+Original、PGR 和 QC-refined BEC 送入 Directed BrainNetCNN。每折只把 test
+受试者的 refined BEC 汇总为 out-of-fold 文件
+`Graph_BEC/outputs/refined_subject_bec.npz`，供后续描述性群体分析使用；该文件
+不会被重新切分后再次用于分类。
+
 当前实现是**静态 PGR-BEC 修正方案**，动态 refiner 已经不属于当前主流程。
 
 ## 2. 总体流程
@@ -529,11 +541,12 @@ variance_retention = 0.85
 2. 只用 train 表型拟合连续变量标准化器
 3. 构建 train-only phenotype/fusion graph
 4. 从训练参考受试者 BEC 生成 train/val/test neighbor BEC
-5. 只用 train BEC 和 train neighbor BEC 训练 PGRBECStatic
-6. 用训练好的 refiner 处理 validation/test BEC
-7. 分别对 Original BEC 和 Refined BEC 训练独立分类器
+5. 只用 train BEC 和 train neighbor BEC 训练 PGRBECStatic/QSR
+6. 用训练好的 fold-local refiner 处理 train/validation/test BEC
+7. 立即对 Original、PGR 和 QC-refined 三种 fold-local 表示训练独立分类器
 8. 使用 validation labels 选择 Youden threshold
 9. 只在 test labels 上报告最终指标
+10. 仅保存该 fold 的 test refined BEC，最后拼成 OOF NPZ
 ```
 
 ### 9.1 防止数据泄漏

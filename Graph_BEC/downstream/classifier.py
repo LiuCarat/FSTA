@@ -6,8 +6,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from .brainnetcnn import DirectedBrainNetCNN
 from .metrics import classification_metrics, select_youden_threshold
-from Graph_BEC.utils import set_seed
-from Graph_BEC.normative_bec import to_directed_channels
+from Graph_BEC.utils.runtime import set_seed
+from Graph_BEC.model.normative_bec import to_directed_channels
 
 
 def train_classifier(train_bec, train_labels, val_bec, val_labels,

@@ -1,6 +1,6 @@
 # ABIDE-I 共享窗口 FSTA
 
-本目录使用 ABIDE-I AAL90 时间序列生成个体 BEC，再使用10折随机森林完成 ASD/HC 分类。
+本目录使用 ABIDE-I AAL90 时间序列生成个体 BEC，再使用10折随机森林完成 ASD/TC 分类。统一标签为 `0=TC`、`1=ASD`。
 
 ## 文件
 

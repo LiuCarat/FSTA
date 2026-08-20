@@ -8,16 +8,20 @@ from pathlib import Path
 
 import numpy as np
 
-from Graph_BEC.phenotype import (
+from Graph_BEC.model.phenotype import (
     load_aligned_phenotypes,
     load_phenotypes,
     subject_fc_features,
 )
-from Graph_BEC.qc import load_aligned_qc
+from Graph_BEC.model.qc import load_aligned_qc
 
 
-DX_TO_LABEL = {1: 0, 2: 1}
-LABEL_TO_GROUP = {0: "HC", 1: "ASD"}
+# Canonical diagnosis labels used throughout Graph_BEC:
+# 0 = TC/control, 1 = ASD.
+TC_LABEL = 0
+ASD_LABEL = 1
+DX_TO_LABEL = {1: TC_LABEL, 2: ASD_LABEL}
+LABEL_TO_GROUP = {TC_LABEL: "TC", ASD_LABEL: "ASD"}
 SOURCE_ROI_COUNT = 116
 ROI_COUNT = 90
 ROI_INDICES = np.arange(ROI_COUNT, dtype=np.int64)
