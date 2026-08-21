@@ -21,6 +21,7 @@ from Graph_BEC.utils import select_device, set_seed
 from Graph_BEC.utils.output import (
     print_summary_table,
     save_refined_bec_archive,
+    save_qsr_bec_archive,
     save_results,
 )
 from Graph_BEC.workflow import run_cross_validation
@@ -30,16 +31,20 @@ def main():
     args = parse_args(__doc__)
     device = select_device(args.gpu_id)
     set_seed(args.seed)
-    print(f"Loading data from {args.data_root} with phenotype {args.phenotype_csv}...")
+    print(
+        f"Dataset={args.dataset}; "
+        f"loading data from {args.data_root} "
+        f"with phenotype {args.phenotype_csv}..."
+    )
     data, fsta_metrics = load_pipeline_data(args, device)
     if np.unique(data["labels"]).size != 2:
-        raise ValueError("The dataset must contain canonical labels 0=TC and 1=ASD")
+        raise ValueError("The dataset must contain exactly two patient/control labels")
     print(
         f"Input={args.input_mode}; subjects={len(data['bec'])}; "
         f"BEC={data['bec'].shape}; labels={np.bincount(data['labels'])}; device={device}"
     )
 
-    print("\n===== fold-local refinement + BrainNetCNN =====")
+    print("\n===== fold refinement + BrainNetCNN =====")
     experiment = run_cross_validation(args, data, device)
     refined_path = save_refined_bec_archive(
         args.refined_bec_path,
@@ -50,10 +55,19 @@ def main():
         args.bec_path,
     )
     print(f"Saved refined NPZ: {refined_path.resolve()}")
+    qsr_refined_path = save_qsr_bec_archive(
+        args.qsr_refined_bec_path,
+        data,
+        experiment["oof_qc"],
+        experiment["fold_ids"],
+        args.bec_path,
+    )
+    print(f"Saved QSR-refined NPZ: {qsr_refined_path.resolve()}")
     training_summary = {
         "fsta": fsta_metrics,
         "refinement_folds": experiment["refinement_metrics"],
         "refined_bec_path": str(refined_path.resolve()),
+        "qsr_refined_bec_path": str(qsr_refined_path.resolve()),
         "classification_protocol": (
             "fold-local train/val/test representations; test-only OOF NPZ"
         ),

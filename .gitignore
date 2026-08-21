@@ -36,6 +36,7 @@ Thumbs.db
 
 # Local neuroimaging datasets
 dataset/ABIDE-I/
+dataset/ABIDE-II/
 dataset/ADHD200/
 
 # ucla_cnp 原始 BIDS / fMRIPrep 输出 (85GB, 不纳入 git)
@@ -49,3 +50,5 @@ dataset/ucla_cnp/*_pipeline_done.txt
 # BD-Core20 图谱、QC 与 ROI 时间序列
 !dataset/BDCore20/
 !dataset/BDCore20/**
+
+ABIDEII
