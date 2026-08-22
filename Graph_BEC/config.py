@@ -35,7 +35,10 @@ def parse_args(description=None):
     parser.add_argument("--fusion-beta", type=float)
     parser.add_argument("--reference-bandwidth", type=float)
     parser.add_argument("--categorical-penalty", type=float)
-    parser.add_argument("--continuous-weights", type=float, nargs=2)
+    parser.add_argument(
+        "--continuous-weights", type=float,
+        nargs=3 if selected.dataset == "adhd200" else 2,
+    )
     parser.add_argument("--permute-phenotype", action="store_true")
     parser.add_argument("--refiner-epochs", type=int)
     parser.add_argument("--refiner-lr", type=float)

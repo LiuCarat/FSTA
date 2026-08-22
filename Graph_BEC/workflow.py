@@ -16,6 +16,11 @@ from Graph_BEC.model.refinement import (
     train_pgr_refiner,
     train_qsr_refiner,
 )
+from Graph_BEC.data.adhd_utils import (
+    apply_numeric_imputer,
+    fit_numeric_imputer,
+    prepare_adhd_fold_arrays,
+)
 from Graph_BEC.utils import make_stratified_splits, prepare_fold_arrays, set_seed
 
 
@@ -75,7 +80,12 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
     """Fit refiners and classifiers using one fold-local data split."""
     fold_seed = args.seed + fold * 1000
     set_seed(fold_seed)
-    arrays = prepare_fold_arrays(
+    prepare_arrays = (
+        prepare_adhd_fold_arrays
+        if args.profile.name == "adhd200"
+        else prepare_fold_arrays
+    )
+    arrays = prepare_arrays(
         data["bec"][train_index], data["bec"][val_index], data["bec"][test_index],
         data["continuous"][train_index], data["continuous"][val_index], data["continuous"][test_index],
         data["categorical_raw"][train_index], data["categorical_raw"][val_index], data["categorical_raw"][test_index],
@@ -87,6 +97,21 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
             for index in (train_index, val_index, test_index)
         )
     reference = build_fold_reference(args, arrays, fmri_arrays)
+
+    if args.profile.name == "adhd200":
+        confound_columns = tuple(args.profile.confound_columns)
+        categorical_indices = tuple(
+            index for index, column in enumerate(confound_columns)
+            if column in ("Gender",)
+        )
+        confound_fills = fit_numeric_imputer(
+            data["qsr_confound_values"][train_index], categorical_indices
+        )
+        qsr_train_confound = apply_numeric_imputer(
+            data["qsr_confound_values"][train_index], confound_fills
+        )
+    else:
+        qsr_train_confound = data["qsr_confound_values"][train_index]
 
     set_seed(fold_seed)
     pgr_model, train_pgr, pgr_metrics = train_pgr_refiner(
@@ -102,7 +127,7 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
     set_seed(fold_seed + 1)
     qsr_model, train_qsr, sensitive_map, qsr_metrics = train_qsr_refiner(
         args, arrays["train_bec"], reference["train_neighbor"],
-        data["qsr_qc"][train_index], data["qsr_confound_values"][train_index],
+        data["qsr_qc"][train_index], qsr_train_confound,
         data["site_ids"][train_index], device, fold_seed + 1,
     )
     val_qsr = apply_qsr_refiner(

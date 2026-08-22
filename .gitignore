@@ -18,10 +18,13 @@ venv/
 out/
 downstream_abide_i/outputs/
 downstream_adhd200/outputs/
-Graph_BEC/outputs
+Graph_BEC/outputs/
 *.pt
 *.pth
 *.ckpt
+*.npz
+*.npy
+*.part
 
 # IDE
 .vscode/
@@ -35,20 +38,22 @@ Graph_BEC/outputs
 Thumbs.db
 
 # Local neuroimaging datasets
-dataset/ABIDE-I/
-dataset/ABIDE-II/
-dataset/ADHD200/
+dataset/ABIDE-I/*
+!dataset/ABIDE-I/*.py
+dataset/ABIDE-II/*
+!dataset/ABIDE-II/*.py
+!dataset/ABIDE-II/*.sh
+!dataset/ABIDE-II/README.md
+!dataset/ABIDE-II/Phenotypic_Processing.csv
+dataset/ADHD200/*
+!dataset/ADHD200/*.py
+!dataset/ADHD200/README.md
 
-# ucla_cnp 原始 BIDS / fMRIPrep 输出 (85GB, 不纳入 git)
-dataset/ucla_cnp/sub-*/
-dataset/ucla_cnp/derivatives/
-dataset/ucla_cnp/license.txt
-dataset/ucla_cnp/.pipeline_tmp/
-dataset/ucla_cnp/pipeline_logs/
-dataset/ucla_cnp/*_pipeline_done.txt
+# ABIDE-II downloader output
+ABIDEII/
 
-# BD-Core20 图谱、QC 与 ROI 时间序列
-!dataset/BDCore20/
-!dataset/BDCore20/**
-
-ABIDEII
+# Download and pipeline temporary files
+*.download
+*.tmp
+*.log
+.download_cache/

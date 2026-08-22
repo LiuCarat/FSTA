@@ -10,6 +10,16 @@ import numpy as np
 DEFAULT_QC_COLUMNS = ("func_mean_fd", "func_dvars", "func_quality")
 
 
+def _subject_row(rows, subject_id):
+    """Match both dataset-local IDs and site/ID composite subject names."""
+    subject_id = str(subject_id).strip()
+    row = rows.get(subject_id)
+    if row is not None:
+        return row
+    basename = subject_id.rsplit("/", 1)[-1]
+    return rows.get(basename)
+
+
 def _parse_numeric(value):
     try:
         number = float(value)
@@ -18,24 +28,26 @@ def _parse_numeric(value):
     return number if np.isfinite(number) else np.nan
 
 
-def load_aligned_qc(csv_path, subject_ids, columns=DEFAULT_QC_COLUMNS):
+def load_aligned_qc(csv_path, subject_ids, columns=DEFAULT_QC_COLUMNS, profile=None):
     """Load QC values in the same order as the BEC archive."""
     columns = tuple(columns)
+    identifier = profile.phenotype_id_column if profile else "FILE_ID"
+    delimiter = "\t" if profile and profile.phenotype_format == "tsv" else ","
     with Path(csv_path).open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle)
-        required = {"FILE_ID", *columns}
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        required = {identifier, *columns}
         missing = required - set(reader.fieldnames or [])
         if missing:
             raise ValueError(f"Missing QC columns: {sorted(missing)}")
         rows = {
-            row["FILE_ID"].strip(): row
+            row[identifier].strip(): row
             for row in reader
-            if row.get("FILE_ID", "").strip()
-            and row["FILE_ID"].strip() != "no_filename"
+            if row.get(identifier, "").strip()
+            and row[identifier].strip() != "no_filename"
         }
     values = np.full((len(subject_ids), len(columns)), np.nan, dtype=np.float64)
     for row_index, subject_id in enumerate(subject_ids):
-        row = rows.get(str(subject_id))
+        row = _subject_row(rows, subject_id)
         if row is None:
             raise ValueError(f"Could not match QC subject: {subject_id}")
         for column_index, column in enumerate(columns):

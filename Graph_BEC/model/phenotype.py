@@ -14,6 +14,16 @@ from Graph_BEC.model.normative_bec import (
 MISSING_SENTINEL = -9000.0
 
 
+def _subject_row(rows, subject_id):
+    """Match both dataset-local IDs and site/ID composite subject names."""
+    subject_id = str(subject_id).strip()
+    row = rows.get(subject_id)
+    if row is not None:
+        return row
+    basename = subject_id.rsplit("/", 1)[-1]
+    return rows.get(basename)
+
+
 def _parse_numeric(value):
     try:
         number = float(value)
@@ -26,6 +36,8 @@ def _parse_numeric(value):
 
 def _encode_sex(value):
     number = _parse_numeric(value)
+    if number == 0:
+        return 0.0
     if number == 1:
         return 1.0
     if number == 2:
@@ -33,42 +45,85 @@ def _encode_sex(value):
     return np.nan
 
 
-def load_aligned_phenotypes(csv_path, subject_ids, columns):
+def load_aligned_phenotypes(csv_path, subject_ids, columns, profile=None):
+    identifier = profile.phenotype_id_column if profile else "FILE_ID"
+    delimiter = "\t" if profile and profile.phenotype_format == "tsv" else ","
     with Path(csv_path).open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle)
-        required = {"FILE_ID", *columns}
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        required = {identifier, *columns}
         missing = required - set(reader.fieldnames or [])
         if missing:
             raise ValueError(f"Missing phenotype columns: {sorted(missing)}")
         rows = {
-            row["FILE_ID"].strip(): row
+            row[identifier].strip(): row
             for row in reader
-            if row.get("FILE_ID", "").strip()
-            and row["FILE_ID"].strip() != "no_filename"
+            if row.get(identifier, "").strip()
+            and row[identifier].strip() != "no_filename"
         }
     values = np.full((len(subject_ids), len(columns)), np.nan, dtype=np.float64)
     for subject_index, subject_id in enumerate(subject_ids):
-        row = rows.get(str(subject_id))
+        row = _subject_row(rows, subject_id)
         if row is None:
             raise ValueError(f"Could not match phenotype subject: {subject_id}")
         for column_index, column in enumerate(columns):
-            parser = _encode_sex if column.upper() == "SEX" else _parse_numeric
+            is_sex = column.upper() in {"SEX", "GENDER"}
+            parser = _encode_sex if is_sex else _parse_numeric
             values[subject_index, column_index] = parser(row.get(column))
     return values
 
 
-def load_phenotypes(phenotype_csv, subject_ids, site_ids):
-    """Load SEX as categorical and FIQ/PIQ as continuous graph features."""
-    values = load_aligned_phenotypes(
-        phenotype_csv, subject_ids, ["SEX", "FIQ", "PIQ"]
+def load_phenotypes(phenotype_csv, subject_ids, site_ids, profile=None):
+    """Load profile-selected categorical and continuous graph features."""
+    if profile is None or profile.name != "adhd200":
+        values = load_aligned_phenotypes(
+            phenotype_csv, subject_ids, ["SEX", "FIQ", "PIQ"]
+        )
+        sex = np.where(np.isfinite(values[:, 0]), values[:, 0], -1).astype(str)[:, None]
+        return {
+            "continuous": values[:, [1, 2]].astype(np.float32),
+            "categorical_raw": sex,
+            "site_ids": np.asarray(site_ids).astype(str),
+        }
+
+    sex_column = profile.sex_column if profile else "SEX"
+    continuous_columns = profile.continuous_columns if profile else ("FIQ", "PIQ")
+    categorical_values = _load_aligned_categories(
+        phenotype_csv, subject_ids, (sex_column,), profile
     )
-    sex = np.where(np.isfinite(values[:, 0]), values[:, 0], -1).astype(str)[:, None]
-    continuous = values[:, [1, 2]].astype(np.float32)
+    continuous = load_aligned_phenotypes(
+        phenotype_csv, subject_ids, continuous_columns, profile
+    ).astype(np.float32)
     return {
         "continuous": continuous,
-        "categorical_raw": sex,
+        "categorical_raw": categorical_values,
         "site_ids": np.asarray(site_ids).astype(str),
     }
+
+
+def _load_aligned_categories(csv_path, subject_ids, columns, profile=None):
+    identifier = profile.phenotype_id_column if profile else "FILE_ID"
+    delimiter = "\t" if profile and profile.phenotype_format == "tsv" else ","
+    with Path(csv_path).open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        required = {identifier, *columns}
+        missing = required - set(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"Missing phenotype columns: {sorted(missing)}")
+        rows = {
+            row[identifier].strip(): row
+            for row in reader
+            if row.get(identifier, "").strip()
+            and row[identifier].strip() != "no_filename"
+        }
+    values = np.empty((len(subject_ids), len(columns)), dtype=object)
+    for subject_index, subject_id in enumerate(subject_ids):
+        row = _subject_row(rows, subject_id)
+        if row is None:
+            raise ValueError(f"Could not match phenotype subject: {subject_id}")
+        for column_index, column in enumerate(columns):
+            value = str(row.get(column, "")).strip()
+            values[subject_index, column_index] = value if value else "__MISSING__"
+    return values
 
 
 def build_reference_graph(train_cont, train_cat, query_cont, query_cat,
