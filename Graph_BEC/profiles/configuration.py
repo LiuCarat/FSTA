@@ -34,9 +34,9 @@ class ExperimentProfile:
 
 def get_profile(name: str) -> ExperimentProfile:
     if name == "abide":
-        from Graph_BEC.experiments.abide_i_config import PROFILE
+        from Graph_BEC.profiles.abide_i import PROFILE
     elif name == "adhd200":
-        from Graph_BEC.experiments.adhd200_config import PROFILE
+        from Graph_BEC.profiles.adhd200 import PROFILE
     else:
         raise ValueError(f"Unknown dataset profile: {name}")
     return PROFILE

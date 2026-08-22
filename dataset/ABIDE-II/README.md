@@ -1,90 +1,146 @@
 # ABIDE-II preprocessing
 
-## 1. Build the phenotype table
+This directory keeps one preprocessing path:
 
-The current phenotype candidate list contains 677 subjects with complete `DX`, `Age`, `Sex`, `FIQ`, and `PIQ`:
-
-```bash
-/data/users/liulin/miniconda3/envs/default/bin/python \
-  dataset/ABIDE-II/prepare_phenotype.py \
-  --input ABIDEII/phenotype/ABIDEII_phenotype_merged.csv \
-  --eligible ABIDEII/phenotype/phenotype_eligible_subjects.csv \
-  --output dataset/ABIDE-II/Phenotypic_Processing.csv \
-  --require-fiq-piq
+```text
+ABIDE-II raw BIDS -> fMRIPrep -> 24P+aCompCor denoising -> AAL90 .1D
 ```
 
-The output is an ABIDE-I-like canonical table with `SITE_ID`, `SUB_ID`, `FILE_ID`, `DX_GROUP`, `AGE_AT_SCAN`, `SEX`, `FIQ`, `VIQ`, and `PIQ`.
+The temporal policy is fixed: linear detrending, 0.01–0.1 Hz band-pass filtering,
+no global signal regression, and no frame deletion. FD and DVARS are recorded as
+subject-level QC only.
 
-## 2. Create one BIDS view
+## 1. Prepare the BIDS view and phenotype
 
-The downloader stores data under site directories. fMRIPrep expects one BIDS root, so create a symlink view:
+The downloader stores each site separately. Merge those subjects into one symlinked
+BIDS view and create the canonical Graph-BEC phenotype table:
 
 ```bash
-/data/users/liulin/miniconda3/envs/default/bin/python \
-  dataset/ABIDE-II/prepare_bids_layout.py \
-  --raw-root ABIDEII/raw \
-  --bids-root ABIDEII/bids
+python dataset/ABIDE-II/prepare_abide2.py
 ```
 
-This does not duplicate the NIfTI files. It creates subject symlinks and writes `abideii_bids_manifest.tsv`.
+Outputs:
 
-## 3. Run fMRIPrep with Docker
+```text
+ABIDEII/bids/
+ABIDEII/bids/abideii_bids_manifest.tsv
+dataset/ABIDE-II/ABIDEII_phenotype_graphbec.csv
+```
 
-Set the FreeSurfer license path first:
+The phenotype converter maps ABIDE-II `dx_group=1` (ASD) to Graph-BEC `DX_GROUP=2`
+and `dx_group=2` (control) to `DX_GROUP=1`.
+
+## 2. Run fMRIPrep
+
+Set a valid FreeSurfer license, then run:
 
 ```bash
 export FS_LICENSE="$HOME/.freesurfer.txt"
+dataset/ABIDE-II/run_fmriprep.sh \
+  ABIDEII/bids \
+  ABIDEII/derivatives/fmriprep \
+  ABIDEII/work
 ```
 
-Then run:
+The wrapper requests `MNI152NLin6Asym`, uses `--fs-no-reconall`, and is resumable.
+
+## 3. Extract denoised AAL90 time series
+
+Provide an AAL116 label image in the same MNI template family as the fMRIPrep output:
 
 ```bash
-dataset/ABIDE-II/run_fmriprep.sh ABIDEII/bids ABIDEII/derivatives/fmriprep ABIDEII/work
-```
-
-The script requests `MNI152NLin6Asym`, which is needed for a common AAL atlas space. fMRIPrep is resumable; rerunning the command reuses completed subjects.
-
-## 4. Extract CPAC-like AAL90 `.1D`
-
-The extraction is not performed directly on the fMRIPrep BOLD. It implements the
-ABIDE-I `cpac / filt_noglobal` intent using fMRIPrep outputs:
-
-- 24-parameter motion nuisance regression when the corresponding fMRIPrep columns exist;
-- white-matter and CSF nuisance regression;
-- no global-signal regression;
-- FD scrubbing at `0.2 mm` by default;
-- band-pass filtering from `0.01` to `0.1 Hz` by default;
-- linear detrending and no post-extraction z-score;
-- AAL116 extraction followed by retaining the first 90 ROI columns.
-
-The exact CPAC implementation and fMRIPrep confound definitions are not byte-for-byte
-identical, but this keeps the same `filt_noglobal` preprocessing intent. The strategy
-is implemented in `extract_aal90.py` and should be kept fixed for all ABIDE-II subjects.
-
-```bash
-/data/users/liulin/miniconda3/envs/default/bin/python \
-  dataset/ABIDE-II/extract_aal90.py \
+python dataset/ABIDE-II/extract_aal90.py \
   --fmriprep-root ABIDEII/derivatives/fmriprep \
   --atlas /path/to/AAL116_MNI.nii.gz \
   --manifest ABIDEII/bids/abideii_bids_manifest.tsv \
-  --output-root dataset/ABIDE-II/AAL_TCs_filtfix
+  --phenotype dataset/ABIDE-II/ABIDEII_phenotype_graphbec.csv
 ```
 
-Optional parameters:
+The extractor builds Friston-24 motion regressors, adds the first five
+`a_comp_cor_*` components when available, and performs nuisance regression,
+linear detrending, and 0.01–0.1 Hz filtering. It does not include global signal
+and never deletes frames. AAL labels are resampled with nearest-neighbor
+interpolation; labels 1–90 are retained. FD/DVARS metrics are written into the
+phenotype table as subject-level QC.
 
-```bash
---fd-threshold 0.2 \
---low-cutoff 0.01 \
---high-cutoff 0.1 \
---min-timepoints 78
-```
-
-The output is:
+Output:
 
 ```text
-dataset/ABIDE-II/AAL_TCs_filtfix/{SITE}/{SUB_ID}/{SUB_ID}_aal_TCs.1D
+dataset/ABIDE-II/cpac/filt_noglobal/sub-29008_rois_aal.1D
+dataset/ABIDE-II/cpac/filt_noglobal/sub-29007_rois_aal.1D
+...
 ```
 
-Each file should have shape `[time_points_after_scrubbing, 90]`. Subjects with fewer than
-78 remaining time points are skipped by default. The script prints the number of censored
-frames for every subject.
+Each `.1D` file is `[T, 90]`. Graph-BEC accepts both these AAL90 files and legacy
+ABIDE-I AAL116 files. The old `prepare_bids_layout.py` and `prepare_phenotype.py`
+scripts were merged into `prepare_abide2.py`.
+
+## 4. Download existing ABIDE-fMRIPrep derivatives without raw MRI
+
+`download_abide_fmriprep.py` uses DataLad/git-annex and intentionally retrieves only
+files needed for the later denoising and ROI extraction:
+
+```text
+resting preprocessed BOLD in MNI152NLin2009cAsym
+confounds_timeseries.tsv
+confounds_timeseries.json
+BOLD JSON
+brain mask
+```
+
+It does not retrieve raw BOLD, T1w, fieldmaps, FreeSurfer outputs, CIFTI/GIfTI, or
+HTML reports. Install `datalad` and `git-annex` first:
+
+```bash
+conda install -c conda-forge datalad git-annex
+```
+
+Test one BNI subject first. `29008` is automatically converted to the repository ID
+`sub-v2s0x29008`:
+
+```bash
+python dataset/ABIDE-II/download_abide_fmriprep.py \
+  --site BNI_1 \
+  --output-root ABIDEII/derivatives/abide-fmriprep \
+  --subject 29008
+```
+
+Download all selected subjects from an existing `SITE_ID,subject` CSV:
+
+```bash
+python dataset/ABIDE-II/download_abide_fmriprep.py \
+  --site BNI_1 \
+  --output-root ABIDEII/derivatives/abide-fmriprep \
+  --subject-file ABIDEII/phenotype/download_subjects.csv
+```
+
+Download all subjects in a site repository:
+
+```bash
+python dataset/ABIDE-II/download_abide_fmriprep.py \
+  --site BNI_1 \
+  --output-root ABIDEII/derivatives/abide-fmriprep \
+  --all-subjects
+```
+
+Check the selected file list before retrieving content:
+
+```bash
+python dataset/ABIDE-II/download_abide_fmriprep.py \
+  --site BNI_1 \
+  --output-root ABIDEII/derivatives/abide-fmriprep \
+  --subject 29008 \
+  --dry-run
+```
+
+The downloaded repository keeps the DataLad layout. Later, point
+`extract_aal90.py` at the repository and use the matching template space:
+
+```bash
+python dataset/ABIDE-II/extract_aal90.py \
+  --fmriprep-root ABIDEII/derivatives/abide-fmriprep/v2s0 \
+  --atlas /path/to/AAL116_MNI152NLin2009cAsym.nii.gz \
+  --manifest ABIDEII/bids/abideii_bids_manifest.tsv \
+  --phenotype dataset/ABIDE-II/ABIDEII_phenotype_graphbec.csv \
+  --space MNI152NLin2009cAsym
+```

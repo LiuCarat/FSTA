@@ -32,9 +32,17 @@ class ABIDERecord:
 
 def load_abide_records(data_root, pipeline="cpac", strategy="filt_noglobal", derivative="rois_aal"):
     data_root = Path(data_root)
-    phenotype_path = data_root / "Phenotypic_V1_0b_preprocessed1.csv"
-    if not phenotype_path.is_file():
-        phenotype_path = data_root / "Phenotypic_Processing_filled.csv"
+    phenotype_candidates = (
+        data_root / "ABIDEII_phenotype_graphbec.csv",
+        data_root / "Phenotypic_V1_0b_preprocessed1.csv",
+        data_root / "Phenotypic_Processing_filled.csv",
+    )
+    phenotype_path = next((path for path in phenotype_candidates if path.is_file()), None)
+    if phenotype_path is None:
+        raise FileNotFoundError(
+            "No ABIDE phenotype CSV found; tried "
+            + ", ".join(str(path) for path in phenotype_candidates)
+        )
     time_series_dir = data_root / pipeline / strategy
     suffix = f"_{derivative}.1D"
     with phenotype_path.open(newline="", encoding="utf-8-sig") as handle:
@@ -69,14 +77,15 @@ def load_abide_records(data_root, pipeline="cpac", strategy="filt_noglobal", der
 
 def load_abide_time_series(record, standardize=True):
     time_series = np.loadtxt(record.time_series_path, dtype=np.float32)
-    if time_series.ndim != 2 or time_series.shape[1] != SOURCE_ROI_COUNT:
+    if time_series.ndim != 2 or time_series.shape[1] not in {ROI_COUNT, SOURCE_ROI_COUNT}:
         raise ValueError(
-            f"Expected {SOURCE_ROI_COUNT} source columns for {record.subject_id}, "
+            f"Expected {ROI_COUNT} or {SOURCE_ROI_COUNT} ROI columns for {record.subject_id}, "
             f"got {time_series.shape}"
         )
     if not np.isfinite(time_series).all():
         raise ValueError(f"Non-finite values found for {record.subject_id}")
-    time_series = time_series[:, ROI_INDICES]
+    if time_series.shape[1] == SOURCE_ROI_COUNT:
+        time_series = time_series[:, ROI_INDICES]
     if standardize:
         time_series = standardize_time_series(time_series)
     return validate_time_series(time_series, record.subject_id, ROI_COUNT)

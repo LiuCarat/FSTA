@@ -9,7 +9,7 @@ from Graph_BEC.model.normative_bec import (
     edge_effect_sizes,
     normative_reference,
 )
-from Graph_BEC.model.phenotype import build_reference_graph, fused_graph, topk_graph
+from Graph_BEC.model.fusion_graph import build_reference_graph, fused_graph, topk_graph
 from Graph_BEC.model.refinement import (
     apply_pgr_refiner,
     apply_qsr_refiner,

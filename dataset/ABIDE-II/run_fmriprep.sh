@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BIDS_ROOT="${1:-ABIDEII/bids}"
-OUTPUT_ROOT="${2:-ABIDEII/derivatives}"
+OUTPUT_ROOT="${2:-ABIDEII/derivatives/fmriprep}"
 WORK_ROOT="${3:-ABIDEII/work}"
 IMAGE="${FMRIPREP_IMAGE:-nipreps/fmriprep:25.2.3}"
 LICENSE_FILE="${FS_LICENSE:-$HOME/.freesurfer.txt}"
@@ -14,6 +14,7 @@ if [[ ! -f "$LICENSE_FILE" ]]; then
 fi
 
 docker run --rm -it \
+  --cleanenv \
   --user "$(id -u):$(id -g)" \
   -v "$(realpath "$BIDS_ROOT"):/data:ro" \
   -v "$(realpath "$OUTPUT_ROOT"):/out" \
@@ -23,5 +24,6 @@ docker run --rm -it \
   /data /out participant \
   --fs-license-file /opt/freesurfer/license.txt \
   --output-spaces MNI152NLin6Asym \
+  --fs-no-reconall \
   --work-dir /work \
   --skip-bids-validation

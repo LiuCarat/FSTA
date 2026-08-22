@@ -23,12 +23,12 @@ from Graph_BEC.data.common import (
     limit_archive_subjects,
     load_bec_archive,
 )
-from Graph_BEC.model.phenotype import (
+from Graph_BEC.model.fusion_graph import (
     load_aligned_phenotypes,
     load_phenotypes,
     subject_fc_features,
 )
-from Graph_BEC.model.qc import load_aligned_qc
+from Graph_BEC.model.qsr.qc import load_aligned_qc
 
 FIXED_DATA_CONFIG = {
     "pipeline": "cpac",
@@ -82,7 +82,7 @@ def load_subject_dataset(
 
 def load_pipeline_data(args, device):
     """Load or generate BEC matrices and attach graph/QC covariates."""
-    from Graph_BEC.baseline.FSTA_EC import generate_subject_bec, save_subject_bec
+    from Graph_BEC.model.fsta_ec import generate_subject_bec, save_subject_bec
 
     fsta_metrics = None
     subjects = None

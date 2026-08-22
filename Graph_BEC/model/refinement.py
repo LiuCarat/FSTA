@@ -6,10 +6,9 @@ import copy
 import numpy as np
 import torch
 
-from Graph_BEC.model import PGRBECStatic, QSRBECRefiner
-from Graph_BEC.model.pgr_bec_static import static_refinement_loss
-from Graph_BEC.model.qsr_bec import qsr_refinement_loss
-from Graph_BEC.model.qc import (
+from Graph_BEC.model.pgr import PGRBECStatic, static_refinement_loss
+from Graph_BEC.model.qsr import QSRBECRefiner, qsr_refinement_loss
+from Graph_BEC.model.qsr.qc import (
     build_confound_design,
     build_pseudo_target,
     build_qc_sensitive_map,

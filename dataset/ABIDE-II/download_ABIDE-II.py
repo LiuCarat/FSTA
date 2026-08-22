@@ -58,7 +58,7 @@ if sys.platform == "win32":
 # 配置
 # ============================================================
 
-S3_ROOT = "https://s3.amazonaws.com/fcp-indi"
+S3_ROOT = os.getenv("ABIDE_S3_ROOT", "https://s3.amazonaws.com/fcp-indi").rstrip("/")
 
 PROJECT_PREFIX = "data/Projects/ABIDE2/RawData"
 
@@ -121,6 +121,32 @@ def progress_message(message):
         tqdm.write(message)
     else:
         print(message)
+
+
+def get_with_retries(url):
+    """GET a small metadata file with retry and exponential backoff."""
+    last_error = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.get(
+                url,
+                timeout=TIMEOUT,
+                headers={"User-Agent": "ABIDE-II-downloader/1.0"},
+            )
+            if response.status_code == 200:
+                return response
+            if response.status_code in {400, 403, 404}:
+                raise RuntimeError(f"HTTP {response.status_code}")
+            last_error = RuntimeError(f"HTTP {response.status_code}")
+        except requests.RequestException as error:
+            last_error = error
+        if attempt < MAX_RETRIES:
+            delay = RETRY_DELAY * (2 ** (attempt - 1))
+            progress_message(
+                f"  metadata 请求失败，第 {attempt}/{MAX_RETRIES} 次重试，等待 {delay}s"
+            )
+            time.sleep(delay)
+    raise RuntimeError(f"请求失败: {url}; {last_error}")
 
 
 def download_file(
@@ -421,17 +447,7 @@ def load_site_participants(site, cache_dir=None, refresh=False, local_root=None)
 
     try:
 
-        response = requests.get(
-            url,
-            timeout=TIMEOUT,
-        )
-
-        if response.status_code != 200:
-            print(
-                f"  {site}: participants.tsv "
-                f"不可用 ({response.status_code})"
-            )
-            return None
+        response = get_with_retries(url)
 
         if cache_path:
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
@@ -828,7 +844,7 @@ def main():
         "--max-subjects",
         type=int,
         default=None,
-        help="只取前 N 个被试，测试时使用"
+        help="只取前 N 个被试；与 --phenotype-only 一起使用时限制候选表型名单"
     )
 
     parser.add_argument(
@@ -927,10 +943,20 @@ def main():
         eligible, summary, inventory_path, summary_path = save_phenotype_audit(
             inventory, phenotype_dir, args.required_fields
         )
+        selected = (
+            eligible.head(args.max_subjects).copy()
+            if args.max_subjects is not None
+            else eligible.copy()
+        )
+        selected.to_csv(
+            os.path.join(phenotype_dir, "ABIDEII_phenotype_selected.csv"),
+            index=False,
+            encoding="utf-8-sig",
+        )
         candidate_path = os.path.join(
             phenotype_dir, "phenotype_download_subjects.csv"
         )
-        eligible[["SITE_ID", "subject"]].to_csv(candidate_path, index=False)
+        selected[["SITE_ID", "subject"]].to_csv(candidate_path, index=False)
         print_phenotype_summary(summary)
         print(f"  读取已有表型: {existing_merged_path}")
         print(f"  表型盘点: {inventory_path}")
@@ -1069,10 +1095,21 @@ def main():
         print_phenotype_summary(summary)
         print(f"  表型盘点: {inventory_path}")
         print(f"  表型统计: {summary_path}")
-        eligible[["SITE_ID", "subject"]].to_csv(
+        selected = (
+            eligible.head(args.max_subjects).copy()
+            if args.max_subjects is not None
+            else eligible.copy()
+        )
+        selected.to_csv(
+            os.path.join(phenotype_dir, "ABIDEII_phenotype_selected.csv"),
+            index=False,
+            encoding="utf-8-sig",
+        )
+        selected[["SITE_ID", "subject"]].to_csv(
             os.path.join(phenotype_dir, "phenotype_download_subjects.csv"),
             index=False,
         )
+        print(f"  选中表型: {len(selected)} 条")
 
     if args.phenotype_only:
         print("\n--phenotype-only：已完成表型盘点，不下载影像文件。")
