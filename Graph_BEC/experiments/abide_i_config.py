@@ -29,6 +29,7 @@ PROFILE = ExperimentProfile(
     roi_count=90,
     exclude_subjects=(),
     defaults={
+        "representations": ["original", "refined", "qc_refined"],
         "input_mode": "bec", "n_splits": 10, "validation_size": 0.2,
         "seed": 42, "gpu_id": "auto", "reference_k": 20,
         "graph_mode": "fusion", "fusion_beta": 0.6,

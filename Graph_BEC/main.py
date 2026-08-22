@@ -46,28 +46,25 @@ def main():
 
     print("\n===== fold refinement + BrainNetCNN =====")
     experiment = run_cross_validation(args, data, device)
-    refined_path = save_refined_bec_archive(
-        args.refined_bec_path,
-        data,
-        experiment["oof_pgr"],
-        experiment["oof_qc"],
-        experiment["fold_ids"],
-        args.bec_path,
-    )
-    print(f"Saved refined NPZ: {refined_path.resolve()}")
-    qsr_refined_path = save_qsr_bec_archive(
-        args.qsr_refined_bec_path,
-        data,
-        experiment["oof_qc"],
-        experiment["fold_ids"],
-        args.bec_path,
-    )
-    print(f"Saved QSR-refined NPZ: {qsr_refined_path.resolve()}")
+    refined_path = qsr_refined_path = None
+    if "refined" in args.representations and "qc_refined" in args.representations:
+        refined_path = save_refined_bec_archive(
+            args.refined_bec_path, data, experiment["oof_pgr"],
+            experiment["oof_qc"], experiment["fold_ids"], args.bec_path,
+        )
+        print(f"Saved refined NPZ: {refined_path.resolve()}")
+    if "qc_refined" in args.representations:
+        qsr_refined_path = save_qsr_bec_archive(
+            args.qsr_refined_bec_path, data, experiment["oof_qc"],
+            experiment["fold_ids"], args.bec_path,
+        )
+        print(f"Saved QSR-refined NPZ: {qsr_refined_path.resolve()}")
     training_summary = {
         "fsta": fsta_metrics,
         "refinement_folds": experiment["refinement_metrics"],
-        "refined_bec_path": str(refined_path.resolve()),
-        "qsr_refined_bec_path": str(qsr_refined_path.resolve()),
+        "representations": args.representations,
+        "refined_bec_path": str(refined_path.resolve()) if refined_path else None,
+        "qsr_refined_bec_path": str(qsr_refined_path.resolve()) if qsr_refined_path else None,
         "classification_protocol": (
             "fold-local train/val/test representations; test-only OOF NPZ"
         ),

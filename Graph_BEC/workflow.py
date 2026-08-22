@@ -78,6 +78,9 @@ def build_fold_reference(args, arrays, fmri_arrays=None):
 
 def run_fold(args, fold, data, train_index, val_index, test_index, device):
     """Fit refiners and classifiers using one fold-local data split."""
+    representations_to_run = tuple(args.representations)
+    needs_pgr = "refined" in representations_to_run
+    needs_qsr = "qc_refined" in representations_to_run
     fold_seed = args.seed + fold * 1000
     set_seed(fold_seed)
     prepare_arrays = (
@@ -91,14 +94,18 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         data["categorical_raw"][train_index], data["categorical_raw"][val_index], data["categorical_raw"][test_index],
     )
     fmri_arrays = None
-    if args.graph_mode == "fusion":
+    if args.graph_mode == "fusion" and (needs_pgr or needs_qsr):
         fmri_arrays = tuple(
             data["fmri_features"][index]
             for index in (train_index, val_index, test_index)
         )
-    reference = build_fold_reference(args, arrays, fmri_arrays)
+    reference = (
+        build_fold_reference(args, arrays, fmri_arrays)
+        if needs_pgr or needs_qsr
+        else None
+    )
 
-    if args.profile.name == "adhd200":
+    if needs_qsr and args.profile.name == "adhd200":
         confound_columns = tuple(args.profile.confound_columns)
         categorical_indices = tuple(
             index for index, column in enumerate(confound_columns)
@@ -110,40 +117,55 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         qsr_train_confound = apply_numeric_imputer(
             data["qsr_confound_values"][train_index], confound_fills
         )
-    else:
+    elif needs_qsr:
         qsr_train_confound = data["qsr_confound_values"][train_index]
 
-    set_seed(fold_seed)
-    pgr_model, train_pgr, pgr_metrics = train_pgr_refiner(
-        args, arrays["train_bec"], reference["train_neighbor"], device
-    )
-    val_pgr = apply_pgr_refiner(
-        pgr_model, arrays["val_bec"], reference["val_neighbor"], device
-    )
-    test_pgr = apply_pgr_refiner(
-        pgr_model, arrays["test_bec"], reference["test_neighbor"], device
-    )
+    pgr_metrics = {}
+    test_pgr = None
+    if needs_pgr:
+        set_seed(fold_seed)
+        pgr_model, train_pgr, pgr_metrics = train_pgr_refiner(
+            args, arrays["train_bec"], reference["train_neighbor"], device
+        )
+        val_pgr = apply_pgr_refiner(
+            pgr_model, arrays["val_bec"], reference["val_neighbor"], device
+        )
+        test_pgr = apply_pgr_refiner(
+            pgr_model, arrays["test_bec"], reference["test_neighbor"], device
+        )
 
-    set_seed(fold_seed + 1)
-    qsr_model, train_qsr, sensitive_map, qsr_metrics = train_qsr_refiner(
-        args, arrays["train_bec"], reference["train_neighbor"],
-        data["qsr_qc"][train_index], qsr_train_confound,
-        data["site_ids"][train_index], device, fold_seed + 1,
-    )
-    val_qsr = apply_qsr_refiner(
-        qsr_model, arrays["val_bec"], reference["val_neighbor"], sensitive_map, device
-    )
-    test_qsr = apply_qsr_refiner(
-        qsr_model, arrays["test_bec"], reference["test_neighbor"], sensitive_map, device
-    )
+    qsr_metrics = {}
+    test_qsr = None
+    if needs_qsr:
+        set_seed(fold_seed + 1)
+        qsr_model, train_qsr, sensitive_map, qsr_metrics = train_qsr_refiner(
+            args, arrays["train_bec"], reference["train_neighbor"],
+            data["qsr_qc"][train_index], qsr_train_confound,
+            data["site_ids"][train_index], device, fold_seed + 1,
+        )
+        val_qsr = apply_qsr_refiner(
+            qsr_model, arrays["val_bec"], reference["val_neighbor"], sensitive_map, device
+        )
+        test_qsr = apply_qsr_refiner(
+            qsr_model, arrays["test_bec"], reference["test_neighbor"], sensitive_map, device
+        )
 
-    representations = {
+    all_representations = {
         "original": {
             "train": arrays["train_bec"], "val": arrays["val_bec"],
             "test": arrays["test_bec"],
         },
-        "refined": {"train": train_pgr, "val": val_pgr, "test": test_pgr},
-        "qc_refined": {"train": train_qsr, "val": val_qsr, "test": test_qsr},
+    }
+    if needs_pgr:
+        all_representations["refined"] = {
+            "train": train_pgr, "val": val_pgr, "test": test_pgr,
+        }
+    if needs_qsr:
+        all_representations["qc_refined"] = {
+            "train": train_qsr, "val": val_qsr, "test": test_qsr,
+        }
+    representations = {
+        name: all_representations[name] for name in representations_to_run
     }
     labels = {
         "train": data["labels"][train_index],
@@ -176,7 +198,7 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         }
         for name, runs in metric_runs.items()
     }
-    original_test = representations["original"]["test"]
+    original_test = all_representations["original"]["test"]
     _, original_effect = edge_effect_sizes(
         original_test, labels["test"], args.asd_label
     )
@@ -221,21 +243,24 @@ def run_cross_validation(args, data, device):
         fold_result = run_fold(
             args, fold, data, train_index, val_index, test_index, device
         )
-        restored_pgr = (
-            fold_result["test_pgr"] * fold_result["bec_std"]
-            + fold_result["bec_mean"]
-        ).astype(np.float32)
-        restored_qc = (
-            fold_result["test_qc"] * fold_result["bec_std"]
-            + fold_result["bec_mean"]
-        ).astype(np.float32)
-        diagonal = np.arange(restored_pgr.shape[-1])
-        restored_pgr[:, diagonal, diagonal] = 0.0
-        restored_qc[:, diagonal, diagonal] = 0.0
         heldout = fold_result["test_index"]
-        oof_pgr[heldout], oof_qc[heldout], fold_ids[heldout] = (
-            restored_pgr, restored_qc, fold
-        )
+        if fold_result["test_pgr"] is not None:
+            restored_pgr = (
+                fold_result["test_pgr"] * fold_result["bec_std"]
+                + fold_result["bec_mean"]
+            ).astype(np.float32)
+            diagonal = np.arange(restored_pgr.shape[-1])
+            restored_pgr[:, diagonal, diagonal] = 0.0
+            oof_pgr[heldout] = restored_pgr
+        if fold_result["test_qc"] is not None:
+            restored_qc = (
+                fold_result["test_qc"] * fold_result["bec_std"]
+                + fold_result["bec_mean"]
+            ).astype(np.float32)
+            diagonal = np.arange(restored_qc.shape[-1])
+            restored_qc[:, diagonal, diagonal] = 0.0
+            oof_qc[heldout] = restored_qc
+        fold_ids[heldout] = fold
         results.append(fold_result["metrics"])
         refinement_metrics.append({
             "fold": fold, **fold_result["refinement_metrics"]
@@ -247,9 +272,11 @@ def run_cross_validation(args, data, device):
         )
         print(f"fold {fold}: {report}")
 
+    needs_pgr = "refined" in args.representations
+    needs_qsr = "qc_refined" in args.representations
     if (
-        not np.isfinite(oof_pgr).all()
-        or not np.isfinite(oof_qc).all()
+        (needs_pgr and not np.isfinite(oof_pgr).all())
+        or (needs_qsr and not np.isfinite(oof_qc).all())
         or np.any(fold_ids < 0)
     ):
         raise RuntimeError("PGR/QC refined OOF arrays are incomplete")
