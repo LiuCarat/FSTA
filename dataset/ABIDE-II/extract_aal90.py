@@ -13,7 +13,7 @@ MOTION_COLUMNS = ("trans_x", "trans_y", "trans_z", "rot_x", "rot_y", "rot_z")
 PHENOTYPE_COLUMNS = (
     "FILE_ID", "SUB_ID", "SITE_ID", "DX_GROUP", "AGE_AT_SCAN", "SEX",
     "FIQ", "VIQ", "PIQ", "func_mean_fd", "func_fd_gt_0_2",
-    "func_fd_gt_0_5", "func_mean_dvars", "func_quality",
+    "func_fd_gt_0_5", "func_dvars", "func_quality",
 )
 
 
@@ -107,7 +107,7 @@ def qc_values(frame):
         "func_mean_fd": float(np.mean(fd)),
         "func_fd_gt_0_2": float(np.mean(fd > 0.2)),
         "func_fd_gt_0_5": float(np.mean(fd > 0.5)),
-        "func_mean_dvars": mean_dvars,
+        "func_dvars": mean_dvars,
         "func_quality": float(np.mean(fd <= 0.2)),
     }
 

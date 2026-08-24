@@ -54,19 +54,30 @@ def load_subject_dataset(
         records = load_adhd200_records(
             data_root, profile, patient_label=patient_label, control_label=control_label
         )
-        series_loader = lambda record: load_adhd200_time_series(
-            record, profile.source_roi_count, profile.roi_count, standardize
-        )
+        time_series = []
+        window_ranges = []
+        for record in records:
+            series, ranges = load_adhd200_time_series(
+                record,
+                profile.source_roi_count,
+                profile.roi_count,
+                standardize,
+                return_run_ranges=True,
+            )
+            time_series.append(series)
+            window_ranges.append(ranges)
         roi_count = profile.roi_count
     else:
         records = load_abide_records(data_root, pipeline, strategy, derivative)
         series_loader = lambda record: load_abide_time_series(record, standardize)
         roi_count = ROI_COUNT
-
-    time_series = [series_loader(record) for record in records]
+        time_series = [series_loader(record) for record in records]
+        window_ranges = None
     if max_subjects is not None:
         records = records[:max_subjects]
         time_series = time_series[:max_subjects]
+        if window_ranges is not None:
+            window_ranges = window_ranges[:max_subjects]
     if not records:
         raise ValueError("No subjects remain after data loading")
     if any(series.ndim != 2 or series.shape[1] != roi_count for series in time_series):
@@ -77,6 +88,7 @@ def load_subject_dataset(
         "labels": np.asarray([record.label for record in records], dtype=np.int64),
         "subject_ids": np.asarray([record.subject_id for record in records]),
         "site_ids": np.asarray([record.site_id for record in records]),
+        "window_ranges": window_ranges,
     }
 
 

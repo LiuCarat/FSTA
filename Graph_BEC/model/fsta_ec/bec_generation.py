@@ -12,7 +12,12 @@ from .fsta_utils import extract_subject_bec
 
 def generate_subject_bec(args, subjects, device):
     """Train FSTA and extract one directed Original BEC per subject."""
-    model, training_metrics = train_fsta(args, subjects["time_series"], device)
+    model, training_metrics = train_fsta(
+        args,
+        subjects["time_series"],
+        device,
+        subjects.get("window_ranges"),
+    )
     extracted = extract_subject_bec(
         model,
         subjects["records"],
@@ -20,6 +25,7 @@ def generate_subject_bec(args, subjects, device):
         args.window_length,
         args.stride,
         device,
+        subjects.get("window_ranges"),
     )
     return {
         "bec": extracted["bec"],

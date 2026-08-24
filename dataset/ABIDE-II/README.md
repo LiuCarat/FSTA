@@ -144,3 +144,50 @@ python dataset/ABIDE-II/extract_aal90.py \
   --phenotype dataset/ABIDE-II/ABIDEII_phenotype_graphbec.csv \
   --space MNI152NLin2009cAsym
 ```
+
+## 5. Low-memory one-subject-at-a-time fMRIPrep
+
+For the downloaded site-separated raw data, use
+`run_fmriprep_onebyone.sh`. It does not require a permanent `bids` directory:
+
+```bash
+bash dataset/ABIDE-II/run_fmriprep_onebyone.sh sub-29563
+```
+
+Without a subject argument it scans all raw sites and processes only subjects with
+exactly one BOLD and one T1w:
+
+```bash
+bash dataset/ABIDE-II/run_fmriprep_onebyone.sh
+```
+
+For each subject the script creates a temporary one-subject BIDS view, runs Docker
+with one process and one OpenMP thread, retains only the following derivatives under
+`dataset/ABIDE-II/fmriprep/`, and deletes the temporary BIDS/work/output directory:
+
+```text
+*space-MNI152NLin6Asym_desc-preproc_bold.nii.gz
+*desc-confounds_timeseries.tsv
+*desc-confounds_timeseries.json
+*space-MNI152NLin6Asym_desc-brain_mask.nii.gz
+*_bold.json
+```
+
+It skips a subject if its retained preprocessed BOLD already exists, so rerunning
+resumes at subject granularity. The default memory cap is 12 GB and can be changed:
+
+```bash
+FMRIPREP_MEM_MB=16000 FMRIPREP_NPROCS=2 \
+  bash dataset/ABIDE-II/run_fmriprep_onebyone.sh sub-29563
+```
+
+The temporary root can be placed on a local scratch disk:
+
+```bash
+FMRIPREP_TMP_ROOT=/path/to/local/scratch/abide2-fmriprep \
+  bash dataset/ABIDE-II/run_fmriprep_onebyone.sh
+```
+
+The retained derivatives still need `extract_aal90.py` for the final temporal
+pipeline: Friston-24, aCompCor, linear detrending, 0.01–0.1 Hz filtering, no GSR,
+and AAL90 extraction. fMRIPrep alone does not produce the final `.1D` files.

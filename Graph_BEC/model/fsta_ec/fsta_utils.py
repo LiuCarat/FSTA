@@ -49,12 +49,27 @@ class FSTAWindowLoss(nn.Module):
 # ---------------------------------------------------------------------------
 
 @torch.no_grad()
-def extract_subject_bec(model, records, time_series, window_length, stride, device):
+def extract_subject_bec(
+    model, records, time_series, window_length, stride, device, window_ranges=None
+):
     model.eval()
     all_bec, all_mse = [], []
     for index, (record, series) in enumerate(zip(records, time_series), 1):
         attentions, errors = [], []
-        for start in fixed_window_starts(series.shape[0], window_length, stride):
+        ranges = (
+            window_ranges[index - 1]
+            if window_ranges is not None
+            else ((0, series.shape[0]),)
+        )
+        starts = []
+        for range_start, range_end in ranges:
+            starts.extend(
+                range_start + start
+                for start in fixed_window_starts(
+                    range_end - range_start, window_length, stride
+                )
+            )
+        for start in starts:
             window = (
                 torch.from_numpy(series[start : start + window_length])
                 .float()
@@ -73,6 +88,7 @@ def extract_subject_bec(model, records, time_series, window_length, stride, devi
         if index == 1 or index == len(records) or index % 100 == 0:
             print(
                 f"BEC [{index}/{len(records)}] subject={record.subject_id} "
+                f"runs={len(ranges)} windows={len(starts)} "
                 f"mse={np.mean(errors):.6f}"
             )
     return {

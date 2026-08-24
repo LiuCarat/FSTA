@@ -20,9 +20,11 @@ def build_fsta(args, device):
     return FSTA(options, args.window_length, args.d_model, args.d_inner_hid, args.n_head, args.d_k, args.d_v, args.dropout).to(device)
 
 
-def train_fsta(args, time_series, device):
+def train_fsta(args, time_series, device, window_ranges=None):
     set_seed(args.seed)
-    dataset = RandomSubjectWindowDataset(time_series, args.window_length, args.seed)
+    dataset = RandomSubjectWindowDataset(
+        time_series, args.window_length, args.seed, window_ranges
+    )
     generator = torch.Generator().manual_seed(args.seed)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, generator=generator, num_workers=0)
     model = build_fsta(args, device)

@@ -17,6 +17,7 @@ class ADHD200Record:
     label: int
     diagnosis: str
     time_series_path: Path
+    time_series_paths: tuple[Path, ...]
 
 
 def load_adhd200_records(data_root, profile, patient_label=1, control_label=0):
@@ -61,12 +62,14 @@ def load_adhd200_records(data_root, profile, patient_label=1, control_label=0):
             if not candidates:
                 continue
             preferred = [path for path in candidates if path.name.startswith("sfnwmrda")]
+            selected_paths = tuple(preferred or candidates)
             records.append(ADHD200Record(
                 subject_id=subject_id,
                 site_id=site_dir.name,
                 label=label,
                 diagnosis=diagnosis,
-                time_series_path=(preferred or candidates)[0],
+                time_series_path=selected_paths[0],
+                time_series_paths=selected_paths,
             ))
     if not records:
         raise FileNotFoundError(
@@ -75,21 +78,41 @@ def load_adhd200_records(data_root, profile, patient_label=1, control_label=0):
     return records
 
 
-def load_adhd200_time_series(record, source_roi_count=116, roi_count=90, standardize=True):
-    time_series = np.loadtxt(
-        record.time_series_path,
-        dtype=np.float32,
-        skiprows=1,
-        usecols=np.arange(2, 2 + source_roi_count),
-    )
-    if time_series.ndim != 2 or time_series.shape[1] != source_roi_count:
-        raise ValueError(
-            f"Expected [{record.subject_id}] ADHD200 data with "
-            f"{source_roi_count} ROI columns, got {time_series.shape}"
+def load_adhd200_time_series(
+    record,
+    source_roi_count=116,
+    roi_count=90,
+    standardize=True,
+    return_run_ranges=False,
+):
+    runs = []
+    run_ranges = []
+    offset = 0
+    for path in record.time_series_paths:
+        time_series = np.loadtxt(
+            path,
+            dtype=np.float32,
+            skiprows=1,
+            usecols=np.arange(2, 2 + source_roi_count),
         )
-    if not np.isfinite(time_series).all():
-        raise ValueError(f"Non-finite values found for {record.subject_id}")
-    time_series = time_series[:, :roi_count]
-    if standardize:
-        time_series = standardize_time_series(time_series)
-    return validate_time_series(time_series, record.subject_id, roi_count)
+        if time_series.ndim != 2 or time_series.shape[1] != source_roi_count:
+            raise ValueError(
+                f"Expected [{record.subject_id}] data with "
+                f"{source_roi_count} ROI columns in {path.name}, got {time_series.shape}"
+            )
+        if not np.isfinite(time_series).all():
+            raise ValueError(f"Non-finite values found for {record.subject_id}: {path.name}")
+        time_series = time_series[:, :roi_count]
+        if standardize:
+            time_series = standardize_time_series(time_series)
+        time_series = validate_time_series(time_series, record.subject_id, roi_count)
+        runs.append(time_series)
+        run_ranges.append((offset, offset + len(time_series)))
+        offset += len(time_series)
+
+    combined = validate_time_series(
+        np.concatenate(runs, axis=0), record.subject_id, roi_count
+    )
+    if return_run_ranges:
+        return combined, tuple(run_ranges)
+    return combined

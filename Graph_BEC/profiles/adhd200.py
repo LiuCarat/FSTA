@@ -44,11 +44,11 @@ PROFILE = ExperimentProfile(
         "qsr_gate_max": 0.5, "qsr_gate_weight": 1e-3,
         "qsr_variance_weight": 0.1, "qsr_variance_retention": 0.85,
         "qsr_basis_ridge": 1e-3, "qsr_qc_columns": list(QC_COLUMNS),
-        "classifier_epochs": 100, "classifier_patience": 20,
+        "classifier_epochs": 60, "classifier_patience": 12,
         "classifier_lr": 1e-3, "classifier_repeats": 1,
         "patient_label": 1, "control_label": 0,
-        "window_length": 72, "stride": 36, "epochs": 91,
-        "fsta_checkpoint": "final", "loss_mode": "entropy", "loss_alpha": 0.01,
+        "window_length": 50, "stride": 25, "epochs": 91, # 91
+        "fsta_checkpoint": "final", "loss_mode": "entropy", "loss_alpha": 0.03, # 0.03
         "batch_size": 32, "log_every": 20, "d_model": 16,
         "d_inner_hid": 64, "d_k": 8, "d_v": 8, "n_head": 2,
         "dropout": 0.2, "n_warmup_steps": 4000, "lr_mul": 1.2,
