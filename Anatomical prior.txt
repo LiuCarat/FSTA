@@ -1,0 +1,973 @@
+对。结合 **FSTA 官方公开代码**来看，我现在反而很确定：如果你不想大改 FSTA，最合理的做法就是**只改 spatial attention 的打分公式，其他全部保持原样**。
+
+我会把新模型定成：
+
+[
+\boxed{\text{SCG-FSTA: Structural-Connectivity-Guided FSTA}}
+]
+
+核心创新只有一句话：
+
+> **在 FSTA 计算 ROI-to-ROI spatial attention 时，加入一个 population structural connectome 作为 soft bias。**
+
+这不是“再加一个大模块”，甚至 Fourier、temporal attention、FFN、loss 都可以先完全不动。
+
+---
+
+# 1. 先看官方 FSTA 代码实际上在做什么
+
+官方 `FSTA.py` 的主要流程非常清楚：
+
+[
+Input
+\rightarrow ConvEmbedding
+\rightarrow PositionalEncoding
+\rightarrow FourierAtt
+\rightarrow TemporalAttention
+\rightarrow SpatialAttention
+\rightarrow SpatiotemporalFusion
+\rightarrow Output
+]
+
+代码中 Fourier Attention 得到 `FA_output`，然后先把它 transpose 后做 temporal attention；之后又对 `X_spa=FA_output` 调用**同一个 attention 模块**得到 `spa_attn`，最后用
+
+[
+\text{tep_output}\times\text{spa_attn}
+]
+
+完成时空融合。([GitHub][1])
+
+尤其关键的是这里：
+
+```text
+_, spa_attn = self.slf_attn(X_spa, ...)
+st_output = torch.matmul(tep_output, spa_attn)
+```
+
+所以：
+
+[
+\boxed{spa_attn\in\mathbb{R}^{N\times N}}
+]
+
+正好就是你最适合加入 structural prior 的地方。官方训练代码最终也把这个 adjacency 转置后作为 EC 输出。([GitHub][2]) 官方 README 特别强调了这个转置，因为最终输出 (A_{ij}) 表示 (v_i\to v_j)。([GitHub][3])
+
+---
+
+# 2. 我建议你的新架构就这么简单
+
+原始 FSTA：
+
+[
+fMRI
+]
+
+[
+\downarrow
+]
+
+[
+Fourier\ Attention
+]
+
+[
+\downarrow
+]
+
+[
+Temporal\ Attention
+]
+
+[
+\downarrow
+]
+
+[
+\boxed{Spatial\ Attention}
+]
+
+[
+\downarrow
+]
+
+[
+Spatiotemporal\ Fusion
+]
+
+[
+\downarrow
+]
+
+[
+EC
+]
+
+你的 SCG-FSTA：
+
+[
+fMRI
+]
+
+[
+\downarrow
+]
+
+[
+Fourier\ Attention
+]
+
+[
+\downarrow
+]
+
+[
+Temporal\ Attention
+]
+
+[
+\downarrow
+]
+
+[
+\boxed{
+Structural\ Prior\ Guided\ Spatial\ Attention
+}
+]
+
+同时：
+
+[
+Population\ DTI
+\rightarrow
+P_{SC}
+\nearrow
+]
+
+然后剩下的全部不变：
+
+[
+\downarrow
+]
+
+[
+Spatiotemporal\ Fusion
+\rightarrow EC
+]
+
+**只改这个框。**
+
+---
+
+# 3. 到底改 spatial attention 的什么？
+
+官方代码底层的 attention 非常标准。
+
+在 `Modules.py` 里面先计算：
+
+[
+S=\frac{QK^\top}{\sqrt{d_k}}
+]
+
+然后：
+
+[
+A=\operatorname{softmax}(S)
+]
+
+再：
+
+[
+O=AV.
+]
+
+官方代码对应的就是先做 Q-K matrix multiplication，再 softmax，最后乘 V。([GitHub][4])
+
+你只需要把它改成：
+
+[
+\boxed{
+S'
+==
+
+\frac{QK^\top}{\sqrt{d_k}}
++
+\lambda P_{SC}
+}
+]
+
+然后：
+
+[
+A=
+\operatorname{softmax}(S').
+]
+
+就结束了。
+
+也就是：
+
+### FSTA
+
+[
+A=
+softmax
+\left(
+\frac{QK^T}{\sqrt d}
+\right)
+]
+
+### 你的方法
+
+[
+\boxed{
+A=
+softmax
+\left(
+\frac{QK^T}{\sqrt d}
++
+\lambda P_{SC}
+\right)
+}
+]
+
+这是我目前最推荐你的版本。
+
+---
+
+# 4. 举个实际数字就特别容易理解
+
+假设只有三个 ROI：
+
+[
+A,B,C
+]
+
+FSTA 根据 fMRI 算出来原始 attention logits：
+
+[
+S=
+\begin{bmatrix}
+0 & 0.7 & 0.8\
+0.5&0&0.6\
+0.4&0.5&0
+\end{bmatrix}
+]
+
+也就是说，仅根据 fMRI：
+
+> A→C 比 A→B 更值得 attention。
+
+现在 population DTI atlas 告诉你：
+
+[
+P_{SC}=
+\begin{bmatrix}
+0&0.9&0.1\
+0.9&0&0.7\
+0.1&0.7&0
+\end{bmatrix}.
+]
+
+也就是说：
+
+> A-B 有很强的已知 structural pathway，
+> A-C 的 structural evidence 很弱。
+
+假设：
+
+[
+\lambda=0.2
+]
+
+那么：
+
+[
+S'=S+0.2P_{SC}.
+]
+
+A→B：
+
+[
+0.7+0.2\times0.9=0.88
+]
+
+A→C：
+
+[
+0.8+0.2\times0.1=0.82.
+]
+
+于是模型会稍微更倾向于：
+
+[
+A\rightarrow B.
+]
+
+但注意：
+
+如果 fMRI 强烈认为：
+
+[
+A\rightarrow C=2.0
+]
+
+那么：
+
+[
+2.0+0.02
+]
+
+依然远远大于：
+
+[
+0.7+0.18.
+]
+
+所以 **DTI 没有决定答案。**
+
+它只是说：
+
+> “两条边的数据证据差不多的时候，请优先考虑有 structural support 的那条。”
+
+这就是 **soft prior**。
+
+---
+
+# 5. 为什么我更推荐“加在 softmax 前”，而不是最后直接混 EC
+
+你可能会想到更简单的方法：
+
+[
+A_{new}
+=======
+
+(1-\lambda)A_{FSTA}
++
+\lambda P_{SC}.
+]
+
+代码确实更简单。
+
+但是我不推荐它当最终方法。
+
+因为这相当于：
+
+> FSTA 已经算完 EC 后，再强行往结果里掺一点 DTI。
+
+Reviewer 很容易问：
+
+> 这到底是模型学习出来的，还是你最后人工把 structural connectome 加进去的？
+
+而我的方案：
+
+[
+QK^T+\lambda P_{SC}
+\rightarrow Softmax
+]
+
+不一样。
+
+DTI 只是**影响 attention 的信息选择过程**，最终 EC 仍然由整个 FSTA 网络通过 fMRI 数据学习。
+
+所以从论文角度更加自然：
+
+[
+\boxed{
+Structural\ Connectivity
+\rightarrow Attention\ Bias
+}
+]
+
+而不是：
+
+[
+EC+SC=\text{最终答案}.
+]
+
+---
+
+# 6. 对官方代码来说，要改的位置其实非常少
+
+官方的调用链是：
+
+```text
+FSTA.py
+   ↓
+STMultiHeadAtt.py
+   ↓
+MultiHeadAtt.py
+   ↓
+Modules.py
+   ↓
+ScaledDotProductAttention
+```
+
+`MultiHeadAtt.py` 负责产生 Q/K/V，官方代码把输入变成 `[B, l1, head, l2, d]` 后传给 scaled-dot-product attention。([GitHub][5])
+
+所以真正改变数学模型的地方只有 **Modules.py 一处**。
+
+其他文件只是多传一个参数。
+
+---
+
+# 7. Modules.py：真正核心只增加这一行逻辑
+
+你现在原理上是：
+
+```python
+score = q @ k.transpose(-1, -2)
+score = softmax(score)
+```
+
+改成：
+
+```python
+score = q @ k.transpose(-1, -2)
+
+if prior is not None:
+    score = score + prior_weight * prior
+
+score = softmax(score)
+```
+
+就这么多。
+
+因为 spatial attention 时：
+
+[
+score
+]
+
+大概是：
+
+[
+[B,T,H,N,N]
+]
+
+而你的：
+
+[
+P_{SC}
+]
+
+是：
+
+[
+[N,N].
+]
+
+PyTorch broadcast 成：
+
+[
+[1,1,1,N,N]
+]
+
+就可以让**所有 subject、所有 timepoint、所有 attention head 共用一个 population structural prior**。
+
+这正好符合“population prior”的定义。
+
+---
+
+# 8. 但是一定要注意：Temporal Attention 不能加这个 prior
+
+这是修改官方代码时最重要的一点。
+
+因为 FSTA 里面 temporal 和 spatial 调用的是同一个：
+
+```python
+self.slf_attn
+```
+
+官方先做：
+
+[
+[B,N,T,d]
+]
+
+的 temporal attention，然后又做：
+
+[
+[B,T,N,d]
+]
+
+的 spatial attention。([GitHub][1])
+
+所以你千万不要直接把 SC prior 永久塞进 `self.slf_attn`。
+
+否则 temporal attention 会变成：
+
+[
+T\times T
+]
+
+attention，
+
+而你的 prior 是：
+
+[
+N\times N
+]
+
+根本不是同一个东西。
+
+---
+
+# 9. 因此 FSTA.py 应该这样改
+
+原来的 temporal：
+
+```python
+tep_output, _ = self.slf_attn(tep_input, mask)
+```
+
+保持：
+
+```python
+tep_output, _ = self.slf_attn(
+    tep_input,
+    mask,
+    prior=None
+)
+```
+
+也就是：
+
+[
+\boxed{\text{Temporal Attention完全不动}}
+]
+
+然后只有 spatial：
+
+```python
+_, spa_attn = self.slf_attn(
+    X_spa,
+    mask,
+    prior=self.sc_prior,
+    prior_weight=self.prior_weight
+)
+```
+
+于是：
+
+### Temporal
+
+[
+A_T
+===
+
+softmax(Q_TK_T^\top)
+]
+
+### Spatial
+
+[
+\boxed{
+A_S
+===
+
+softmax
+(
+Q_SK_S^\top
++
+\lambda P_{SC}
+)
+}
+]
+
+这就是整个新模型。
+
+---
+
+# 10. Population prior 最好不要设成 trainable matrix
+
+这也是我建议你保持模型干净的地方。
+
+不要：
+
+[
+P_{SC}
+]
+
+本身也被训练。
+
+否则训练到最后：
+
+> “这还是 structural prior 吗？”
+
+都不好说。
+
+最好在 FSTA model 里：
+
+```python
+self.register_buffer("sc_prior", sc_prior)
+```
+
+这样：
+
+* 它会跟模型一起移动到 GPU；
+* 会保存在模型状态里；
+* **但不会被 optimizer 更新。**
+
+即：
+
+[
+\boxed{P_{SC}=\text{fixed external knowledge}}
+]
+
+而：
+
+[
+Q,K,V
+]
+
+继续正常学习。
+
+这个概念非常干净。
+
+---
+
+# 11. 那 (\lambda) 怎么办？
+
+第一版我建议最简单：
+
+[
+\lambda\in{0,0.05,0.1,0.2,0.5}
+]
+
+validation 选。
+
+其中：
+
+[
+\lambda=0
+]
+
+恰好就是：
+
+[
+\boxed{\text{Original FSTA}}
+]
+
+这特别方便做 ablation。
+
+比如最后：
+
+|    λ |       F1 |    SHD |
+| ---: | -------: | -----: |
+|    0 |     0.72 |     21 |
+| 0.05 |     0.74 |     19 |
+|  0.1 | **0.78** | **15** |
+|  0.2 |     0.76 |     17 |
+|  0.5 |     0.69 |     24 |
+
+这张表本身就能说明一个很好的问题：
+
+> structural prior 有帮助，但过强的 structural constraint 会压制 fMRI data-driven evidence。
+
+这个实验甚至很有 neuroscience 意义。
+
+暂时**不用**上 learnable (\lambda)。
+
+如果第一版有效，再把固定 (\lambda) 改成一个 learnable gate 都来得及。
+
+---
+
+# 12. Population SC matrix 怎么预处理
+
+假设原始 population DTI connectome：
+
+[
+C\in\mathbb R^{N\times N}.
+]
+
+它可能是 streamline count，所以可能出现：
+
+[
+0,\ 3,\ 17,\ 283,\ 5000
+]
+
+这种极度偏斜的数据。
+
+不能直接：
+
+[
+QK^T+\lambda C.
+]
+
+否则 attention 完全被 DTI 支配。
+
+我建议：
+
+### 第一步：对数压缩
+
+[
+C'*{ij}=\log(1+C*{ij})
+]
+
+### 第二步：0–1 normalization
+
+[
+P_{ij}
+======
+
+\frac{C'*{ij}-C'*{\min}}
+{C'*{\max}-C'*{\min}}
+]
+
+### 第三步
+
+[
+P_{ii}=0.
+]
+
+最终：
+
+[
+P_{SC}\in[0,1]^{N\times N}.
+]
+
+如果 population DTI 本身有左右数值小差异，可以：
+
+[
+P_{SC}
+======
+
+\frac{P+P^T}{2}
+]
+
+做成 symmetric。
+
+因为 DTI structural connectivity 本来就不应该承担 EC direction 的任务。
+
+---
+
+# 13. 方向依然由 FSTA 学，不由 DTI 决定
+
+这个设计还有一个非常漂亮的性质。
+
+因为：
+
+[
+P_{ij}=P_{ji}
+]
+
+但：
+
+[
+Q_iK_j^T
+\neq
+Q_jK_i^T
+]
+
+完全可能。
+
+所以：
+
+[
+A_{i\rightarrow j}
+\neq
+A_{j\rightarrow i}.
+]
+
+例如 DTI：
+
+[
+P_{AB}=P_{BA}=0.9.
+]
+
+只是说：
+
+> A、B 有 structural pathway。
+
+而 FSTA 最终仍然可能得到：
+
+[
+A\rightarrow B=0.85
+]
+
+[
+B\rightarrow A=0.31.
+]
+
+所以你的论文逻辑可以非常清楚：
+
+> **Structural connectivity provides undirected anatomical plausibility, while FSTA's fMRI-driven spatiotemporal modeling determines directed effective connectivity.**
+
+我觉得这句话甚至可以作为你方法的核心思想。
+
+---
+
+# 14. 原来的 loss 我建议第一版完全别改
+
+FSTA 官方训练代码现在是：
+
+[
+L
+=
+
+L_{\text{prediction}}
++
+\alpha_{sp}L_{sp}.
+]
+
+其中 prediction 是 output 与原始 fMRI 的 MSE，同时对 adjacency 加了一个稀疏项。([GitHub][6]) 训练脚本也确实直接把输入数据作为 label，并把模型返回的 `adj` 送入这个 loss。([GitHub][2])
+
+**你第一版不要碰它。**
+
+这样你的实验才特别漂亮：
+
+Original FSTA：
+
+[
+L_{FSTA}
+]
+
+SCG-FSTA：
+
+[
+\boxed{同一个L_{FSTA}}
+]
+
+唯一差异：
+
+[
+SpatialAttention
+\rightarrow
+SC\text{-}GuidedSpatialAttention.
+]
+
+这样如果效果提高，你能非常有底气说：
+
+> Improvement comes from structural-prior-guided spatial dependency learning rather than a redesigned training objective.
+
+---
+
+# 15. 所以实际上你真正新增的东西只有一个
+
+我给你压缩到极致：
+
+### 原 FSTA
+
+[
+S_{ij}
+======
+
+\frac{Q_iK_j^\top}{\sqrt{d}}
+]
+
+### 你的 FSTA
+
+[
+\boxed{
+S_{ij}
+======
+
+\frac{Q_iK_j^\top}{\sqrt{d}}
++
+\lambda P_{ij}^{SC}
+}
+]
+
+其他：
+
+* Fourier Attention：**不改**
+* Temporal Attention：**不改**
+* Multi-head：**不改**
+* Spatiotemporal fusion：**不改**
+* Feed Forward：**不改**
+* Reconstruction：**不改**
+* Loss：**不改**
+* EC extraction：**不改**
+* Threshold：**不改**
+
+我觉得这就是你现在最应该做的第一版。
+
+---
+
+## 16. 新模型架构图可以直接这么画
+
+```text
+                    Population Structural Connectome
+                              P_SC
+                               │
+                               │ soft prior
+                               ▼
+fMRI ──► Embedding ──► Fourier Attention ──► Spatiotemporal Attention
+                                              │
+                            ┌─────────────────┴──────────────────┐
+                            │                                    │
+                    Temporal Attention                  SC-Guided Spatial Attention
+                       unchanged                       QKᵀ/√d + λP_SC
+                            │                                    │
+                            └─────────────────┬──────────────────┘
+                                              ▼
+                                   Spatiotemporal Fusion
+                                              │
+                                              ▼
+                                         Predicted fMRI
+                                              │
+                                              └────► Directed EC
+```
+
+真正新加的只有这个：
+
+[
+\boxed{
+QK^T/\sqrt d
+\rightarrow
+QK^T/\sqrt d+\lambda P_{SC}
+}
+]
+
+这就够干净了。
+
+---
+
+## 17. 不过在真正写代码前，有一件事比代码还重要
+
+你的 **population prior 必须和 FSTA 输入的 ROI 完全一一对应**。
+
+假设 fMRI：
+
+[
+X\in R^{T\times90}
+]
+
+顺序是：
+
+```text
+Precentral_L
+Precentral_R
+Frontal_Sup_L
+...
+```
+
+那么：
+
+[
+P_{SC}\in R^{90\times90}
+]
+
+的第 1、2、3 行列必须也是**完全相同的 ROI 顺序**。
+
+如果：
+
+* fMRI 用 AAL90；
+* population DTI 用 Schaefer200；
+
+就不能直接塞进去。
+
+这个比网络怎么写更重要。
+
+---
+
+我建议你现在就把这个模型定下来，先不要继续扩展。如果是我来做，第一阶段就只做 **Original FSTA vs SCG-FSTA**，甚至论文名字都可以暂时叫 **Structural Connectivity-Guided Fourier Spatiotemporal Attention for Effective Connectivity Estimation**。
+
+而且基于官方代码，我已经能比较明确地告诉你具体该改 **`Modules.py → MultiHeadAtt.py → STMultiHeadAtt.py → FSTA.py` 哪几个函数和参数**。如果你愿意，我下一条可以直接按照官方 GitHub 的代码结构，给你写成**“文件 A 哪行附近改什么、文件 B 加什么”的最小修改版**，基本可以照着改。 [FSTA 官方 GitHub](https://github.com/XiongWenXww/FSTA?utm_source=chatgpt.com)
+
+[1]: https://github.com/XiongWenXww/FSTA/blob/main/model/FSTA.py "FSTA/model/FSTA.py at main · XiongWenXww/FSTA · GitHub"
+[2]: https://github.com/XiongWenXww/FSTA/blob/main/train_FSTA_real_multi.py "FSTA/train_FSTA_real_multi.py at main · XiongWenXww/FSTA · GitHub"
+[3]: https://github.com/XiongWenXww/FSTA "GitHub - XiongWenXww/FSTA · GitHub"
+[4]: https://github.com/XiongWenXww/FSTA/blob/main/model/Modules.py "FSTA/model/Modules.py at main · XiongWenXww/FSTA · GitHub"
+[5]: https://github.com/XiongWenXww/FSTA/blob/main/model/MultiHeadAtt.py "FSTA/model/MultiHeadAtt.py at main · XiongWenXww/FSTA · GitHub"
+[6]: https://github.com/XiongWenXww/FSTA/blob/main/utils/utils.py "FSTA/utils/utils.py at main · XiongWenXww/FSTA · GitHub"

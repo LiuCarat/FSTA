@@ -120,7 +120,7 @@ run_subject() {
   local label="${subject#sub-}"
   local site="$(basename "$site_root")"
   local site_id="${site#ABIDEII-}"
-  local metadata_root="$(dirname "$RAW_ROOT")/$site"
+  local metadata_root="$site_root"
   local bold_count
   local t1_count
   bold_count=$(find "$subject_root" -type f -name '*_bold.nii.gz' | wc -l)
@@ -131,8 +131,12 @@ run_subject() {
   fi
 
   local final_bold
+  local final_confounds
+  local final_brain_mask
   final_bold=$(find "$OUTPUT_ROOT/$subject" -type f -name "*space-${SPACE}_desc-preproc_bold.nii.gz" 2>/dev/null | head -1 || true)
-  if [[ -n "$final_bold" ]]; then
+  final_confounds=$(find "$OUTPUT_ROOT/$subject" -type f -name "*desc-confounds_timeseries.tsv" 2>/dev/null | head -1 || true)
+  final_brain_mask=$(find "$OUTPUT_ROOT/$subject" -type f -name "*space-${SPACE}_desc-brain_mask.nii.gz" 2>/dev/null | head -1 || true)
+  if [[ -n "$final_bold" && -n "$final_confounds" && -n "$final_brain_mask" ]]; then
     PROCESSED_COUNT=$((PROCESSED_COUNT + 1))
     return 0
   fi
@@ -266,7 +270,7 @@ while [[ "$next_index" -lt "$ELIGIBLE_TOTAL" || "${#ACTIVE_PIDS[@]}" -gt 0 ]]; d
     completed_count=$((completed_count + 1))
     if [[ "$worker_status" -ne 0 ]]; then
       failed_count=$((failed_count + 1))
-      echo "[$(ACTIVE_LABELS[$worker_pid])] failed with status $worker_status" >&2
+      echo "[${ACTIVE_LABELS[$worker_pid]}] failed with status $worker_status" >&2
     fi
     unset 'ACTIVE_LABELS[$worker_pid]'
   done

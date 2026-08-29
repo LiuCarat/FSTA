@@ -775,12 +775,12 @@ def download_subject(row, out_dir, cache_root, refresh_listing=False, progress_p
     except Exception as error:
         return subject, False, f"S3 listing 失败: {error}"
 
-    files = [item for item in objects if wanted_file(item["key"])]
-    if not files:
-        return subject, False, "未找到可用 T1/BOLD"
+    selected_files, selection_message = select_subject_files(objects)
+    if not selected_files:
+        return subject, False, selection_message
 
     subject_ok = True
-    for item in files:
+    for item in selected_files:
         key = item["key"]
         relative = key.replace(PROJECT_PREFIX + "/", "", 1)
         save_path = os.path.join(out_dir, "raw", relative)
@@ -793,7 +793,7 @@ def download_subject(row, out_dir, cache_root, refresh_listing=False, progress_p
             progress_label=f"{site}/{subject}",
         ):
             subject_ok = False
-    return subject, subject_ok, f"找到 {len(files)} 个文件"
+    return subject, subject_ok, selection_message
 
 
 def download_subject_with_slot(row, out_dir, cache_root, refresh_listing, slots):
@@ -804,6 +804,56 @@ def download_subject_with_slot(row, out_dir, cache_root, refresh_listing, slots)
         )
     finally:
         slots.put(position)
+
+
+def select_subject_files(objects):
+    """Select one usable T1w/BOLD pair and its relevant sidecars."""
+    image_objects = [item for item in objects if item["key"].endswith((
+        "_T1w.nii.gz", "_bold.nii.gz"
+    ))]
+    t1_files = sorted(
+        [
+            item for item in image_objects
+            if item["key"].endswith("_T1w.nii.gz")
+        ],
+        key=lambda item: item["key"],
+    )
+    bold_files = sorted(
+        [
+            item for item in image_objects
+            if "task-rest" in os.path.basename(item["key"])
+            and item["key"].endswith("_bold.nii.gz")
+        ],
+        key=lambda item: item["key"],
+    )
+    if not t1_files or not bold_files:
+        return [], f"未找到完整输入: T1w={len(t1_files)}, BOLD={len(bold_files)}"
+
+    def selection_key(item):
+        key = item["key"]
+        return (0 if "/ses-1/" in key else 1,
+                0 if "_run-1_" in os.path.basename(key) else 1,
+                key)
+
+    selected_t1 = min(t1_files, key=selection_key)
+    selected_bold = min(bold_files, key=selection_key)
+    selected_keys = {selected_t1["key"], selected_bold["key"]}
+
+    # Download only the selected image sidecars. Site-level inheritance JSON
+    # remains handled separately by download_site_level_sidecars().
+    for item in objects:
+        key = item["key"]
+        if key in selected_keys:
+            sidecar = key[:-7] + ".json"  # remove .nii.gz
+            if any(candidate["key"] == sidecar for candidate in objects):
+                selected_keys.add(sidecar)
+
+    selected = [item for item in objects if item["key"] in selected_keys]
+    message = (
+        f"选择 1 组输入: T1w={os.path.basename(selected_t1['key'])}, "
+        f"BOLD={os.path.basename(selected_bold['key'])}"
+    )
+    return selected, message
 
 
 # ============================================================
@@ -909,6 +959,7 @@ def main():
         "site": args.site,
         "max_subjects": args.max_subjects,
         "sites": sites,
+        "selection_mode": "phenotype_only_v3",
     }
 
 
@@ -1115,6 +1166,13 @@ def main():
         print("\n--phenotype-only：已完成表型盘点，不下载影像文件。")
         return
 
+    subject_df.to_csv(subject_list_path, index=False)
+    subject_df[["SITE_ID", "subject"]].to_csv(
+        os.path.join(phenotype_dir, "phenotype_download_subjects.csv"),
+        index=False,
+    )
+    print(f"最终表型下载名单: {len(subject_df)} 条")
+
     print(
         f"\n准备下载被试数: {len(subject_df)}"
     )
@@ -1188,10 +1246,11 @@ def main():
                 objects = cached_s3_objects(
                     prefix, cache_root, refresh=args.refresh_listings
                 )
-                files = [item["key"] for item in objects if wanted_file(item["key"])]
+                files, selection_message = select_subject_files(objects)
                 print(f"\n[{index + 1}/{total}] {site} / {subject}: {len(files)} files")
-                for key in files:
-                    print(f"    {key}")
+                print(f"    {selection_message}")
+                for item in files:
+                    print(f"    {item['key']}")
             except Exception as error:
                 print(f"\n[{index + 1}/{total}] {site} / {subject}: {error}")
                 failed += 1

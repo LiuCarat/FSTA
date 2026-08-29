@@ -53,7 +53,7 @@ class DirectedBrainNetCNN(nn.Module):
         e2n_channels=16,
         n2g_channels=16,
         fc_channels=8,
-        dropout=0.5,
+        dropout=0.3,
     ):
         super().__init__()
         first_e2e, second_e2e = e2e_channels

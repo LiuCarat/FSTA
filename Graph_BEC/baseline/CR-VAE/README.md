@@ -1,6 +1,5 @@
 # CR-VAE
 
-`CRVAE_demo.py` is the original Henon-data demo.
 `run_abide_classifier.py` evaluates whether subject-level CR-VAE causal
 matrices can distinguish ASD from TC. It does not modify the Graph-BEC main
 program.

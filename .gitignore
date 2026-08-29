@@ -17,8 +17,6 @@ venv/
 
 # Generated experiment outputs and model checkpoints
 out/
-downstream_abide_i/outputs/
-downstream_adhd200/outputs/
 Graph_BEC/outputs/
 *.pt
 *.pth
@@ -49,12 +47,12 @@ dataset/ABIDE-II/*
 dataset/ADHD200/*
 !dataset/ADHD200/*.py
 !dataset/ADHD200/README.md
-
-# ABIDE-II downloader output
-ABIDEII/
+dataset/structural_connectivity_matrices
 
 # Download and pipeline temporary files
 *.download
 *.tmp
 *.log
 .download_cache/
+
+Graph_BEC/baseline

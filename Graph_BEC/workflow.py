@@ -165,7 +165,12 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
             "train": train_qsr, "val": val_qsr, "test": test_qsr,
         }
     representations = {
-        name: all_representations[name] for name in representations_to_run
+        "original": all_representations["original"],
+        **{
+            name: all_representations[name]
+            for name in representations_to_run
+            if name != "original"
+        },
     }
     labels = {
         "train": data["labels"][train_index],
