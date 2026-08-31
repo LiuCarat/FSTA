@@ -39,13 +39,16 @@ PROFILE = ExperimentProfile(
         "refiner_epochs": 80, "refiner_lr": 1e-2, "gate_max": 0.5,
         "gate_l1_weight": 1e-3, "anchor_weight": 1.0,
         "variance_weight": 1.0, "variance_retention": 0.85,
-        "qsr_epochs": 80, "qsr_lr": 3e-3, "qsr_hidden_channels": 8,
-        "qsr_eta": 0.15, "qsr_r_max": 0.03, "qsr_corruption_scale": 0.5,
-        "qsr_gate_max": 0.5, "qsr_gate_weight": 1e-3,
-        "qsr_variance_weight": 0.1, "qsr_variance_retention": 0.85,
-        "qsr_basis_ridge": 1e-3, "qsr_qc_columns": list(QC_COLUMNS),
+
+        "qsr_epochs": 80, "qsr_lr": 0.01, "qsr_hidden_channels": 8,
+        "qsr_eta": 0.2, "qsr_r_max": 0.05, "qsr_corruption_scale": 0.5,
+        "qsr_gate_max": 0.3, "qsr_gate_weight": 1e-4,
+        "qsr_variance_weight": 0.15, "qsr_variance_retention": 0.85,
+        "qsr_basis_ridge": 1e-2, "qsr_qc_columns": list(QC_COLUMNS),
+
         "classifier_epochs": 60, "classifier_patience": 12,
         "classifier_lr": 1e-3, "classifier_repeats": 1,
+
         "patient_label": 1, "control_label": 0,
         "window_length": 50, "stride": 25, "epochs": 91, # 91
         "fsta_checkpoint": "final", "loss_mode": "entropy", "loss_alpha": 0.03, # 0.03

@@ -120,10 +120,31 @@ def load_phenotype(path: Path) -> dict[str, dict[str, str]]:
 
 def write_phenotype(path: Path, rows: dict[str, dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = []
+    for row in rows.values():
+        for fieldname in row:
+            if fieldname not in fieldnames:
+                fieldnames.append(fieldname)
+    for fieldname in PHENOTYPE_COLUMNS:
+        if fieldname not in fieldnames:
+            fieldnames.append(fieldname)
     with path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=PHENOTYPE_COLUMNS, extrasaction="ignore")
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows.values())
+
+
+def link_site_output(output_path: Path, site_root: Path, site: str) -> Path | None:
+    if not site or site == "unknown":
+        return None
+    site_path = site_root / site / "cpac" / "filt_noglobal" / output_path.name
+    site_path.parent.mkdir(parents=True, exist_ok=True)
+    if site_path.is_symlink() and site_path.resolve() == output_path.resolve():
+        return site_path
+    if site_path.exists() or site_path.is_symlink():
+        return site_path
+    site_path.symlink_to(output_path.resolve())
+    return site_path
 
 
 def extract_one(bold_path, atlas_path, output_path, tr, args, manifest, nib, resample_to_img, NiftiLabelsMasker, clean):
@@ -142,15 +163,25 @@ def extract_one(bold_path, atlas_path, output_path, tr, args, manifest, nib, res
     confounds = select_confounds(confound_frame, args.acompcor_components)
     qc = qc_values(confound_frame)
 
-    atlas = resample_to_img(nib.load(str(atlas_path)), image, interpolation="nearest")
+    atlas = nib.load(str(atlas_path))
+    atlas_data = np.asarray(atlas.get_fdata())
+    source_labels = np.unique(atlas_data[atlas_data > 0])
+    if len(source_labels) != 116:
+        raise ValueError(
+            f"Atlas has {len(source_labels)} positive labels before resampling; expected 116"
+        )
+    labels = np.zeros(atlas_data.shape, dtype=np.int16)
+    positive = atlas_data > 0
+    labels[positive] = np.searchsorted(source_labels, atlas_data[positive]) + 1
+    atlas = nib.Nifti1Image(labels, atlas.affine, atlas.header)
+    atlas = resample_to_img(atlas, image, interpolation="nearest")
     labels = np.asarray(atlas.get_fdata(), dtype=np.int16)
-    labels[(labels < 1) | (labels > 116)] = 0
     label_count = len(np.unique(labels[labels > 0]))
     if label_count != 116:
         raise ValueError(f"Atlas has {label_count} labels after resampling; expected 116")
     atlas = nib.Nifti1Image(labels, atlas.affine, atlas.header)
 
-    masker = NiftiLabelsMasker(labels_img=atlas, standardize=False, detrend=False, strategy="mean")
+    masker = NiftiLabelsMasker(labels_img=atlas, standardize=None, detrend=False, strategy="mean")
     values = masker.fit_transform(image)
     if values.shape[1] != 116:
         raise ValueError(f"Expected 116 extracted AAL labels, got {values.shape}")
@@ -159,7 +190,7 @@ def extract_one(bold_path, atlas_path, output_path, tr, args, manifest, nib, res
         confounds=confounds,
         t_r=tr,
         detrend=True,
-        standardize=False,
+        standardize=None,
         low_pass=args.high_cutoff,
         high_pass=args.low_cutoff,
     )
@@ -177,8 +208,20 @@ def main():
     parser.add_argument("--fmriprep-root", type=Path, default=Path("ABIDEII/derivatives/fmriprep"))
     parser.add_argument("--atlas", type=Path, required=True, help="AAL116 atlas NIfTI")
     parser.add_argument("--phenotype", type=Path, default=Path("dataset/ABIDE-II/ABIDEII_phenotype_graphbec.csv"))
+    parser.add_argument(
+        "--phenotype-output",
+        type=Path,
+        default=None,
+        help="Optionally write the QC-enriched phenotype here",
+    )
     parser.add_argument("--manifest", type=Path, default=Path("ABIDEII/bids/abideii_bids_manifest.tsv"))
     parser.add_argument("--output-root", type=Path, default=Path("dataset/ABIDE-II/cpac/filt_noglobal"))
+    parser.add_argument(
+        "--site-output-root",
+        type=Path,
+        default=Path("dataset/ABIDE-II/sites"),
+        help="Create site/<SITE_ID>/cpac/filt_noglobal symlinks here; pass an empty value to disable",
+    )
     parser.add_argument("--space", default="MNI152NLin6Asym")
     parser.add_argument("--low-cutoff", type=float, default=0.01)
     parser.add_argument("--high-cutoff", type=float, default=0.1)
@@ -215,8 +258,11 @@ def main():
     print(f"Subjects: {len(by_subject)}")
     for index, (subject, bold_path) in enumerate(sorted(by_subject.items()), 1):
         output_path = args.output_root / f"{subject}_rois_aal.1D"
+        phenotype_row = rows.get(subject)
+        site = manifest.get(subject) or (phenotype_row or {}).get("SITE_ID", "unknown")
         if output_path.exists() and not args.overwrite:
             print(f"[{index}/{len(by_subject)}] exists {output_path}")
+            link_site_output(output_path, args.site_output_root, site)
             continue
         try:
             shape = None
@@ -229,12 +275,15 @@ def main():
                 print(f"[{index}/{len(by_subject)}] WARNING phenotype missing: {subject}")
                 continue
             row["SITE_ID"] = site if site != "unknown" else row.get("SITE_ID", "")
+            site = row["SITE_ID"].strip()
             row.update({key: f"{value:.8g}" for key, value in qc.items()})
+            link_site_output(output_path, args.site_output_root, site)
             print(f"[{index}/{len(by_subject)}] {subject}: {shape[0]}x{shape[1]}")
         except Exception as error:
             print(f"[{index}/{len(by_subject)}] ERROR {subject}: {type(error).__name__}: {error}")
-    write_phenotype(args.phenotype, rows)
-    print(f"Saved phenotype/QC: {args.phenotype.resolve()}")
+    if args.phenotype_output is not None:
+        write_phenotype(args.phenotype_output, rows)
+        print(f"Saved phenotype/QC: {args.phenotype_output.resolve()}")
     print(f"Saved ROI files: {args.output_root.resolve()}")
 
 

@@ -75,6 +75,25 @@ Each `.1D` file is `[T, 90]`. Graph-BEC accepts both these AAL90 files and legac
 ABIDE-I AAL116 files. The old `prepare_bids_layout.py` and `prepare_phenotype.py`
 scripts were merged into `prepare_abide2.py`.
 
+To also create a site-separated view without copying the ROI files, use the
+`--site-output-root` option:
+
+```bash
+python dataset/ABIDE-II/extract_aal90.py \
+  --fmriprep-root dataset/ABIDE-II/fmriprep \
+  --atlas dataset/ABIDE-II/atlas/AAL116_MNI152NLin6Asym.nii.gz \
+  --phenotype dataset/ABIDE-II/Phenotypic_Processing.csv \
+  --output-root dataset/ABIDE-II/cpac/filt_noglobal \
+  --site-output-root dataset/ABIDE-II/sites
+```
+
+This preserves the flat `cpac/filt_noglobal` output and creates symlinks such as
+`sites/BNI_1/cpac/filt_noglobal/sub-29006_rois_aal.1D`. The site is read from the
+manifest first and falls back to `SITE_ID` in the phenotype table. If no manifest
+is available, omit `--manifest`; the phenotype table is sufficient as long as it
+has `FILE_ID` and `SITE_ID` columns. If QC metrics are also needed, add
+`--phenotype-output dataset/ABIDE-II/ABIDEII_phenotype_graphbec_qc.csv`.
+
 ## 4. Download existing ABIDE-fMRIPrep derivatives without raw MRI
 
 `download_abide_fmriprep.py` uses DataLad/git-annex and intentionally retrieves only

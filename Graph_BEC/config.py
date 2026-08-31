@@ -68,6 +68,7 @@ def parse_args(description=None):
     parser.add_argument("--categorical-penalty", type=float)
     parser.add_argument("--continuous-weights", type=float, nargs=3 if selected.dataset == "adhd200" else 2)
     parser.add_argument("--permute-phenotype", action="store_true")
+    
     parser.add_argument("--refiner-epochs", type=int)
     parser.add_argument("--refiner-lr", type=float)
     parser.add_argument("--gate-max", type=float)
@@ -75,6 +76,7 @@ def parse_args(description=None):
     parser.add_argument("--anchor-weight", type=float)
     parser.add_argument("--variance-weight", type=float)
     parser.add_argument("--variance-retention", type=float)
+
     parser.add_argument("--qsr-qc-columns", nargs="+")
     parser.add_argument("--qsr-epochs", type=int)
     parser.add_argument("--qsr-lr", type=float)
@@ -87,6 +89,7 @@ def parse_args(description=None):
     parser.add_argument("--qsr-variance-weight", type=float)
     parser.add_argument("--qsr-variance-retention", type=float)
     parser.add_argument("--qsr-basis-ridge", type=float)
+
     parser.add_argument("--classifier-epochs", type=int)
     parser.add_argument("--classifier-patience", type=int)
     parser.add_argument("--classifier-lr", type=float)

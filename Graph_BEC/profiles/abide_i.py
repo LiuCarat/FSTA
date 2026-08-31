@@ -38,12 +38,14 @@ PROFILE = ExperimentProfile(
         "refiner_epochs": 80, "refiner_lr": 1e-2, "gate_max": 0.5,
         "gate_l1_weight": 1e-3, "anchor_weight": 1.0,
         "variance_weight": 1.0, "variance_retention": 0.85,
+
         "qsr_epochs": 80, "qsr_lr": 3e-3, "qsr_hidden_channels": 8,
         "qsr_eta": 0.15, "qsr_r_max": 0.03, "qsr_corruption_scale": 0.5,
         "qsr_gate_max": 0.5, "qsr_gate_weight": 1e-3,
         "qsr_variance_weight": 0.1, "qsr_variance_retention": 0.85,
         "qsr_basis_ridge": 1e-3,
         "qsr_qc_columns": ["func_mean_fd", "func_dvars", "func_quality"],
+        
         "classifier_epochs": 100, "classifier_patience": 20,
         "classifier_lr": 1e-3, "classifier_repeats": 1,
         "patient_label": 1, "control_label": 0,

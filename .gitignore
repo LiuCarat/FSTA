@@ -54,5 +54,3 @@ dataset/structural_connectivity_matrices
 *.tmp
 *.log
 .download_cache/
-
-Graph_BEC/baseline
