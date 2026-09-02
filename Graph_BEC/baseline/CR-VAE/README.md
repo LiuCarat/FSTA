@@ -78,3 +78,57 @@ python Graph_BEC/baseline/CR-VAE/run_abide_classifier.py \
 Use `--regenerate-bec` to discard the logical checkpoint and regenerate BECs
 from subject 1. Classification outputs are saved as `metrics.csv`,
 `metrics.json`, and `summary.json` in the CR-VAE output directory.
+
+## ABIDE-II
+
+ABIDE-II is supported through the shared loader. Its default input layout is
+`dataset/ABIDE-II/cpac/filt_noglobal/*_rois_aal.1D`, with labels matched from
+the ABIDE-II phenotype records. Use a dataset-specific archive and output
+directory:
+
+```bash
+python Graph_BEC/baseline/CR-VAE/run_abide_classifier.py \
+  --dataset abide_ii \
+  --data-root dataset/ABIDE-II \
+  --gpu-id auto \
+  --crvae-context 20 \
+  --crvae-hidden 64 \
+  --crvae-max-iter 500 \
+  --crvae-batch-size 256 \
+  --crvae-lr 5e-2 \
+  --crvae-lambda 0.1 \
+  --n-splits 10 \
+  --classifier-epochs 100 \
+  --classifier-patience 20 \
+  --output-dir Graph_BEC/baseline/CR-VAE/outputs/abide_ii \
+  --bec-path Graph_BEC/baseline/CR-VAE/outputs/abide_ii/subject_bec_abide_ii.npz \
+  --regenerate-bec
+```
+
+CR-VAE generation does not use neural-network `epoch`; `--crvae-max-iter`
+controls the number of Phase-I optimization iterations for each subject. For
+ABIDE-II, use `100` for a smoke test, `300` as a fast pilot, and `500` as the
+recommended starting point for the full BEC archive. Compare `300`, `500`, and
+`1000` on the same subjects before selecting the final value. Because the
+runner fits one model per subject, runtime grows approximately linearly with
+`--crvae-max-iter`.
+
+The classifier's `--classifier-epochs` is a separate parameter and only
+controls the downstream 10-fold evaluation; `100` with patience `20` remains a
+reasonable default.
+
+Quick smoke test:
+
+```bash
+python Graph_BEC/baseline/CR-VAE/run_abide_classifier.py \
+  --dataset abide_ii \
+  --data-root dataset/ABIDE-II \
+  --gpu-id auto \
+  --max-subjects 2 \
+  --crvae-max-iter 10 \
+  --crvae-batch-size 64 \
+  --generation-only \
+  --output-dir Graph_BEC/baseline/CR-VAE/outputs/smoke_abide_ii \
+  --bec-path Graph_BEC/baseline/CR-VAE/outputs/smoke_abide_ii/subject_bec_abide_ii.npz \
+  --regenerate-bec
+```

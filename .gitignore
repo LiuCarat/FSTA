@@ -47,7 +47,6 @@ dataset/ABIDE-II/*
 dataset/ADHD200/*
 !dataset/ADHD200/*.py
 !dataset/ADHD200/README.md
-dataset/structural_connectivity_matrices
 
 # Download and pipeline temporary files
 *.download

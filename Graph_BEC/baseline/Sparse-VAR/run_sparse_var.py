@@ -31,13 +31,13 @@ from sparse_var import SparseVARConfig, generate_sparse_var_bec
 
 def parse_args():
     selector = argparse.ArgumentParser(add_help=False)
-    selector.add_argument("--dataset", choices=["abide", "adhd200"], default="abide")
+    selector.add_argument("--dataset", choices=["abide", "abide_ii", "adhd200"], default="abide")
     selected, _ = selector.parse_known_args()
     profile = get_profile(selected.dataset)
     output_dir = Path(__file__).resolve().parent / "outputs"
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", choices=["abide", "adhd200"], default=profile.name)
+    parser.add_argument("--dataset", choices=["abide", "abide_ii", "adhd200"], default=profile.name)
     parser.add_argument("--data-root", type=Path, default=profile.data_root)
     parser.add_argument("--pipeline", default="cpac")
     parser.add_argument("--strategy", default="filt_noglobal")
@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument("--l1-ratio", type=float, default=1.0)
     parser.add_argument("--lag-decay", type=float, default=1.0)
     parser.add_argument("--threshold", type=float, default=0.0)
-    parser.add_argument("--max-iter", type=int, default=10000)
+    parser.add_argument("--max-iter", type=int, default=5000)
     parser.add_argument("--tol", type=float, default=1e-4)
     parser.add_argument("--output-dir", type=Path, default=output_dir)
     parser.add_argument("--bec-path", type=Path, default=output_dir / f"subject_sparse_var_bec_{profile.name}.npz")

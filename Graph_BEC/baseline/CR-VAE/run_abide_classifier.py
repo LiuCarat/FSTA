@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from Graph_BEC.data import load_subject_dataset
+from Graph_BEC.dataset_configs import get_profile
 from Graph_BEC.downstream import train_classifier
 from Graph_BEC.utils.folds import (
     fit_bec_scaler,
@@ -31,15 +32,20 @@ from models.cgru_error import CRVAE, train_phase1
 
 
 def parse_args():
+    selector = argparse.ArgumentParser(add_help=False)
+    selector.add_argument("--dataset", choices=["abide", "abide_ii"], default="abide")
+    selected, _ = selector.parse_known_args()
+    profile = get_profile(selected.dataset)
     output_dir = Path(__file__).parent / "outputs"
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-root", type=Path, default=ROOT / "dataset/ABIDE-I")
+    parser.add_argument("--dataset", choices=["abide", "abide_ii"], default=profile.name)
+    parser.add_argument("--data-root", type=Path, default=profile.data_root)
     parser.add_argument("--pipeline", default="cpac")
     parser.add_argument("--strategy", default="filt_noglobal")
     parser.add_argument("--derivative", default="rois_aal")
     parser.add_argument("--max-subjects", type=int, default=None)
     parser.add_argument("--output-dir", type=Path, default=output_dir)
-    parser.add_argument("--bec-path", type=Path, default=output_dir / "subject_bec.npz")
+    parser.add_argument("--bec-path", type=Path, default=output_dir / f"subject_bec_{profile.name}.npz")
     parser.add_argument("--regenerate-bec", action="store_true")
     parser.add_argument("--generation-only", action="store_true")
     parser.add_argument("--classification-only", action="store_true")
@@ -307,6 +313,9 @@ def main():
         args.derivative,
         standardize=True,
         max_subjects=args.max_subjects,
+        profile=get_profile(args.dataset),
+        patient_label=args.patient_label,
+        control_label=args.control_label,
     )
     archive = generate_subject_bec(args, dataset, device)
     print(f"subject BEC archive: {args.bec_path} shape={archive['bec'].shape}")
