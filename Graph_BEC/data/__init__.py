@@ -68,7 +68,7 @@ def load_subject_dataset(
             window_ranges.append(ranges)
         roi_count = profile.roi_count
     else:
-        records = load_abide_records(data_root, pipeline, strategy, derivative)
+        records = load_abide_records(data_root, pipeline, strategy, derivative, profile=profile)
         series_loader = lambda record: load_abide_time_series(record, standardize)
         roi_count = ROI_COUNT
         time_series = [series_loader(record) for record in records]

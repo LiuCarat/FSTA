@@ -26,7 +26,7 @@ for path in (ROOT, BASELINE_DIR):
 import NPI
 from Graph_BEC.data import load_subject_dataset
 from Graph_BEC.downstream import train_classifier
-from Graph_BEC.profiles.configuration import get_profile
+from Graph_BEC.dataset_configs import get_profile
 from Graph_BEC.utils.folds import (
     fit_bec_scaler,
     make_stratified_splits,
@@ -58,12 +58,12 @@ def parse_args():
         default=output_dir / f"subject_npi_mlp_bec_{profile.name}.npz",
     )
     parser.add_argument("--max-subjects", type=int, default=None)
-    parser.add_argument("--seed", type=int, default=profile.defaults.get("seed", 42))
-    parser.add_argument("--n-splits", type=int, default=profile.defaults.get("n_splits", 10))
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--n-splits", type=int, default=10)
     parser.add_argument(
         "--validation-size",
         type=float,
-        default=profile.defaults.get("validation_size", 0.2),
+        default=0.2,
     )
     parser.add_argument("--gpu-id", default="auto")
     parser.add_argument("--steps", type=int, default=3)
@@ -78,25 +78,25 @@ def parse_args():
     parser.add_argument(
         "--classifier-epochs",
         type=int,
-        default=profile.defaults.get("classifier_epochs", 100),
+        default=100,
     )
     parser.add_argument(
         "--classifier-patience",
         type=int,
-        default=profile.defaults.get("classifier_patience", 20),
+        default=20,
     )
     parser.add_argument(
         "--classifier-lr",
         type=float,
-        default=profile.defaults.get("classifier_lr", 1e-3),
+        default=1e-3,
     )
     parser.add_argument(
         "--classifier-repeats",
         type=int,
-        default=profile.defaults.get("classifier_repeats", 1),
+        default=1,
     )
-    parser.add_argument("--patient-label", type=int, default=profile.defaults.get("patient_label", 1), choices=[0, 1])
-    parser.add_argument("--control-label", type=int, default=profile.defaults.get("control_label", 0), choices=[0, 1])
+    parser.add_argument("--patient-label", type=int, default=1, choices=[0, 1])
+    parser.add_argument("--control-label", type=int, default=0, choices=[0, 1])
     parser.add_argument("--regenerate-bec", action="store_true")
     parser.add_argument("--generation-only", action="store_true")
     parser.add_argument("--classification-only", action="store_true")

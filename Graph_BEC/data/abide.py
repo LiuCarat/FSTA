@@ -30,9 +30,9 @@ class ABIDERecord:
     time_series_path: Path
 
 
-def load_abide_records(data_root, pipeline="cpac", strategy="filt_noglobal", derivative="rois_aal"):
+def load_abide_records(data_root, pipeline="cpac", strategy="filt_noglobal", derivative="rois_aal", profile=None):
     data_root = Path(data_root)
-    phenotype_candidates = (
+    phenotype_candidates = ((Path(profile.phenotype_path),) if profile is not None else ()) + (
         data_root / "ABIDEII_phenotype_graphbec.csv",
         data_root / "Phenotypic_V1_0b_preprocessed1.csv",
         data_root / "Phenotypic_Processing_filled.csv",
@@ -46,9 +46,13 @@ def load_abide_records(data_root, pipeline="cpac", strategy="filt_noglobal", der
     time_series_dir = data_root / pipeline / strategy
     suffix = f"_{derivative}.1D"
     with phenotype_path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        reader.fieldnames = [field.strip() for field in reader.fieldnames or []]
         phenotype_rows = {
-            row["FILE_ID"].strip(): row
-            for row in csv.DictReader(handle)
+            row["FILE_ID"].strip(): {
+                key: (value or "").strip() for key, value in row.items()
+            }
+            for row in reader
             if row.get("FILE_ID", "").strip() != "no_filename"
         }
     records = []
@@ -57,13 +61,24 @@ def load_abide_records(data_root, pipeline="cpac", strategy="filt_noglobal", der
         row = phenotype_rows.get(subject_id)
         if row is None:
             continue
-        diagnosis_code = int(float(row["DX_GROUP"]))
-        if diagnosis_code not in DX_TO_LABEL:
+        raw_diagnosis = str(
+            row.get(profile.patient_column if profile else "DX_GROUP", "")
+        ).strip()
+        try:
+            diagnosis_code = str(int(float(raw_diagnosis)))
+        except ValueError:
+            diagnosis_code = raw_diagnosis
+        patient_values = profile.patient_values if profile else ("2",)
+        control_values = profile.control_values if profile else ("1",)
+        if diagnosis_code in patient_values:
+            label = 1
+        elif diagnosis_code in control_values:
+            label = 0
+        else:
             continue
-        label = DX_TO_LABEL[diagnosis_code]
         records.append(ABIDERecord(
             subject_id=subject_id,
-            site_id=row["SITE_ID"].strip(),
+            site_id=row[profile.site_column if profile else "SITE_ID"].strip(),
             label=label,
             diagnosis=LABEL_TO_GROUP[label],
             time_series_path=time_series_path,

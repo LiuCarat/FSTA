@@ -33,7 +33,7 @@ def load_sparse_var_runner():
 
 SPARSE_VAR = load_sparse_var_runner()
 from Graph_BEC.data import load_subject_dataset
-from Graph_BEC.profiles.configuration import get_profile
+from Graph_BEC.dataset_configs import get_profile
 from Graph_BEC.utils.runtime import set_seed
 
 METRICS = ("ACC", "SPE", "AUC", "Precision", "Recall", "F1")
@@ -66,12 +66,12 @@ def parse_args():
     parser.add_argument("--n-splits", type=int, default=10)
     parser.add_argument("--validation-size", type=float, default=0.2)
     parser.add_argument("--gpu-id", default="auto")
-    parser.add_argument("--classifier-epochs", type=int, default=profile.defaults.get("classifier_epochs", 100))
-    parser.add_argument("--classifier-patience", type=int, default=profile.defaults.get("classifier_patience", 20))
-    parser.add_argument("--classifier-lr", type=float, default=profile.defaults.get("classifier_lr", 1e-3))
-    parser.add_argument("--classifier-repeats", type=int, default=profile.defaults.get("classifier_repeats", 1))
-    parser.add_argument("--patient-label", type=int, default=profile.defaults.get("patient_label", 1), choices=[0, 1])
-    parser.add_argument("--control-label", type=int, default=profile.defaults.get("control_label", 0), choices=[0, 1])
+    parser.add_argument("--classifier-epochs", type=int, default=100)
+    parser.add_argument("--classifier-patience", type=int, default=20)
+    parser.add_argument("--classifier-lr", type=float, default=1e-3)
+    parser.add_argument("--classifier-repeats", type=int, default=1)
+    parser.add_argument("--patient-label", type=int, default=1, choices=[0, 1])
+    parser.add_argument("--control-label", type=int, default=0, choices=[0, 1])
     parser.add_argument("--max-iter", type=int, default=10000)
     parser.add_argument("--tol", type=float, default=1e-4)
     parser.add_argument("--threshold", type=float, default=0.0)

@@ -35,12 +35,13 @@ def load_aligned_qc(csv_path, subject_ids, columns=DEFAULT_QC_COLUMNS, profile=N
     delimiter = "\t" if profile and profile.phenotype_format == "tsv" else ","
     with Path(csv_path).open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle, delimiter=delimiter)
+        reader.fieldnames = [field.strip() for field in reader.fieldnames or []]
         required = {identifier, *columns}
         missing = required - set(reader.fieldnames or [])
         if missing:
             raise ValueError(f"Missing QC columns: {sorted(missing)}")
         rows = {
-            row[identifier].strip(): row
+            row[identifier].strip(): {key.strip(): value.strip() for key, value in row.items()}
             for row in reader
             if row.get(identifier, "").strip()
             and row[identifier].strip() != "no_filename"

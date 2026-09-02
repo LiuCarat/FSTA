@@ -1,7 +1,7 @@
 """FSTA training helpers used by the main Original-BEC pipeline.
 
 This module only defines reusable training functions; it is not a command-line
-entry point. ``Graph_BEC/main.py`` starts the pipeline and calls these helpers
+entry point. `the dataset-specific main entry point` starts the pipeline and calls these helpers
 through ``bec_generation.generate_subject_bec`` when ``input_mode`` is ``raw``.
 """
 from __future__ import annotations

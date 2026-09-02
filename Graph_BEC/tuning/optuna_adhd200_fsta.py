@@ -19,9 +19,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from Graph_BEC.config import parse_args
+from Graph_BEC.main_adhd200 import parse_args
 from Graph_BEC.data import load_subject_dataset
-from Graph_BEC.profiles.configuration import get_profile
+from Graph_BEC.dataset_configs import get_profile
 from Graph_BEC.model.fusion_graph import load_phenotypes
 from Graph_BEC.model.fsta_ec import generate_subject_bec, save_subject_bec
 from Graph_BEC.utils import select_device, set_seed
@@ -49,13 +49,12 @@ def parse_optuna_args():
 def build_base_args(optuna_args):
     sys.argv = [
         sys.argv[0],
-        "--dataset", "adhd200",
         "--input-mode", "raw",
         "--representations", "original",
         "--seed", str(optuna_args.seed),
         "--gpu-id", optuna_args.gpu_id,
     ]
-    args = parse_args("ADHD200 FSTA Optuna search")
+    args = parse_args()
     args.input_mode = "raw"
     args.representations = ["original"]
     args.fsta_checkpoint = "best"
