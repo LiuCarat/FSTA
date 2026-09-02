@@ -28,17 +28,24 @@ from Graph_BEC.utils.runtime import set_seed
 
 def parse_args():
     selector = argparse.ArgumentParser(add_help=False)
-    selector.add_argument("--dataset", choices=["abide", "adhd200"], default="abide")
+    selector.add_argument(
+        "--dataset", choices=["abide", "abide_ii", "adhd200"], default="abide"
+    )
     selected, _ = selector.parse_known_args()
     profile = get_profile(selected.dataset)
     output_dir = Path(__file__).resolve().parent / "outputs"
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", choices=["abide", "adhd200"], default=profile.name)
+    parser.add_argument(
+        "--dataset",
+        choices=["abide", "abide_ii", "adhd200"],
+        default=profile.name,
+    )
     parser.add_argument("--data-root", type=Path, default=profile.data_root)
     parser.add_argument("--pipeline", default="cpac")
     parser.add_argument("--strategy", default="filt_noglobal")
     parser.add_argument("--derivative", default="rois_aal")
+    parser.add_argument("--phenotype-csv", type=Path, default=profile.phenotype_path)
     parser.add_argument("--output-dir", type=Path, default=output_dir)
     parser.add_argument(
         "--fc-path",
@@ -54,8 +61,18 @@ def parse_args():
     parser.add_argument("--classifier-patience", type=int, default=20)
     parser.add_argument("--classifier-lr", type=float, default=1e-3)
     parser.add_argument("--classifier-repeats", type=int, default=1)
-    parser.add_argument("--patient-label", type=int, default=1, choices=[0, 1])
-    parser.add_argument("--control-label", type=int, default=0, choices=[0, 1])
+    parser.add_argument(
+        "--patient-label",
+        type=int,
+        default=profile.patient_label if hasattr(profile, "patient_label") else 1,
+        choices=[0, 1],
+    )
+    parser.add_argument(
+        "--control-label",
+        type=int,
+        default=profile.control_label if hasattr(profile, "control_label") else 0,
+        choices=[0, 1],
+    )
     parser.add_argument("--regenerate-fc", action="store_true")
     parser.add_argument("--generation-only", action="store_true")
     parser.add_argument("--classification-only", action="store_true")

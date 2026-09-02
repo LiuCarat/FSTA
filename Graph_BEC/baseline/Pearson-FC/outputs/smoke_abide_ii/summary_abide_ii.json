@@ -1,0 +1,26 @@
+{
+  "ACC": {
+    "mean": 0.0,
+    "std": 0.0
+  },
+  "SPE": {
+    "mean": 0.0,
+    "std": 0.0
+  },
+  "AUC": {
+    "mean": NaN,
+    "std": NaN
+  },
+  "Precision": {
+    "mean": 0.0,
+    "std": 0.0
+  },
+  "Recall": {
+    "mean": 0.0,
+    "std": 0.0
+  },
+  "F1": {
+    "mean": 0.0,
+    "std": 0.0
+  }
+}

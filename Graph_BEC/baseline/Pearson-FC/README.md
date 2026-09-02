@@ -32,6 +32,18 @@ python Graph_BEC/baseline/Pearson-FC/run_pearson_fc.py \
   --gpu-id auto
 ```
 
+## ABIDE-II
+
+```bash
+python Graph_BEC/baseline/Pearson-FC/run_pearson_fc.py \
+  --dataset abide_ii \
+  --gpu-id auto
+```
+
+The ABIDE-II profile uses `dataset/ABIDE-II/Phenotypic_Processing.csv` and
+the ROI files under `dataset/ABIDE-II/cpac/filt_noglobal/` by default. Its
+archive is saved as `subject_fc_abide_ii.npz` in the same `outputs` folder.
+
 Because Pearson FC has no learned generation stage, the matrix generation is
 fast. The FC archive and classifier outputs are written under. Files are dataset-specific so ABIDE and ADHD200 do not overwrite each other:
 
@@ -67,5 +79,5 @@ Then classify an existing archive:
 python Graph_BEC/baseline/Pearson-FC/run_pearson_fc.py \
   --dataset abide \
   --classification-only \
-  --fc-path Graph_BEC/baseline/Pearson-FC/outputs/subject_fc_abide.npz
+  --fc-path Graph_BEC/baseline/Pearson-FC/outputs/subject_fc_abide_ii.npz
 ```

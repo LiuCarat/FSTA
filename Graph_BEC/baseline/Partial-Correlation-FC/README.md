@@ -38,6 +38,18 @@ python Graph_BEC/baseline/Partial-Correlation-FC/run_partial_correlation_fc.py \
   --gpu-id auto
 ```
 
+## ABIDE-II
+
+```bash
+python Graph_BEC/baseline/Partial-Correlation-FC/run_partial_correlation_fc.py \
+  --dataset abide_ii \
+  --gpu-id auto
+```
+
+The ABIDE-II profile uses `dataset/ABIDE-II/Phenotypic_Processing.csv` and
+`dataset/ABIDE-II/cpac/filt_noglobal/*_rois_aal.1D` by default. The output
+archive is `subject_partial_correlation_fc_abide_ii.npz`.
+
 The archive and metrics are saved under:
 
 ```text
@@ -48,9 +60,10 @@ Dataset-specific files prevent ABIDE and ADHD200 from overwriting each other:
 
 ```text
 subject_partial_correlation_fc_abide.npz
+subject_partial_correlation_fc_abide_ii.npz
 subject_partial_correlation_fc_adhd200.npz
-metrics_abide.csv / metrics_adhd200.csv
-summary_abide.json / summary_adhd200.json
+metrics_abide.csv / metrics_abide_ii.csv / metrics_adhd200.csv
+summary_abide.json / summary_abide_ii.json / summary_adhd200.json
 ```
 
 ## Main options
@@ -87,7 +100,7 @@ Classify an existing archive:
 
 ```bash
 python Graph_BEC/baseline/Partial-Correlation-FC/run_partial_correlation_fc.py \
-  --dataset abide \
+  --dataset abide_ii \
   --classification-only \
-  --fc-path Graph_BEC/baseline/Partial-Correlation-FC/outputs/subject_partial_correlation_fc_abide.npz
+  --fc-path Graph_BEC/baseline/Partial-Correlation-FC/outputs/subject_partial_correlation_fc_abide_ii.npz
 ```

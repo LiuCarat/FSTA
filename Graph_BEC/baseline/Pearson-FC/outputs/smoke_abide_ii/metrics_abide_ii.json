@@ -1,0 +1,22 @@
+[
+  {
+    "fold": 1,
+    "repeat": 1,
+    "ACC": 0.0,
+    "SPE": 0.0,
+    "AUC": NaN,
+    "Precision": 0.0,
+    "Recall": 0.0,
+    "F1": 0.0
+  },
+  {
+    "fold": 2,
+    "repeat": 1,
+    "ACC": 0.0,
+    "SPE": 0.0,
+    "AUC": NaN,
+    "Precision": 0.0,
+    "Recall": 0.0,
+    "F1": 0.0
+  }
+]
