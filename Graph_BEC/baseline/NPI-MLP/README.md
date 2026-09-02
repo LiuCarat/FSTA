@@ -88,3 +88,31 @@ For any questions/comments, please contact [NCC Lab](https://www.sustech.edu.cn/
 ## **Copyright**
 
 Copyright © 2024 NCC Lab, Southern University of Science and Technology, Shenzhen, China.
+
+## ABIDE-II
+
+The Graph-BEC baseline runner also supports ABIDE-II:
+
+```bash
+python Graph_BEC/baseline/NPI-MLP/run_npi_classifier.py \
+  --dataset abide_ii \
+  --data-root ./dataset/ABIDE-II \
+  --gpu-id auto
+```
+
+It uses the ABIDE-II profile, reading
+`dataset/ABIDE-II/Phenotypic_Processing.csv` and the standardized ROI files
+under `dataset/ABIDE-II/cpac/filt_noglobal/`. Results are written to
+`Graph_BEC/baseline/NPI-MLP/outputs/`, with the archive named
+`subject_npi_mlp_bec_abide_ii.npz`.
+
+For a smoke test:
+
+```bash
+python Graph_BEC/baseline/NPI-MLP/run_npi_classifier.py \
+  --dataset abide_ii \
+  --max-subjects 2 \
+  --npi-epochs 1 \
+  --npi-batch-size 16 \
+  --generation-only
+```

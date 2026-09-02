@@ -42,6 +42,34 @@ python Graph_BEC/baseline/NAVAR/run_navar_baseline.py \
   --data-root ./dataset/ABIDE-I
 ```
 
+ABIDE-II uses the same runner and the shared ABIDE-II loader. The default
+ABIDE-II layout is `dataset/ABIDE-II/cpac/filt_noglobal/*_rois_aal.1D`, with
+labels read from `dataset/ABIDE-II/Phenotypic_Processing.csv`:
+
+```bash
+python Graph_BEC/baseline/NAVAR/run_navar_baseline.py \
+  --dataset abide_ii \
+  --data-root ./dataset/ABIDE-II \
+  --gpu-id auto
+```
+
+For a quick smoke test, reduce both NAVAR and classifier training:
+
+```bash
+python Graph_BEC/baseline/NAVAR/run_navar_baseline.py \
+  --dataset abide_ii \
+  --data-root ./dataset/ABIDE-II \
+  --max-subjects 20 \
+  --epochs 1 \
+  --batch-size 16 \
+  --n-splits 2 \
+  --classifier-epochs 1 \
+  --classifier-patience 1 \
+  --output-dir Graph_BEC/baseline/NAVAR/outputs/smoke_abide_ii \
+  --bec-path Graph_BEC/baseline/NAVAR/outputs/smoke_abide_ii/subject_navar_bec_abide_ii.npz \
+  --regenerate-bec
+```
+
 Generate only subject-level BEC matrices:
 
 ```bash

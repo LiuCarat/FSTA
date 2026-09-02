@@ -5,9 +5,9 @@ from __future__ import annotations
 
 def add_fsta_arguments(parser):
     group = parser.add_argument_group("FSTA-EC baseline")
-    group.add_argument("--window-length", type=int, default=78)
-    group.add_argument("--stride", type=int, default=39)
-    group.add_argument("--epochs", type=int, default=301)
+    group.add_argument("--window-length", type=int, default=80)
+    group.add_argument("--stride", type=int, default=40)
+    group.add_argument("--epochs", type=int, default=51)
     group.add_argument("--alpha-sp", type=float, default=0.8)
     group.add_argument("--batch-size", type=int, default=32)
     group.add_argument("--log-every", type=int, default=10)

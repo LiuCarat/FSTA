@@ -66,7 +66,7 @@ def add_fsta_arguments(parser):
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-mode", choices=["bec", "raw"], default='bec')
-    parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=['original', 'qc_refined'])
+    parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=['original', 'refined', "qc_refined"])
     parser.add_argument("--bec-path", type=Path, default=DATASET_CONFIG.bec_path)
     parser.add_argument("--refined-bec-path", type=Path, default=DATASET_CONFIG.refined_bec_path)
     parser.add_argument("--qsr-refined-bec-path", type=Path, default=DATASET_CONFIG.qsr_refined_bec_path)

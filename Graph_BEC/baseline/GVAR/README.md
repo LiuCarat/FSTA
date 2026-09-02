@@ -48,6 +48,48 @@ The default output is:
 Graph_BEC/baseline/GVAR/outputs/subject_gvar_bec_abide.npz
 ```
 
+## ABIDE-II
+
+ABIDE-II uses the shared Graph-BEC loader and the default layout under
+`dataset/ABIDE-II/cpac/filt_noglobal/`. Use a dataset-specific output path so
+that ABIDE-I results are not overwritten:
+
+```bash
+PYTHONUNBUFFERED=1 python Graph_BEC/baseline/GVAR/run_gvar.py \
+  --dataset abide_ii \
+  --data-root ./dataset/ABIDE-II \
+  --order 1 \
+  --epochs 200 \
+  --batch-size 128 \
+  --workers 1 \
+  --gpu-id auto \
+  --output-dir Graph_BEC/baseline/GVAR/outputs/abide_ii \
+  --bec-path Graph_BEC/baseline/GVAR/outputs/abide_ii/subject_gvar_bec_abide_ii.npz \
+  --regenerate-bec
+```
+
+For ABIDE-II, `epochs=100` is a reasonable smoke-test value and `epochs=200`
+is a practical starting point for the full BEC generation. Compare
+`epochs=100`, `200`, and `300` on the same subjects; use `300` only if the
+resulting BECs are still changing materially. The runner trains one GVAR per
+subject, so increasing epochs increases total runtime approximately linearly.
+
+Quick smoke test:
+
+```bash
+PYTHONUNBUFFERED=1 python Graph_BEC/baseline/GVAR/run_gvar.py \
+  --dataset abide_ii \
+  --data-root ./dataset/ABIDE-II \
+  --epochs 2 \
+  --batch-size 128 \
+  --max-subjects 2 \
+  --generation-only \
+  --gpu-id auto \
+  --output-dir Graph_BEC/baseline/GVAR/outputs/smoke_abide_ii \
+  --bec-path Graph_BEC/baseline/GVAR/outputs/smoke_abide_ii/subject_gvar_bec_abide_ii.npz \
+  --regenerate-bec
+```
+
 ## Classification
 
 ```bash

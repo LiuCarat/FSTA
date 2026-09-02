@@ -27,13 +27,13 @@ from train_NAVAR import train_NAVAR
 
 def parse_args():
     selector = argparse.ArgumentParser(add_help=False)
-    selector.add_argument("--dataset", choices=["abide", "adhd200"], default="abide")
+    selector.add_argument("--dataset", choices=["abide", "abide_ii", "adhd200"], default="abide")
     selected, _ = selector.parse_known_args()
     profile = get_profile(selected.dataset)
     output_dir = Path(__file__).resolve().parent / "outputs"
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", choices=["abide", "adhd200"], default=profile.name)
+    parser.add_argument("--dataset", choices=["abide", "abide_ii", "adhd200"], default=profile.name)
     parser.add_argument("--data-root", type=Path, default=profile.data_root)
     parser.add_argument("--pipeline", default="cpac")
     parser.add_argument("--strategy", default="filt_noglobal")
@@ -41,8 +41,8 @@ def parse_args():
     parser.add_argument("--maxlags", type=int, default=5)
     parser.add_argument("--hidden-nodes", type=int, default=10)
     parser.add_argument("--hidden-layers", type=int, default=1)
-    parser.add_argument("--epochs", type=int, default=2000)
-    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--sparsity-penalty", type=float, default=0.1)
     parser.add_argument("--weight-decay", type=float, default=0.001)
     parser.add_argument("--dropout", type=float, default=0.5)

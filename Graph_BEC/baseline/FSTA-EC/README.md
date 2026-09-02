@@ -56,3 +56,18 @@ The default archive is
 The archive contains `bec`, labels, subject IDs, site IDs, ROI names, and
 subject reconstruction errors. The method reported in comparison tables
 should be `FSTA-EC` or `FSTA-EC Original-BEC`.
+
+## ABIDE-II
+
+The same runner supports ABIDE-II through the existing ABIDE-II profile:
+
+```bash
+python Graph_BEC/baseline/FSTA-EC/run_fsta_ec_baseline.py \
+  --dataset abide_ii \
+  --data-root ./dataset/ABIDE-II \
+  --gpu-id auto
+```
+
+It reads `dataset/ABIDE-II/Phenotypic_Processing.csv` and
+`dataset/ABIDE-II/cpac/filt_noglobal/*_rois_aal.1D` by default, and writes the
+archive and metrics to `Graph_BEC/baseline/FSTA-EC/outputs/`.

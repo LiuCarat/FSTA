@@ -40,13 +40,19 @@ NPI_EC_AXIS = "rows=perturbed_source; columns=affected_target"
 
 def parse_args():
     selector = argparse.ArgumentParser(add_help=False)
-    selector.add_argument("--dataset", choices=["abide", "adhd200"], default="abide")
+    selector.add_argument(
+        "--dataset", choices=["abide", "abide_ii", "adhd200"], default="abide"
+    )
     selected, _ = selector.parse_known_args()
     profile = get_profile(selected.dataset)
     output_dir = BASELINE_DIR / "outputs"
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", choices=["abide", "adhd200"], default=profile.name)
+    parser.add_argument(
+        "--dataset",
+        choices=["abide", "abide_ii", "adhd200"],
+        default=profile.name,
+    )
     parser.add_argument("--data-root", type=Path, default=profile.data_root)
     parser.add_argument("--pipeline", default="cpac")
     parser.add_argument("--strategy", default="filt_noglobal")
