@@ -10,6 +10,7 @@ import argparse
 import csv
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -57,8 +58,8 @@ def parse_args():
     parser.add_argument(
         "--checkpoint-every",
         type=int,
-        default=10,
-        help="save the BEC archive every N subjects",
+        default=1,
+        help="save the BEC archive every N subjects (default: 1)",
     )
 
     parser.add_argument("--seed", type=int, default=42)
@@ -110,14 +111,25 @@ def crvae_config(args):
 def save_bec_archive(path, bec, dataset, args):
     path.parent.mkdir(parents=True, exist_ok=True)
     count = len(bec)
-    np.savez_compressed(
-        path,
-        bec=np.asarray(bec, dtype=np.float32),
-        labels=np.asarray(dataset["labels"][:count], dtype=np.int64),
-        subject_ids=np.asarray(dataset["subject_ids"][:count]),
-        site_ids=np.asarray(dataset["site_ids"][:count]),
-        crvae_config=np.asarray(json.dumps(crvae_config(args), sort_keys=True)),
-    )
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
+        ) as handle:
+            temporary_path = Path(handle.name)
+        np.savez_compressed(
+            temporary_path,
+            bec=np.asarray(bec, dtype=np.float32),
+            labels=np.asarray(dataset["labels"][:count], dtype=np.int64),
+            subject_ids=np.asarray(dataset["subject_ids"][:count]),
+            site_ids=np.asarray(dataset["site_ids"][:count]),
+            crvae_config=np.asarray(json.dumps(crvae_config(args), sort_keys=True)),
+        )
+        temporary_path.with_name(temporary_path.name + ".npz").replace(path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+            temporary_path.with_name(temporary_path.name + ".npz").unlink(missing_ok=True)
 
 
 def load_bec_archive(path):

@@ -8,17 +8,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from Graph_BEC.dataset_configs import ExperimentProfile
-QC_COLUMNS = ("QC_Athena", "QC_NIAK")
+QC_COLUMNS = ("func_mean_fd", "func_dvars", "func_quality")
 
 DATASET_CONFIG = ExperimentProfile(
     name="adhd200",
     data_root=ROOT / "dataset/ADHD200",
-    phenotype_path=ROOT / "dataset/ADHD200/adhd200_preprocessed_phenotypics.tsv",
+    phenotype_path=ROOT / "dataset/ADHD200/Phenotypic_Processing.csv",
     output_dir=ROOT / "Graph_BEC/outputs/adhd200",
     bec_path=ROOT / "Graph_BEC/outputs/adhd200/adhd200_subject_bec.npz",
     refined_bec_path=ROOT / "Graph_BEC/outputs/adhd200/adhd200_refined_subject_bec.npz",
     qsr_refined_bec_path=ROOT / "Graph_BEC/outputs/adhd200/adhd200_qsr_refined_subject_bec.npz",
-    phenotype_format="tsv",
+    phenotype_format="csv",
     phenotype_id_column="ScanDir ID",
     patient_column="DX",
     control_column="DX",

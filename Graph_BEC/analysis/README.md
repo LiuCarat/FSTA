@@ -13,7 +13,8 @@ Difference = ASD_mean - TC_mean
 - `Difference > 0`：ASD 中该连接增强；
 - `Difference < 0`：TC 中该连接增强，也可表述为 ASD 中相对减弱。
 
-当前分析不做统计显著性检验，因此结果应称为 descriptive group-level differences 或 candidate edges/ROIs。
+边差异排序同时报告 Welch 组间检验及全边 Benjamini–Hochberg FDR q 值；ROI 和弦图仍是
+基于差异分数的描述性 candidate ROIs/edges，不应单独解读为显著性结论。
 
 ## 1. Top-10 有向连接边
 
@@ -23,14 +24,33 @@ Difference = ASD_mean - TC_mean
 python Graph_BEC/analysis/group_edge_difference.py
 ```
 
-默认输入是模型阶段生成的 `Graph_BEC/outputs/refined_subject_bec.npz`，默认分析
-`pgr_bec`，输出为：
+默认输入是 ABIDE II 模型阶段生成的
+`Graph_BEC/outputs/abide-ii/abide_ii_qsr_refined_subject_bec.npz`，默认分析
+`bec`，输出为：
 
 ```text
-Graph_BEC/analysis/outputs/group_edge_difference/top_edges_asd_vs_tc.csv
+Graph_BEC/analysis/outputs/group_edge_difference/top_edges_abide_ii.csv
 ```
 
-默认输出 20 行：10 条 `ASD_enhanced` 和 10 条 `TC_enhanced`。表格包括 `source`、`target`、`asd_mean`、`tc_mean`、`difference_asd_minus_tc` 等字段，并保留有向边方向。
+默认输出 20 行：10 条 `ASD_enhanced` 和 10 条 `TC_enhanced`。表格包括
+`Source`、`Target`、`ASD_mean`、`TC_mean`、`Difference`、`PValue` 和 `FDR_q`
+等字段，并保留有向边方向。`PValue` 使用 Welch 两独立样本 t 检验，`FDR_q`
+使用 Benjamini–Hochberg 方法在全部 90×89 条非对角有向边上校正。
+
+若要生成截图风格的 Top-5 ABIDE II 表：
+
+```bash
+python3 Graph_BEC/analysis/group_edge_difference.py --top-k 5
+```
+
+ABIDE I 仍可显式指定输入文件运行：
+
+```bash
+python3 Graph_BEC/analysis/group_edge_difference.py \
+  --bec-path Graph_BEC/outputs/abide-i/abide_refined_subject_bec.npz \
+  --output-dir Graph_BEC/analysis/outputs/group_edge_difference/abide_i \
+  --output-name top_edges_abide_i.csv
+```
 
 如需分析 QC 弱监督结果：
 

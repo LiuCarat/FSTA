@@ -44,14 +44,18 @@ For ABIDE's 90-ROI model, this runner defaults to the safer
 `ridge=0`. You can reproduce the original batch setting explicitly with
 `--crvae-batch-size 2048` if your GPU has enough memory.
 
-Generation is checkpointed every 10 subjects by default. Re-running the same
-command resumes an incomplete archive or reuses a complete one.
+Generation is checkpointed after every subject by default. Each checkpoint is
+written to a temporary file and atomically replaces the archive, so an
+interrupted run keeps all completed subjects and does not leave a partially
+written `.npz`. Re-running the same command resumes an incomplete archive or
+reuses a complete one. Use `--checkpoint-every N` to trade restart granularity
+for fewer archive writes.
 
 For a much faster first result, use `--fast`. It keeps the CR-VAE model and
 the requested `context=20`, `hidden=64`, `lr=0.05`, and `lambda=0.1`, but uses
 100 iterations and batch size 64. The archive is checkpointed every 10
-subjects by default, which avoids 871 compressed-file writes. Use
-`--checkpoint-every 1` if you prefer maximum restart safety.
+subject by default; use `--checkpoint-every 1` explicitly if you want to make
+that behavior clear in a command.
 
 ## Run the two stages separately
 

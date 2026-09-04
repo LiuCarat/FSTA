@@ -14,11 +14,12 @@ import csv
 from pathlib import Path
 
 import numpy as np
+from scipy.stats import ttest_ind
 
 TC_LABEL = 0
 ASD_LABEL = 1
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BEC = ROOT / "Graph_BEC/outputs/refined_subject_bec.npz"
+DEFAULT_BEC = ROOT / "Graph_BEC/outputs/abide/abide_qsr_refined_subject_bec.npz"
 DEFAULT_OUTPUT = ROOT / "Graph_BEC/analysis/outputs/group_edge_difference"
 
 
@@ -27,9 +28,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bec-path", type=Path, default=DEFAULT_BEC)
     parser.add_argument(
         "--bec-key", choices=["pgr_bec", "qc_refined_bec", "bec"],
-        default="pgr_bec",
+        default="bec",
     )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--output-name", default="top_edges_abide.csv")
     parser.add_argument("--top-k", type=int, default=10)
     return parser.parse_args()
 
@@ -74,10 +76,40 @@ def compute_difference(
     return asd_mean, tc_mean, asd_mean - tc_mean
 
 
+def benjamini_hochberg(values: np.ndarray) -> np.ndarray:
+    values = np.asarray(values, dtype=np.float64).reshape(-1)
+    order = np.argsort(values)
+    sorted_values = values[order]
+    ranks = np.arange(1, len(sorted_values) + 1, dtype=np.float64)
+    adjusted = np.minimum.accumulate(
+        (sorted_values * len(sorted_values) / ranks)[::-1]
+    )[::-1]
+    result = np.empty_like(values)
+    result[order] = np.minimum(adjusted, 1.0)
+    return result
+
+
+def compute_edge_statistics(
+    bec: np.ndarray, labels: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute Welch p-values and BH q-values for all directed edges."""
+    asd_mask = labels == ASD_LABEL
+    tc_mask = labels == TC_LABEL
+    _, p_values = ttest_ind(
+        bec[asd_mask], bec[tc_mask], axis=0, equal_var=False, nan_policy="raise"
+    )
+    off_diagonal = ~np.eye(p_values.shape[0], dtype=bool)
+    q_values = np.full_like(p_values, np.nan, dtype=np.float64)
+    q_values[off_diagonal] = benjamini_hochberg(p_values[off_diagonal])
+    return p_values, q_values
+
+
 def edge_rows(
     asd_mean: np.ndarray,
     tc_mean: np.ndarray,
     difference: np.ndarray,
+    p_values: np.ndarray,
+    q_values: np.ndarray,
     roi_names: np.ndarray,
     top_k: int,
 ) -> list[dict[str, object]]:
@@ -94,6 +126,8 @@ def edge_rows(
                 "tc_mean": float(tc_mean[source, target]),
                 "difference_asd_minus_tc": value,
                 "absolute_difference": abs(value),
+                "p_value": float(p_values[source, target]),
+                "fdr_q": float(q_values[source, target]),
                 "source_index": source,
                 "target_index": target,
             })
@@ -117,6 +151,7 @@ def write_csv(path: Path, rows: list[dict[str, object]]) -> None:
     fields = [
         "Direction", "Rank", "Source", "Target", "SourceIndex", "TargetIndex",
         "ASD_mean", "TC_mean", "Difference", "AbsoluteDifference",
+        "PValue", "FDR_q",
     ]
     rows = [
         {
@@ -130,6 +165,8 @@ def write_csv(path: Path, rows: list[dict[str, object]]) -> None:
             "TC_mean": row["tc_mean"],
             "Difference": row["difference_asd_minus_tc"],
             "AbsoluteDifference": row["absolute_difference"],
+            "PValue": row["p_value"],
+            "FDR_q": row["fdr_q"],
         }
         for row in rows
     ]
@@ -145,9 +182,12 @@ def main() -> None:
         raise ValueError("--top-k must be at least 1")
     bec, labels, roi_names = load_archive(args.bec_path, args.bec_key)
     asd_mean, tc_mean, difference = compute_difference(bec, labels)
-    rows = edge_rows(asd_mean, tc_mean, difference, roi_names, args.top_k)
+    p_values, q_values = compute_edge_statistics(bec, labels)
+    rows = edge_rows(
+        asd_mean, tc_mean, difference, p_values, q_values, roi_names, args.top_k
+    )
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    output = args.output_dir / "top_edges_asd_vs_tc.csv"
+    output = args.output_dir / args.output_name
     write_csv(output, rows)
     print(f"ASD subjects: {int((labels == ASD_LABEL).sum())}")
     print(f"TC subjects: {int((labels == TC_LABEL).sum())}")

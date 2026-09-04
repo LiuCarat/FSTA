@@ -19,7 +19,7 @@ import numpy as np
 TC_LABEL = 0
 ASD_LABEL = 1
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BEC = ROOT / "Graph_BEC/outputs/refined_subject_bec.npz"
+DEFAULT_BEC = ROOT / "Graph_BEC/outputs/abide-ii/abide_ii_qsr_refined_subject_bec.npz"
 DEFAULT_OUTPUT = ROOT / "Graph_BEC/analysis/outputs/group_roi_difference"
 
 
@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bec-path", type=Path, default=DEFAULT_BEC)
     parser.add_argument(
         "--bec-key", choices=["pgr_bec", "qc_refined_bec", "bec"],
-        default="pgr_bec",
+        default="bec",
     )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--top-k", type=int, default=10)

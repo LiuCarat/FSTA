@@ -22,22 +22,54 @@ class ADHD200Record:
 
 def load_adhd200_records(data_root, profile, patient_label=1, control_label=0):
     data_root = Path(data_root)
+    delimiter = "\t" if profile.phenotype_format == "tsv" else ","
     with Path(profile.phenotype_path).open(newline="", encoding="utf-8-sig") as handle:
         rows = {
             str(row[profile.phenotype_id_column]).strip(): row
-            for row in csv.DictReader(handle, delimiter="\t")
+            for row in csv.DictReader(handle, delimiter=delimiter)
             if str(row.get(profile.phenotype_id_column, "")).strip()
         }
     records = []
     cleaned_root = data_root / "cleaned" / "AAL_TCs_filtfix"
     series_root = cleaned_root if cleaned_root.is_dir() else data_root / "AAL_TCs_filtfix"
+    flat_root = data_root / "cpac" / "filt_noglobal"
     excluded = {
         f"{subject_id.split('/', 1)[0]}/{str(int(subject_id.split('/', 1)[1]))}"
         if "/" in subject_id and subject_id.split("/", 1)[1].isdigit()
         else subject_id
         for subject_id in profile.exclude_subjects
     }
-    for site_dir in sorted(path for path in series_root.iterdir() if path.is_dir()):
+    flat_paths = sorted(flat_root.glob("*_rois_aal.1D")) if flat_root.is_dir() else []
+    if flat_paths:
+        for time_series_path in flat_paths:
+            normalized_id = time_series_path.name.removesuffix("_rois_aal.1D")
+            normalized_id = normalized_id.removeprefix("sub-")
+            normalized_id = str(int(normalized_id)) if normalized_id.isdigit() else normalized_id
+            row = rows.get(normalized_id)
+            if row is None:
+                continue
+            diagnosis = str(row.get(profile.patient_column, "")).strip()
+            if diagnosis in profile.patient_values:
+                label = patient_label
+            elif diagnosis in profile.control_values:
+                label = control_label
+            else:
+                continue
+            site_id = str(row.get(profile.site_column, "")).strip() or "unknown"
+            subject_id = normalized_id
+            records.append(ADHD200Record(
+                subject_id=subject_id,
+                site_id=site_id,
+                label=label,
+                diagnosis=diagnosis,
+                time_series_path=time_series_path,
+                time_series_paths=(time_series_path,),
+            ))
+    if flat_paths:
+        site_dirs = []
+    else:
+        site_dirs = sorted(path for path in series_root.iterdir() if path.is_dir()) if series_root.is_dir() else []
+    for site_dir in site_dirs:
         for subject_dir in sorted(path for path in site_dir.iterdir() if path.is_dir()):
             subject_id = f"{site_dir.name}/{subject_dir.name}"
             if subject_id in excluded:
@@ -73,7 +105,7 @@ def load_adhd200_records(data_root, profile, patient_label=1, control_label=0):
             ))
     if not records:
         raise FileNotFoundError(
-            f"No ADHD200 ROI files matched phenotype records in {series_root}"
+            f"No ADHD200 ROI files matched phenotype records in {flat_root} or {series_root}"
         )
     return records
 
