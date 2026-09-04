@@ -1,4 +1,4 @@
-# FSTA-Graph-BEC
+# Graph-QSR-BEC
 
 本目录实现一个从 ROI 时间序列生成个体化有向 BEC，并使用患者相似图进行无诊断标签修正的流程。最终通过 Directed BrainNetCNN 比较不同 BEC 表示的 ASD/TC 分类性能。
 
@@ -6,7 +6,7 @@
 
 ```text
 ROI 时间序列
-    ↓ FSTA-EC（无监督重建）
+    ↓ STF-BEC Encoder（无监督重建）
 个体化有向 BEC
     ↓ phenotype / fusion 患者图
 邻居参考 BEC
@@ -97,7 +97,7 @@ python Graph_BEC/main_adhd200.py --gpu-id 0
 python Graph_BEC/main_adhd200.py --gpu-id cpu
 ```
 
-`--input-mode bec`（默认）要求对应 `main_*.py` 中配置的 BEC 文件已经存在；`--input-mode raw` 会读取原始 ROI 时间序列、训练 FSTA-EC，并覆盖保存对应的 BEC 文件。数据根目录或表型文件位置不采用默认值时，可使用 `--data-root` 和 `--phenotype-csv` 覆盖。
+`--input-mode bec`（默认）要求对应 `main_*.py` 中配置的 BEC 文件已经存在；`--input-mode raw` 会读取原始 ROI 时间序列、训练 STF-BEC 编码器，并覆盖保存对应的 BEC 文件。数据根目录或表型文件位置不采用默认值时，可使用 `--data-root` 和 `--phenotype-csv` 覆盖。
 
 不同数据集需要的连续表型权重数量不同：ABIDE-I 为 2 个，ADHD200 为 3 个。例如：
 
@@ -138,10 +138,10 @@ Graph_BEC/
 ├── runner.py                # 三个入口共享的完整运行流程
 ├── dataset_configs.py       # 非主流程工具的兼容配置注册
 ├── data/                    # 数据、表型和 QC 加载
-├── model/fsta_ec/           # FSTA-EC 与 BEC 生成
-├── model/fusion_graph/      # 患者相似图
-├── model/pgr/               # PGR-BEC 修正
-├── model/qsr/               # QSR/QC-BEC 修正
+├── model/stf_bec/           # STF-BEC 编码器与 BEC 生成
+├── model/patient_graph/     # 患者相似图与参考 BEC
+├── model/pgr_bec_ablation.py# 去除 QC 的 PGR 消融结构
+├── model/qsr_bec/            # 最终 QSR-BEC 修正模型
 ├── downstream/              # BrainNetCNN、分类器和指标
 └── analysis/                # 结果分析与可视化
 ```

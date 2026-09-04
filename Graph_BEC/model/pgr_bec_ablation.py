@@ -1,8 +1,3 @@
-"""方案一：PGR-BEC-Static，表型引导的静态边级门控修正。
-
-该模块只使用初始 BEC 和表型邻域参考 BEC，不接收诊断标签。
-它适合作为已有 subject_bec.npz 的稳定基线。
-"""
 from __future__ import annotations
 import torch
 import torch.nn as nn

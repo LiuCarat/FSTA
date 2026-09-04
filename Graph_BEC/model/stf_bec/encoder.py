@@ -1,11 +1,12 @@
-"""FSTA core model."""
+"""STF-BEC encoder for subject-specific directed BEC estimation."""
 import torch
 import torch.nn as nn
-from .st_multi_head_att import PositionalEncoding, STMultiHeadAtt, PositionwiseFeedForward
-from .fourier_att import FourierAtt
+from .temporal_attention import PositionalEncoding, STMultiHeadAtt
+from .feed_forward import PositionwiseFeedForward
+from .spectral_block import FourierAtt
 
 
-class FSTA(nn.Module):
+class STFEncoder(nn.Module):
     def __init__(self, opt, time_num, d_model, d_inner, n_head, d_k, d_v, dropout=0.1):
         super().__init__()
         self.FA = FourierAtt(opt)
@@ -22,7 +23,7 @@ class FSTA(nn.Module):
         )
 
     def _encode(self, inputs, slf_attn_mask=None):
-        """Compute the shared FSTA representation before spatial fusion."""
+        """Compute the shared STF-BEC representation before spatial fusion."""
         embedded = inputs.unsqueeze(0).permute(1, 0, 2, 3)
         embedded = self.conv1(embedded).permute(0, 2, 3, 1)
         position = self.position_enc(embedded).unsqueeze(2).expand(embedded.shape)
@@ -48,3 +49,4 @@ class FSTA(nn.Module):
             spatial_features, temporal_features, spatial_attention
         )
         return reconstruction, spatial_attention
+

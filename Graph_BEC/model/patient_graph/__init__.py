@@ -1,6 +1,6 @@
-"""Phenotype and fMRI fusion-graph construction."""
+"""Phenotype and fMRI patient-similarity graph construction."""
 
-from .phenotype import (
+from .phenotype_graph import (
     build_reference_graph,
     fused_graph,
     load_phenotypes,

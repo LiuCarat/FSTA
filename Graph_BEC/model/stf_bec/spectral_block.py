@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from .fourier_att_modules import Encoder, LayerNorm
+from .spectral_modules import Encoder, LayerNorm
 
 class FourierAtt(nn.Module):
     def __init__(self, args):

@@ -21,7 +21,7 @@ def run(args):
         f"Dataset={args.dataset}; loading data from {args.data_root} "
         f"with phenotype {args.phenotype_csv}..."
     )
-    data, fsta_metrics = load_pipeline_data(args, device)
+    data, stf_metrics = load_pipeline_data(args, device)
     if np.unique(data["labels"]).size != 2:
         raise ValueError("The dataset must contain exactly two patient/control labels")
     print(
@@ -45,7 +45,7 @@ def run(args):
         )
         print(f"Saved QSR-refined NPZ: {qsr_refined_path.resolve()}")
     training_summary = {
-        "fsta": fsta_metrics,
+        "stf_bec": stf_metrics,
         "refinement_folds": experiment["refinement_metrics"],
         "representations": args.representations,
         "refined_bec_path": str(refined_path.resolve()) if refined_path else None,

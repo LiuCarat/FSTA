@@ -93,7 +93,7 @@ def save_results(args, fold_results, training_metrics):
 
     summary = {
         "config": vars(args),
-        "fsta_training": training_metrics,
+        "stf_bec_training": training_metrics,
         "folds": rows,
     }
     names = [

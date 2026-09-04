@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
-from .multi_head_att import MultiHeadAttention
+from .spatial_attention import MultiHeadAttention
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

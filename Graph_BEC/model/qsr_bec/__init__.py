@@ -1,11 +1,11 @@
 """QSR-BEC refinement model and QC utilities."""
 
-from .qc import (
+from .qc_prior import (
     DEFAULT_QC_COLUMNS,
     build_qc_sensitive_map,
     load_aligned_qc,
 )
-from .qsr_bec import QSRBECRefiner, qsr_refinement_loss
+from .qsr_model import QSRBECRefiner, qsr_refinement_loss
 
 __all__ = [
     "DEFAULT_QC_COLUMNS",

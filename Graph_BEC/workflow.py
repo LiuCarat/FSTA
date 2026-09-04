@@ -4,12 +4,12 @@ from __future__ import annotations
 import numpy as np
 
 from Graph_BEC.downstream import train_classifier
-from Graph_BEC.model.normative_bec import (
+from Graph_BEC.model.patient_graph.reference_bec import (
     bec_separability,
     edge_effect_sizes,
     normative_reference,
 )
-from Graph_BEC.model.fusion_graph import build_reference_graph, fused_graph, topk_graph
+from Graph_BEC.model.patient_graph import build_reference_graph, fused_graph, topk_graph
 from Graph_BEC.model.refinement import (
     apply_pgr_refiner,
     apply_qsr_refiner,

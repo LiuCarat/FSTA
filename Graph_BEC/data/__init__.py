@@ -23,12 +23,12 @@ from Graph_BEC.data.common import (
     limit_archive_subjects,
     load_bec_archive,
 )
-from Graph_BEC.model.fusion_graph import (
+from Graph_BEC.model.patient_graph import (
     load_aligned_phenotypes,
     load_phenotypes,
     subject_fc_features,
 )
-from Graph_BEC.model.qsr.qc import load_aligned_qc
+from Graph_BEC.model.qsr_bec.qc_prior import load_aligned_qc
 
 FIXED_DATA_CONFIG = {
     "pipeline": "cpac",
@@ -94,9 +94,9 @@ def load_subject_dataset(
 
 def load_pipeline_data(args, device):
     """Load or generate BEC matrices and attach graph/QC covariates."""
-    from Graph_BEC.model.fsta_ec import generate_subject_bec, save_subject_bec
+    from Graph_BEC.model.stf_bec import generate_subject_bec, save_subject_bec
 
-    fsta_metrics = None
+    stf_metrics = None
     subjects = None
     if args.input_mode == "raw":
         subjects = load_subject_dataset(
@@ -110,11 +110,11 @@ def load_pipeline_data(args, device):
             patient_label=args.patient_label,
             control_label=args.control_label,
         )
-        print(f"Training FSTA from {len(subjects['records'])} subject time series...")
-        data, fsta_metrics = generate_subject_bec(args, subjects, device)
+        print(f"Training STF-BEC from {len(subjects['records'])} subject time series...")
+        data, stf_metrics = generate_subject_bec(args, subjects, device)
         _report_existing_archive_difference(args.bec_path, data)
         save_subject_bec(args.bec_path, data)
-        print(f"Saved FSTA-EC BEC archive: {args.bec_path.resolve()}")
+        print(f"Saved STF-BEC archive: {args.bec_path.resolve()}")
     else:
         data = limit_archive_subjects(
             load_bec_archive(args.bec_path), FIXED_DATA_CONFIG["max_subjects"]
@@ -140,7 +140,7 @@ def load_pipeline_data(args, device):
     ).astype(np.float32)
     data["bec"] = np.asarray(data["bec"], dtype=np.float32)
     data["labels"] = np.asarray(data["labels"], dtype=np.int64)
-    return data, fsta_metrics
+    return data, stf_metrics
 
 
 def _report_existing_archive_difference(path, generated):

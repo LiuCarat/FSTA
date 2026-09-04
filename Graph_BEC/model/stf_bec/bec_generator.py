@@ -1,4 +1,4 @@
-"""Raw time-series to Original-BEC generation for the FSTA-EC model."""
+"""Raw time-series to Original-BEC generation for the STF-BEC encoder."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ from pathlib import Path
 
 import numpy as np
 
-from .fsta_training import train_fsta
-from .fsta_utils import extract_subject_bec
+from .training import train_stf_bec
+from .utils import extract_subject_bec
 
 
 def generate_subject_bec(args, subjects, device):
-    """Train FSTA and extract one directed Original BEC per subject."""
-    model, training_metrics = train_fsta(
+    """Train STF-BEC and extract one directed Original BEC per subject."""
+    model, training_metrics = train_stf_bec(
         args,
         subjects["time_series"],
         device,

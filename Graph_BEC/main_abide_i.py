@@ -35,12 +35,12 @@ DATASET_CONFIG = ExperimentProfile(
 
 
 
-def add_fsta_arguments(parser):
-    group = parser.add_argument_group("FSTA-EC model")
+def add_stf_arguments(parser):
+    group = parser.add_argument_group("STF-BEC encoder")
     group.add_argument("--window-length", type=int, default=78)
     group.add_argument("--stride", type=int, default=39)
     group.add_argument("--epochs", type=int, default=101)
-    group.add_argument("--fsta-checkpoint", choices=["final", "best"], default='final')
+    group.add_argument("--stf-checkpoint", choices=["final", "best"], default='final')
     group.add_argument("--loss-mode", choices=["original", "entropy"], default='entropy')
     group.add_argument("--loss-alpha", type=float, default=0.01)
     group.add_argument("--batch-size", type=int, default=32)
@@ -112,7 +112,7 @@ def parse_args():
     parser.add_argument("--classifier-repeats", type=int, default=1)
     parser.add_argument("--patient-label", type=int, choices=[0, 1], default=1)
     parser.add_argument("--control-label", type=int, choices=[0, 1], default=0)
-    add_fsta_arguments(parser)
+    add_stf_arguments(parser)
     args = parser.parse_args()
     args.dataset, args.profile = DATASET_CONFIG.name, DATASET_CONFIG
     if args.patient_label == args.control_label:

@@ -1,4 +1,4 @@
-"""Parameterized BEC estimation: FSTA composition, loss, and extraction.
+"""Parameterized BEC estimation: STF-BEC loss and extraction.
 
 Merged from: fsta_graph_bec, bec_extractor, losses, bec_refiner.
 """
@@ -12,10 +12,10 @@ from Graph_BEC.utils import fixed_window_starts
 
 
 # ---------------------------------------------------------------------------
-# 1.  Unsupervised FSTA window loss  (was losses)
+# 1.  Unsupervised STF-BEC window loss
 # ---------------------------------------------------------------------------
 
-class FSTAWindowLoss(nn.Module):
+class STFWindowLoss(nn.Module):
     MODES = ("original", "entropy")
 
     def __init__(self, mode="entropy", alpha=0.01, node_count=90, eps=1e-8):

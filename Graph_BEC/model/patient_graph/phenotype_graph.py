@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from Graph_BEC.model.normative_bec import (
+from Graph_BEC.model.patient_graph.reference_bec import (
     reference_weights,
 )
 

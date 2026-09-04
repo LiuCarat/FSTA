@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
-from Graph_BEC.model.normative_bec import apply_continuous_scaler, fit_continuous_scaler
+from Graph_BEC.model.patient_graph.reference_bec import apply_continuous_scaler, fit_continuous_scaler
 
 
 def fit_bec_scaler(train_bec):
