@@ -33,6 +33,43 @@ dataset/ADHD200/Phenotypic_Processing.csv
 | `WashU` | 60 |
 | **合计** | **798** |
 
+### Peking_2、Peking_3 和 WashU 的表型说明
+
+当前本地 `BIDS` 目录中已下载的站点独立表型文件只有部分站点，例如：
+
+```text
+KKI_phenotypic.csv
+NYU_phenotypic.csv
+OHSU_phenotypic.csv
+Peking_1_phenotypic.csv
+Pittsburgh_phenotypic.csv
+```
+
+FCP-INDI 的 `RawDataBIDS` 清单中没有单独的 `Peking_2_phenotypic.csv`、
+`Peking_3_phenotypic.csv` 或 `WashU_phenotypic.csv`。这不表示这三个站点没有数据：
+
+- 远程清单包含 `Peking_2`、`Peking_3` 和 `WashU` 的 BIDS 影像；
+- 当前 `Phenotypic_Processing.csv` 已包含这些站点筛选后的表型；
+- `Peking_3` 的 42 个被试和 `WashU` 的 60 个被试均能与远程影像被试 ID 对应；
+- 下载脚本按 `Phenotypic_Processing.csv` 的 `Site` 和 `ScanDir ID` 筛选，不依赖站点独立表型 CSV。
+
+因此，下载这两个站点时不要用 `--phenotype-only` 去寻找独立表型文件，而应使用：
+
+```bash
+python dataset/ADHD200/scripts/download_ADHD200.py \
+    --subject-audit dataset/ADHD200/Phenotypic_Processing.csv \
+    --site Peking_3 \
+    --workers 1
+
+python dataset/ADHD200/scripts/download_ADHD200.py \
+    --subject-audit dataset/ADHD200/Phenotypic_Processing.csv \
+    --site WashU \
+    --workers 1
+```
+
+这两个站点的表型来源是项目中整理好的总表，而不是远程 BIDS 目录下的独立
+`*_phenotypic.csv` 文件。
+
 `DX` 编码在 Graph-BEC 中按以下方式解释：
 
 - `DX=0`：对照组；

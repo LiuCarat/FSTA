@@ -14,8 +14,13 @@ from Graph_BEC.data.abide import (
 )
 from Graph_BEC.data.adhd200 import (
     ADHD200Record,
+    apply_category_imputer,
+    apply_numeric_imputer,
+    fit_category_imputer,
+    fit_numeric_imputer,
     load_adhd200_records,
     load_adhd200_time_series,
+    prepare_adhd_fold_arrays,
 )
 from Graph_BEC.data.common import (
     ROI_COUNT,
@@ -57,16 +62,16 @@ def load_subject_dataset(
         time_series = []
         window_ranges = []
         for record in records:
-            series, ranges = load_adhd200_time_series(
+            series = load_adhd200_time_series(
                 record,
                 profile.source_roi_count,
                 profile.roi_count,
                 standardize,
-                return_run_ranges=True,
             )
             time_series.append(series)
-            window_ranges.append(ranges)
         roi_count = profile.roi_count
+        # ADHD200 uses exactly one selected run per subject, like ABIDE.
+        window_ranges = None
     else:
         records = load_abide_records(data_root, pipeline, strategy, derivative, profile=profile)
         series_loader = lambda record: load_abide_time_series(record, standardize)

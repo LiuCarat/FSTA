@@ -16,7 +16,7 @@ from Graph_BEC.model.refinement import (
     train_pgr_refiner,
     train_qsr_refiner,
 )
-from Graph_BEC.data.adhd_utils import (
+from Graph_BEC.data.adhd200 import (
     apply_numeric_imputer,
     fit_numeric_imputer,
     prepare_adhd_fold_arrays,

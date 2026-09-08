@@ -8,6 +8,95 @@ from pathlib import Path
 import numpy as np
 
 from Graph_BEC.data.common import standardize_time_series, validate_time_series
+from Graph_BEC.utils.folds import prepare_fold_arrays
+
+
+def normalize_value(value):
+    value = str(value or "").strip()
+    if not value:
+        return ""
+    try:
+        number = float(value)
+    except ValueError:
+        return value
+    return str(int(number)) if number.is_integer() else str(number)
+
+
+def normalize_row(row):
+    return {
+        str(key).strip(): normalize_value(value)
+        for key, value in row.items()
+        if key is not None
+    }
+
+
+def fit_category_imputer(train_values):
+    values = np.asarray(train_values).astype(str)
+    if values.ndim == 1:
+        values = values[:, None]
+    modes = []
+    missing_values = {"", "-1", "nan", "None", "__MISSING__"}
+    for column in range(values.shape[1]):
+        observed = [value for value in values[:, column] if value not in missing_values]
+        modes.append(max(set(observed), key=observed.count) if observed else "__MISSING__")
+    return np.asarray(modes, dtype=object)
+
+
+def apply_category_imputer(values, modes):
+    values = np.asarray(values).astype(str)
+    if values.ndim == 1:
+        values = values[:, None]
+    output = values.copy()
+    missing = np.isin(output, ["", "-1", "nan", "None", "__MISSING__"])
+    for column, mode in enumerate(np.asarray(modes).tolist()):
+        output[missing[:, column], column] = mode
+    return output
+
+
+def fit_numeric_imputer(train_values, categorical_indices=()):
+    values = np.asarray(train_values, dtype=np.float64)
+    if values.ndim == 1:
+        values = values[:, None]
+    fills = np.nanmedian(values, axis=0)
+    for column in categorical_indices:
+        observed = values[np.isfinite(values[:, column]), column]
+        if len(observed):
+            unique, counts = np.unique(observed, return_counts=True)
+            fills[column] = unique[np.argmax(counts)]
+    fills[~np.isfinite(fills)] = 0.0
+    return fills.astype(np.float32)
+
+
+def apply_numeric_imputer(values, fills):
+    values = np.asarray(values, dtype=np.float32)
+    if values.ndim == 1:
+        values = values[:, None]
+    return np.where(np.isfinite(values), values, np.asarray(fills, dtype=np.float32))
+
+
+def prepare_adhd_fold_arrays(
+    train_bec, val_bec, test_bec,
+    train_cont, val_cont, test_cont,
+    train_cat, val_cat, test_cat,
+):
+    category_fills = fit_category_imputer(train_cat)
+    train_cat, val_cat, test_cat = (
+        apply_category_imputer(values, category_fills)
+        for values in (train_cat, val_cat, test_cat)
+    )
+    continuous_fills = fit_numeric_imputer(train_cont)
+    train_cont, val_cont, test_cont = (
+        apply_numeric_imputer(values, continuous_fills)
+        for values in (train_cont, val_cont, test_cont)
+    )
+    arrays = prepare_fold_arrays(
+        train_bec, val_bec, test_bec,
+        train_cont, val_cont, test_cont,
+        train_cat, val_cat, test_cat,
+    )
+    arrays["adhd_continuous_imputer"] = continuous_fills
+    arrays["adhd_category_imputer"] = category_fills
+    return arrays
 
 
 @dataclass(frozen=True)
@@ -17,95 +106,56 @@ class ADHD200Record:
     label: int
     diagnosis: str
     time_series_path: Path
-    time_series_paths: tuple[Path, ...]
 
 
 def load_adhd200_records(data_root, profile, patient_label=1, control_label=0):
     data_root = Path(data_root)
     delimiter = "\t" if profile.phenotype_format == "tsv" else ","
     with Path(profile.phenotype_path).open(newline="", encoding="utf-8-sig") as handle:
-        rows = {
-            str(row[profile.phenotype_id_column]).strip(): row
-            for row in csv.DictReader(handle, delimiter=delimiter)
-            if str(row.get(profile.phenotype_id_column, "")).strip()
-        }
-    records = []
-    cleaned_root = data_root / "cleaned" / "AAL_TCs_filtfix"
-    series_root = cleaned_root if cleaned_root.is_dir() else data_root / "AAL_TCs_filtfix"
+        rows = {}
+        for raw_row in csv.DictReader(handle, delimiter=delimiter):
+            row = normalize_row(raw_row)
+            subject = normalize_value(row.get(profile.phenotype_id_column))
+            if subject:
+                rows[subject] = row
+
     flat_root = data_root / "cpac" / "filt_noglobal"
-    excluded = {
-        f"{subject_id.split('/', 1)[0]}/{str(int(subject_id.split('/', 1)[1]))}"
-        if "/" in subject_id and subject_id.split("/", 1)[1].isdigit()
-        else subject_id
-        for subject_id in profile.exclude_subjects
-    }
     flat_paths = sorted(flat_root.glob("*_rois_aal.1D")) if flat_root.is_dir() else []
-    if flat_paths:
-        for time_series_path in flat_paths:
-            normalized_id = time_series_path.name.removesuffix("_rois_aal.1D")
-            normalized_id = normalized_id.removeprefix("sub-")
-            normalized_id = str(int(normalized_id)) if normalized_id.isdigit() else normalized_id
-            row = rows.get(normalized_id)
-            if row is None:
-                continue
-            diagnosis = str(row.get(profile.patient_column, "")).strip()
-            if diagnosis in profile.patient_values:
-                label = patient_label
-            elif diagnosis in profile.control_values:
-                label = control_label
-            else:
-                continue
-            site_id = str(row.get(profile.site_column, "")).strip() or "unknown"
-            subject_id = normalized_id
-            records.append(ADHD200Record(
-                subject_id=subject_id,
-                site_id=site_id,
-                label=label,
-                diagnosis=diagnosis,
-                time_series_path=time_series_path,
-                time_series_paths=(time_series_path,),
-            ))
-    if flat_paths:
-        site_dirs = []
-    else:
-        site_dirs = sorted(path for path in series_root.iterdir() if path.is_dir()) if series_root.is_dir() else []
-    for site_dir in site_dirs:
-        for subject_dir in sorted(path for path in site_dir.iterdir() if path.is_dir()):
-            subject_id = f"{site_dir.name}/{subject_dir.name}"
-            if subject_id in excluded:
-                continue
-            normalized_id = subject_dir.name
-            if normalized_id.isdigit():
-                normalized_id = str(int(normalized_id))
-            row = rows.get(normalized_id)
-            if row is None:
-                continue
-            diagnosis = str(row.get(profile.patient_column, "")).strip()
-            if diagnosis in profile.patient_values:
-                label = patient_label
-            elif diagnosis in profile.control_values:
-                label = control_label
-            else:
-                continue
-            candidates = sorted(
-                path for path in subject_dir.glob("*_aal_TCs.1D")
-                if "*" not in path.name and path.stat().st_size > 0
-            )
-            if not candidates:
-                continue
-            preferred = [path for path in candidates if path.name.startswith("sfnwmrda")]
-            selected_paths = tuple(preferred or candidates)
-            records.append(ADHD200Record(
-                subject_id=subject_id,
-                site_id=site_dir.name,
-                label=label,
-                diagnosis=diagnosis,
-                time_series_path=selected_paths[0],
-                time_series_paths=selected_paths,
-            ))
+    excluded = {str(subject_id).strip() for subject_id in profile.exclude_subjects}
+    records = []
+    for time_series_path in flat_paths:
+        subject_id = time_series_path.name.removesuffix("_rois_aal.1D")
+        subject_id = subject_id.removeprefix("sub-")
+        subject_id = str(int(subject_id)) if subject_id.isdigit() else subject_id
+        if subject_id in excluded:
+            continue
+        row = rows.get(subject_id)
+        if row is None:
+            continue
+        diagnosis = normalize_value(row.get(profile.patient_column))
+        if diagnosis in profile.patient_values:
+            label = patient_label
+        elif diagnosis in profile.control_values:
+            label = control_label
+        else:
+            continue
+        records.append(ADHD200Record(
+            subject_id=subject_id,
+            site_id=str(row.get(profile.site_column, "")).strip() or "unknown",
+            label=label,
+            diagnosis=diagnosis,
+            time_series_path=time_series_path,
+        ))
     if not records:
+        diagnosis_values = sorted({row.get(profile.patient_column, "") for row in rows.values()})
+        if diagnosis_values == [""]:
+            raise ValueError(
+                f"ADHD phenotype column {profile.patient_column!r} is empty in "
+                f"{profile.phenotype_path}; restore the original ADHD200 diagnosis labels "
+                "before running Graph_BEC"
+            )
         raise FileNotFoundError(
-            f"No ADHD200 ROI files matched phenotype records in {flat_root} or {series_root}"
+            f"No ADHD200 ROI files matched phenotype records in {flat_root}"
         )
     return records
 
@@ -115,36 +165,25 @@ def load_adhd200_time_series(
     source_roi_count=116,
     roi_count=90,
     standardize=True,
-    return_run_ranges=False,
 ):
-    runs = []
-    run_ranges = []
-    offset = 0
-    for path in record.time_series_paths:
-        time_series = np.loadtxt(
-            path,
-            dtype=np.float32,
-            skiprows=1,
-            usecols=np.arange(2, 2 + source_roi_count),
-        )
-        if time_series.ndim != 2 or time_series.shape[1] != source_roi_count:
-            raise ValueError(
-                f"Expected [{record.subject_id}] data with "
-                f"{source_roi_count} ROI columns in {path.name}, got {time_series.shape}"
-            )
-        if not np.isfinite(time_series).all():
-            raise ValueError(f"Non-finite values found for {record.subject_id}: {path.name}")
-        time_series = time_series[:, :roi_count]
-        if standardize:
-            time_series = standardize_time_series(time_series)
-        time_series = validate_time_series(time_series, record.subject_id, roi_count)
-        runs.append(time_series)
-        run_ranges.append((offset, offset + len(time_series)))
-        offset += len(time_series)
-
-    combined = validate_time_series(
-        np.concatenate(runs, axis=0), record.subject_id, roi_count
+    # ADHD200 is now represented by one selected run per subject, matching
+    # the ABIDE loader. Do not concatenate multiple runs into one sequence.
+    path = record.time_series_path
+    time_series = np.loadtxt(
+        path,
+        dtype=np.float32,
+        skiprows=1,
+        usecols=np.arange(2, 2 + source_roi_count),
     )
-    if return_run_ranges:
-        return combined, tuple(run_ranges)
+    if time_series.ndim != 2 or time_series.shape[1] != source_roi_count:
+        raise ValueError(
+            f"Expected [{record.subject_id}] data with "
+            f"{source_roi_count} ROI columns in {path.name}, got {time_series.shape}"
+        )
+    if not np.isfinite(time_series).all():
+        raise ValueError(f"Non-finite values found for {record.subject_id}: {path.name}")
+    combined = time_series[:, :roi_count]
+    if standardize:
+        combined = standardize_time_series(combined)
+    combined = validate_time_series(combined, record.subject_id, roi_count)
     return combined
