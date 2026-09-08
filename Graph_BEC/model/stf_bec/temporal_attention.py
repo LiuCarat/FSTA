@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
-from .spatial_attention import MultiHeadAttention
+from .spatial_attention import SpatialMultiHeadAttention
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -34,7 +34,9 @@ class STMultiHeadAtt(nn.Module):
     def __init__(self, d_model, n_head, d_k, d_v, dropout=0.1):
         # d_model:embedding size
         super(STMultiHeadAtt, self).__init__()
-        self.slf_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
+        self.slf_attn = SpatialMultiHeadAttention(
+            n_head, d_model, d_k, d_v, dropout=dropout
+        )
     def forward(self, enc_input, slf_attn_mask=None):
         # enc_input: [B, len1, len2, d_model]
         # temporal:[B, N, T, d_model], spatial:[B, T, N, d_model], len1、len2 correspond to T or N

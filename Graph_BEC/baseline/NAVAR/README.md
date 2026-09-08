@@ -53,6 +53,29 @@ python Graph_BEC/baseline/NAVAR/run_navar_baseline.py \
   --gpu-id auto
 ```
 
+ADHD200 uses the shared loader with
+`dataset/ADHD200/Phenotypic_Processing.csv` and
+`dataset/ADHD200/cpac/filt_noglobal/*_rois_aal.1D`. `DX=0` is the control
+group, while `DX=1/2/3` is mapped to the patient group. The loader reads 116
+source ROIs and keeps the first 90, matching NAVAR's input size. ADHD200
+outputs default to `outputs/adhd200/`.
+
+Quick ADHD200 generation smoke test:
+
+```bash
+python Graph_BEC/baseline/NAVAR/run_navar_baseline.py \
+  --dataset adhd200 \
+  --data-root ./dataset/ADHD200 \
+  --max-subjects 2 \
+  --epochs 1 \
+  --batch-size 16 \
+  --generation-only \
+  --gpu-id cpu \
+  --output-dir Graph_BEC/baseline/NAVAR/outputs/smoke_adhd200 \
+  --bec-path Graph_BEC/baseline/NAVAR/outputs/smoke_adhd200/subject_navar_bec_adhd200.npz \
+  --regenerate-bec
+```
+
 For a quick smoke test, reduce both NAVAR and classifier training:
 
 ```bash

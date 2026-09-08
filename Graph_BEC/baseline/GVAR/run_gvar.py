@@ -32,7 +32,8 @@ def parse_args():
     selector.add_argument("--dataset", choices=["abide", "abide_ii", "adhd200"], default="abide")
     selected, _ = selector.parse_known_args()
     profile = get_profile(selected.dataset)
-    output_dir = Path(__file__).resolve().parent / "outputs"
+    output_root = Path(__file__).resolve().parent / "outputs"
+    output_dir = output_root if profile.name == "abide" else output_root / profile.name
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", choices=["abide", "abide_ii", "adhd200"], default=profile.name)
@@ -53,7 +54,11 @@ def parse_args():
     parser.add_argument("--lag-decay", type=float, default=1.0)
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--output-dir", type=Path, default=output_dir)
-    parser.add_argument("--bec-path", type=Path, default=output_dir / f"subject_gvar_bec_{profile.name}.npz")
+    parser.add_argument(
+        "--bec-path",
+        type=Path,
+        default=output_dir / f"subject_gvar_bec_{profile.name}.npz",
+    )
     parser.add_argument("--max-subjects", type=int, default=None)
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--seed", type=int, default=42)

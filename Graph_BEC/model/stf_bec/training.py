@@ -12,7 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 from .encoder import STFEncoder
 from .optim import ScheduledOptim
-from .losses import STFWindowLoss
+from .utils import STFWindowLoss
 from Graph_BEC.utils import RandomSubjectWindowDataset, set_seed
 
 

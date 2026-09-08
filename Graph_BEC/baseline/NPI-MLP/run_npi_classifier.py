@@ -45,7 +45,8 @@ def parse_args():
     )
     selected, _ = selector.parse_known_args()
     profile = get_profile(selected.dataset)
-    output_dir = BASELINE_DIR / "outputs"
+    output_root = BASELINE_DIR / "outputs"
+    output_dir = output_root if profile.name == "abide" else output_root / profile.name
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

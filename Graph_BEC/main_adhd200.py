@@ -41,7 +41,7 @@ def add_stf_arguments(parser):
     group.add_argument("--epochs", type=int, default=131)
     group.add_argument("--stf-checkpoint", choices=["final", "best"], default='final')
     group.add_argument("--loss-mode", choices=["original", "entropy"], default='entropy')
-    group.add_argument("--loss-alpha", type=float, default=0.03)
+    group.add_argument("--loss-alpha", type=float, default=0.01)
     group.add_argument("--batch-size", type=int, default=32)
     group.add_argument("--log-every", type=int, default=20)
     group.add_argument("--d-model", type=int, default=16)
@@ -97,17 +97,17 @@ def parse_args():
     parser.add_argument("--variance-retention", type=float, default=0.85)
 
     parser.add_argument("--qsr-qc-columns", nargs="+", default=list(QC_COLUMNS))
-    parser.add_argument("--qsr-epochs", type=int, default=80)
-    parser.add_argument("--qsr-lr", type=float, default=0.03)
+    parser.add_argument("--qsr-epochs", type=int, default=100)
+    parser.add_argument("--qsr-lr", type=float, default=0.03) #0.003
     parser.add_argument("--qsr-hidden-channels", type=int, default=8)
-    parser.add_argument("--qsr-eta", type=float, default=0.3)
-    parser.add_argument("--qsr-r-max", type=float, default=0.05)
+    parser.add_argument("--qsr-eta", type=float, default=0.5) #0.5
+    parser.add_argument("--qsr-r-max", type=float, default=0.03) #0.03
     parser.add_argument("--qsr-corruption-scale", type=float, default=0.5)
-    parser.add_argument("--qsr-gate-max", type=float, default=0.4)
-    parser.add_argument("--qsr-gate-weight", type=float, default=0.0001)
-    parser.add_argument("--qsr-variance-weight", type=float, default=0.15)
+    parser.add_argument("--qsr-gate-max", type=float, default=0.5)
+    parser.add_argument("--qsr-gate-weight", type=float, default=0.01)
+    parser.add_argument("--qsr-variance-weight", type=float, default=0.3)
     parser.add_argument("--qsr-variance-retention", type=float, default=0.85)
-    parser.add_argument("--qsr-basis-ridge", type=float, default=0.02)
+    parser.add_argument("--qsr-basis-ridge", type=float, default=0.01)
 
     parser.add_argument("--classifier-epochs", type=int, default=60)
     parser.add_argument("--classifier-patience", type=int, default=12)

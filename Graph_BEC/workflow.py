@@ -10,12 +10,8 @@ from Graph_BEC.model.patient_graph.reference_bec import (
     normative_reference,
 )
 from Graph_BEC.model.patient_graph import build_reference_graph, fused_graph, topk_graph
-from Graph_BEC.model.refinement import (
-    apply_pgr_refiner,
-    apply_qsr_refiner,
-    train_pgr_refiner,
-    train_qsr_refiner,
-)
+from Graph_BEC.model.pgr_bec_ablation import apply_pgr_refiner, train_pgr_refiner
+from Graph_BEC.model.qsr_bec.qsr_model import apply_qsr_refiner, train_qsr_refiner
 from Graph_BEC.data.adhd200 import (
     apply_numeric_imputer,
     fit_numeric_imputer,

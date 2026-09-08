@@ -8,6 +8,7 @@ import numpy as np
 
 
 DEFAULT_QC_COLUMNS = ("func_mean_fd", "func_dvars", "func_quality")
+QC_GOODNESS_COLUMNS = frozenset(("func_quality",))
 
 
 def _subject_row(rows, subject_id):
@@ -29,7 +30,7 @@ def _parse_numeric(value):
 
 
 def load_aligned_qc(csv_path, subject_ids, columns=DEFAULT_QC_COLUMNS, profile=None):
-    """Load QC values in the same order as the BEC archive."""
+    """Load QC values in BEC order, preserving quality goodness scores."""
     columns = tuple(columns)
     identifier = profile.phenotype_id_column if profile else "FILE_ID"
     delimiter = "\t" if profile and profile.phenotype_format == "tsv" else ","
@@ -57,7 +58,7 @@ def load_aligned_qc(csv_path, subject_ids, columns=DEFAULT_QC_COLUMNS, profile=N
 
 
 def fit_qc_scaler(train_qc):
-    """Fit log-IQR QC normalization using only one training fold."""
+    """Fit log-IQR QC score normalization using only one training fold."""
     values = np.asarray(train_qc, dtype=np.float64)
     if values.ndim != 2 or not len(values):
         raise ValueError("train_qc must be a non-empty [subjects, features] array")
@@ -77,7 +78,7 @@ def fit_qc_scaler(train_qc):
 
 
 def transform_qc_badness(qc, scaler):
-    """Return one-sided, fold-normalized QC badness scores."""
+    """Return one-sided, fold-normalized QC scores."""
     values = np.asarray(qc, dtype=np.float64)
     fill = np.asarray(scaler["fill"], dtype=np.float64)
     values = np.where(np.isfinite(values), values, fill)

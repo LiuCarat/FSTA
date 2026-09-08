@@ -1,8 +1,11 @@
 """STF-BEC encoder for subject-specific directed BEC estimation."""
 import torch
 import torch.nn as nn
-from .temporal_attention import PositionalEncoding, STMultiHeadAtt
-from .feed_forward import PositionwiseFeedForward
+from .temporal_attention import (
+    PositionalEncoding,
+    PositionwiseFeedForward,
+    STMultiHeadAtt,
+)
 from .spectral_block import FourierAtt
 
 
@@ -49,4 +52,3 @@ class STFEncoder(nn.Module):
             spatial_features, temporal_features, spatial_attention
         )
         return reconstruction, spatial_attention
-

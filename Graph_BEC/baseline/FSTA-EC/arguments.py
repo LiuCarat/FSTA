@@ -5,7 +5,12 @@ from __future__ import annotations
 
 def add_fsta_arguments(parser):
     group = parser.add_argument_group("FSTA-EC baseline")
-    group.add_argument("--window-length", type=int, default=80)
+    group.add_argument(
+        "--window-length",
+        type=int,
+        default=None,
+        help="window length; defaults to 80 for ABIDE and 75 for ADHD200",
+    )
     group.add_argument("--stride", type=int, default=40)
     group.add_argument("--epochs", type=int, default=51)
     group.add_argument("--alpha-sp", type=float, default=0.8)

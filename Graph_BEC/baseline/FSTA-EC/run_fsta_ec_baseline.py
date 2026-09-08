@@ -33,7 +33,8 @@ def parse_args():
     )
     selected, _ = selector.parse_known_args()
     profile = get_profile(selected.dataset)
-    output_dir = Path(__file__).resolve().parent / "outputs"
+    output_root = Path(__file__).resolve().parent / "outputs"
+    output_dir = output_root if profile.name == "abide" else output_root / profile.name
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -46,7 +47,11 @@ def parse_args():
     parser.add_argument("--strategy", default="filt_noglobal")
     parser.add_argument("--derivative", default="rois_aal")
     parser.add_argument("--output-dir", type=Path, default=output_dir)
-    parser.add_argument("--bec-path", type=Path, default=output_dir / f"subject_fsta_ec_bec_{profile.name}.npz")
+    parser.add_argument(
+        "--bec-path",
+        type=Path,
+        default=output_dir / f"subject_fsta_ec_bec_{profile.name}.npz",
+    )
     parser.add_argument("--max-subjects", type=int)
     parser.add_argument("--gpu-id", default="auto")
     parser.add_argument("--seed", type=int, default=42)
@@ -62,7 +67,10 @@ def parse_args():
     parser.add_argument("--generation-only", action="store_true")
     parser.add_argument("--classification-only", action="store_true")
     add_fsta_arguments(parser)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.window_length is None:
+        args.window_length = 75 if args.dataset == "adhd200" else 80
+    return args
 
 
 def fsta_config(args):
@@ -200,6 +208,8 @@ def validate_args(args):
         raise ValueError("generation-only and classification-only cannot be used together")
     if args.window_length < 1 or args.stride < 1 or args.epochs < 1:
         raise ValueError("window-length, stride, and epochs must be positive")
+    if args.stride > args.window_length:
+        raise ValueError("stride must not be greater than window-length")
 
 
 def main():
@@ -216,6 +226,18 @@ def main():
             derivative=args.derivative, profile=profile, standardize=True,
             max_subjects=args.max_subjects, patient_label=args.patient_label,
             control_label=args.control_label,
+        )
+        shortest_series = min(series.shape[0] for series in dataset["time_series"])
+        if shortest_series < args.window_length:
+            raise ValueError(
+                f"window-length={args.window_length} exceeds the shortest loaded "
+                f"time series ({shortest_series} frames); use --window-length "
+                f"{shortest_series} or smaller"
+            )
+        print(
+            f"loaded {len(dataset['records'])} subjects; "
+            f"window-length={args.window_length}, shortest-series={shortest_series}",
+            flush=True,
         )
         archive = generate_archive(args, dataset, device)
     print(f"FSTA-EC archive: {args.bec_path}; shape={archive['bec'].shape}; device={device}", flush=True)

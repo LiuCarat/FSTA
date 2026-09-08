@@ -116,3 +116,28 @@ python Graph_BEC/baseline/NPI-MLP/run_npi_classifier.py \
   --npi-batch-size 16 \
   --generation-only
 ```
+
+## ADHD200
+
+ADHD200 uses the shared loader with
+`dataset/ADHD200/Phenotypic_Processing.csv` and
+`dataset/ADHD200/cpac/filt_noglobal/*_rois_aal.1D`. `DX=0` is the control
+group, while `DX=1/2/3` is mapped to the patient group. The loader keeps the
+first 90 of the 116 source ROIs, matching the NPI-MLP input size. Outputs
+default to `Graph_BEC/baseline/NPI-MLP/outputs/adhd200/`.
+
+Quick ADHD200 generation smoke test:
+
+```bash
+python Graph_BEC/baseline/NPI-MLP/run_npi_classifier.py \
+  --dataset adhd200 \
+  --data-root ./dataset/ADHD200 \
+  --max-subjects 2 \
+  --npi-epochs 1 \
+  --npi-batch-size 16 \
+  --generation-only \
+  --gpu-id cpu \
+  --output-dir Graph_BEC/baseline/NPI-MLP/outputs/smoke_adhd200 \
+  --bec-path Graph_BEC/baseline/NPI-MLP/outputs/smoke_adhd200/subject_npi_mlp_bec_adhd200.npz \
+  --regenerate-bec
+```

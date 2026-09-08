@@ -12,7 +12,7 @@ dataset/ADHD200/Phenotypic_Processing.csv
 
 当前文件包含 **798 个受试者**。筛选条件为：
 
-- `Age`、`Gender`、`Full4 IQ` 和 `Handedness` 均有值；
+- `Age`、`Gender` 和 `Handedness` 均有记录；`Full4 IQ` 允许使用 ADHD200 的缺失编码 `-999`，Graph-BEC 会将其按缺失值处理；
 - 至少有一个 T1w 文件；
 - 至少有一个 BOLD 文件；
 - 排除 `DX=pending`；
@@ -95,7 +95,7 @@ Full4 IQ
 - `Age` 使用岁为单位，可以是小数，例如 `12.36`；
 - `Handedness` 是利手评分，部分站点使用连续值，不应强行转换为整数；
 - `DX` 是 ADHD200 的诊断编码；
-- `Full4 IQ` 用作 Graph-BEC 的连续表型协变量。
+- `Full4 IQ` 用作 Graph-BEC 的连续表型协变量；`-999` 不代表真实 IQ，会在建图和 QSR 混杂回归前进行折内中位数填补。
 
 fMRIPrep 本身不依赖 `DX`，但 Graph-BEC 训练需要有效的患者/对照标签。
 
@@ -234,7 +234,7 @@ python dataset/ADHD200/scripts/extract_aal90.py \
   - `func_dvars`；
   - `func_quality`。
 
-其中 `func_quality` 是 FD 不超过 `0.2` 的帧比例。这个步骤会重新生成带 QC 的 `Phenotypic_Processing.csv`，因此最终训练前不要手工删除 QC 列。
+其中 `func_quality` 是 FD 不超过 `0.2` 的帧比例，属于 quality goodness 指标，数值越高表示质量越好；加载到 QSR-BEC 后保留原始 goodness 数值，后续仍沿用原有 QC 标准化、basis 和 QSR 训练流程。这个步骤会重新生成带 QC 的 `Phenotypic_Processing.csv`，因此最终训练前不要手工删除 QC 列。
 
 ## Graph-BEC 训练
 

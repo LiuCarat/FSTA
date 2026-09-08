@@ -1,4 +1,4 @@
-"""Run the VarCoNet representation baseline on ABIDE-I or ABIDE-II.
+"""Run the VarCoNet representation baseline on ABIDE-I, ABIDE-II, or ADHD200.
 
 The original VarCoNet paper repository expects pre-packed ``ABIDE*_nilearn``
 files and contains several unrelated experiments.  This entry point uses the
@@ -33,12 +33,18 @@ from Graph_BEC.baseline.VarCoNet.model_scripts.VarCoNet import VarCoNet
 
 def parse_args():
     selector = argparse.ArgumentParser(add_help=False)
-    selector.add_argument("--dataset", choices=("abide", "abide_ii"), default="abide")
+    selector.add_argument(
+        "--dataset", choices=("abide", "abide_ii", "adhd200"), default="abide"
+    )
     selected, _ = selector.parse_known_args()
     profile = get_profile(selected.dataset)
     output_dir = Path(__file__).resolve().parent / "outputs" / profile.name
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", choices=("abide", "abide_ii"), default=profile.name)
+    parser.add_argument(
+        "--dataset",
+        choices=("abide", "abide_ii", "adhd200"),
+        default=profile.name,
+    )
     parser.add_argument("--data-root", type=Path, default=profile.data_root)
     parser.add_argument("--pipeline", default="cpac")
     parser.add_argument("--strategy", default="filt_noglobal")
@@ -235,23 +241,56 @@ def main():
     if args.classification_only:
         archive = load_archive(representation_path)
     else:
-        dataset = load_subject_dataset(args.data_root, pipeline=args.pipeline, strategy=args.strategy, derivative=args.derivative, profile=profile, standardize=True, max_subjects=args.max_subjects)
+        dataset = load_subject_dataset(
+            args.data_root,
+            pipeline=args.pipeline,
+            strategy=args.strategy,
+            derivative=args.derivative,
+            profile=profile,
+            standardize=True,
+            max_subjects=args.max_subjects,
+            patient_label=1,
+            control_label=0,
+        )
         max_length = max(len(series) for series in dataset["time_series"])
-        matrices = []
-        rows = []
-        splits = list(make_stratified_splits(dataset["labels"], args.n_splits, args.seed, args.validation_size))
-        for fold, train_idx, val_idx, test_idx in splits:
-            print(f"training VarCoNet representation for fold {fold}")
-            model = train_encoder([dataset["time_series"][i] for i in train_idx], dataset["time_series"][0].shape[1], args, device, max_length, args.seed + fold)
-            train_fc = encode(model, [dataset["time_series"][i] for i in train_idx], device, max_length, dataset["time_series"][0].shape[1])
-            val_fc = encode(model, [dataset["time_series"][i] for i in val_idx], device, max_length, dataset["time_series"][0].shape[1])
-            test_fc = encode(model, [dataset["time_series"][i] for i in test_idx], device, max_length, dataset["time_series"][0].shape[1])
-            rows.extend(classify_fold(args, train_fc, dataset["labels"][train_idx], val_fc, dataset["labels"][val_idx], test_fc, dataset["labels"][test_idx], device, fold))
-            save_results(output_dir, rows)
-            if fold == 1:
-                matrices.append(encode(model, dataset["time_series"], device, max_length, dataset["time_series"][0].shape[1]))
-        archive = {"bec": matrices[0], "labels": dataset["labels"], "subject_ids": dataset["subject_ids"], "site_ids": dataset["site_ids"]}
-        save_archive(representation_path, archive["bec"], dataset, args)
+        max_length = max(len(series) for series in dataset["time_series"])
+        roi_count = dataset["time_series"][0].shape[1]
+        if args.generation_only:
+            print("training VarCoNet representation on all selected subjects")
+            model = train_encoder(
+                dataset["time_series"],
+                roi_count,
+                args,
+                device,
+                max_length,
+                args.seed,
+            )
+            representations = encode(
+                model, dataset["time_series"], device, max_length, roi_count
+            )
+            archive = {
+                "bec": representations,
+                "labels": dataset["labels"],
+                "subject_ids": dataset["subject_ids"],
+                "site_ids": dataset["site_ids"],
+            }
+            save_archive(representation_path, representations, dataset, args)
+        else:
+            matrices = []
+            rows = []
+            splits = list(make_stratified_splits(dataset["labels"], args.n_splits, args.seed, args.validation_size))
+            for fold, train_idx, val_idx, test_idx in splits:
+                print(f"training VarCoNet representation for fold {fold}")
+                model = train_encoder([dataset["time_series"][i] for i in train_idx], roi_count, args, device, max_length, args.seed + fold)
+                train_fc = encode(model, [dataset["time_series"][i] for i in train_idx], device, max_length, roi_count)
+                val_fc = encode(model, [dataset["time_series"][i] for i in val_idx], device, max_length, roi_count)
+                test_fc = encode(model, [dataset["time_series"][i] for i in test_idx], device, max_length, roi_count)
+                rows.extend(classify_fold(args, train_fc, dataset["labels"][train_idx], val_fc, dataset["labels"][val_idx], test_fc, dataset["labels"][test_idx], device, fold))
+                save_results(output_dir, rows)
+                if fold == 1:
+                    matrices.append(encode(model, dataset["time_series"], device, max_length, roi_count))
+            archive = {"bec": matrices[0], "labels": dataset["labels"], "subject_ids": dataset["subject_ids"], "site_ids": dataset["site_ids"]}
+            save_archive(representation_path, archive["bec"], dataset, args)
     print(f"VarCoNet representation: {representation_path} shape={archive['bec'].shape}")
     if args.generation_only: return
     if args.classification_only:

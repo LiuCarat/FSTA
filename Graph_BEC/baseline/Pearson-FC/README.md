@@ -42,13 +42,22 @@ python Graph_BEC/baseline/Pearson-FC/run_pearson_fc.py \
 
 The ABIDE-II profile uses `dataset/ABIDE-II/Phenotypic_Processing.csv` and
 the ROI files under `dataset/ABIDE-II/cpac/filt_noglobal/` by default. Its
-archive is saved as `subject_fc_abide_ii.npz` in the same `outputs` folder.
+archive is saved as `subject_fc_abide_ii.npz` under
+`Graph_BEC/baseline/Pearson-FC/outputs/abide_ii/` by default.
+
+ADHD200 uses `dataset/ADHD200/Phenotypic_Processing.csv` and
+`dataset/ADHD200/cpac/filt_noglobal/` by default. `DX=0` is the control group,
+and `DX=1/2/3` is mapped to the patient group. The shared loader reads 116
+source ROIs and keeps the first 90, matching the other Graph-BEC baselines.
+ADHD200 archives and classification results are stored under
+`Graph_BEC/baseline/Pearson-FC/outputs/adhd200/` by default.
 
 Because Pearson FC has no learned generation stage, the matrix generation is
-fast. The FC archive and classifier outputs are written under. Files are dataset-specific so ABIDE and ADHD200 do not overwrite each other:
+fast. The FC archive and classifier outputs are dataset-specific so ABIDE and
+ADHD200 do not overwrite each other:
 
 ```text
-Graph_BEC/baseline/Pearson-FC/outputs/
+Graph_BEC/baseline/Pearson-FC/outputs/<dataset>/
 ```
 
 Useful options:

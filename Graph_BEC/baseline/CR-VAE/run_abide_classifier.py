@@ -34,19 +34,30 @@ from models.cgru_error import CRVAE, train_phase1
 
 def parse_args():
     selector = argparse.ArgumentParser(add_help=False)
-    selector.add_argument("--dataset", choices=["abide", "abide_ii"], default="abide")
+    selector.add_argument(
+        "--dataset", choices=["abide", "abide_ii", "adhd200"], default="abide"
+    )
     selected, _ = selector.parse_known_args()
     profile = get_profile(selected.dataset)
-    output_dir = Path(__file__).parent / "outputs"
+    output_root = Path(__file__).parent / "outputs"
+    output_dir = output_root if profile.name == "abide" else output_root / profile.name
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", choices=["abide", "abide_ii"], default=profile.name)
+    parser.add_argument(
+        "--dataset",
+        choices=["abide", "abide_ii", "adhd200"],
+        default=profile.name,
+    )
     parser.add_argument("--data-root", type=Path, default=profile.data_root)
     parser.add_argument("--pipeline", default="cpac")
     parser.add_argument("--strategy", default="filt_noglobal")
     parser.add_argument("--derivative", default="rois_aal")
     parser.add_argument("--max-subjects", type=int, default=None)
     parser.add_argument("--output-dir", type=Path, default=output_dir)
-    parser.add_argument("--bec-path", type=Path, default=output_dir / f"subject_bec_{profile.name}.npz")
+    parser.add_argument(
+        "--bec-path",
+        type=Path,
+        default=output_dir / f"subject_bec_{profile.name}.npz",
+    )
     parser.add_argument("--regenerate-bec", action="store_true")
     parser.add_argument("--generation-only", action="store_true")
     parser.add_argument("--classification-only", action="store_true")
@@ -290,6 +301,10 @@ def validate_args(args):
         raise ValueError("--patient-label and --control-label must be different")
     if args.crvae_context < 11:
         raise ValueError("--crvae-context must be at least 11 for this CR-VAE code")
+    if args.crvae_batch_size < 1:
+        raise ValueError("--crvae-batch-size must be positive")
+    if args.crvae_check_every < 1:
+        raise ValueError("--crvae-check-every must be positive")
     if args.crvae_max_iter < 1:
         raise ValueError("--crvae-max-iter must be positive")
     if args.classifier_repeats < 1:

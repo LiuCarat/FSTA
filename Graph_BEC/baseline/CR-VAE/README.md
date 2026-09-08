@@ -1,8 +1,8 @@
 # CR-VAE
 
 `run_abide_classifier.py` evaluates whether subject-level CR-VAE causal
-matrices can distinguish ASD from TC. It does not modify the Graph-BEC main
-program.
+matrices can distinguish the patient and control groups. It supports ABIDE-I,
+ABIDE-II, and ADHD200, and does not modify the Graph-BEC main program.
 
 ## Evaluation protocol
 
@@ -106,6 +106,47 @@ python Graph_BEC/baseline/CR-VAE/run_abide_classifier.py \
   --classifier-patience 20 \
   --output-dir Graph_BEC/baseline/CR-VAE/outputs/abide_ii \
   --bec-path Graph_BEC/baseline/CR-VAE/outputs/abide_ii/subject_bec_abide_ii.npz \
+  --regenerate-bec
+```
+
+## ADHD200
+
+ADHD200 uses the shared loader and the prepared files under
+`dataset/ADHD200/cpac/filt_noglobal/`. The phenotype file is
+`dataset/ADHD200/Phenotypic_Processing.csv`; `DX=0` is the control group and
+`DX=1/2/3` is mapped to the patient group. The loader reads the 116 source
+ROIs and uses the first 90, matching the rest of Graph-BEC.
+
+Generate subject BECs and run classification:
+
+```bash
+python Graph_BEC/baseline/CR-VAE/run_abide_classifier.py \
+  --dataset adhd200 \
+  --data-root dataset/ADHD200 \
+  --gpu-id auto \
+  --crvae-context 20 \
+  --crvae-hidden 64 \
+  --crvae-max-iter 500 \
+  --crvae-batch-size 128 \
+  --n-splits 10 \
+  --output-dir Graph_BEC/baseline/CR-VAE/outputs/adhd200 \
+  --bec-path Graph_BEC/baseline/CR-VAE/outputs/adhd200/subject_bec_adhd200.npz \
+  --regenerate-bec
+```
+
+For a smoke test, limit the number of subjects and iterations. Use
+`--generation-only` to validate BEC generation before starting classification:
+
+```bash
+python Graph_BEC/baseline/CR-VAE/run_abide_classifier.py \
+  --dataset adhd200 \
+  --data-root dataset/ADHD200 \
+  --max-subjects 2 \
+  --crvae-max-iter 10 \
+  --crvae-batch-size 64 \
+  --generation-only \
+  --output-dir Graph_BEC/baseline/CR-VAE/outputs/smoke_adhd200 \
+  --bec-path Graph_BEC/baseline/CR-VAE/outputs/smoke_adhd200/subject_bec.npz \
   --regenerate-bec
 ```
 

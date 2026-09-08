@@ -30,7 +30,8 @@ def parse_args():
     selector.add_argument("--dataset", choices=["abide", "abide_ii", "adhd200"], default="abide")
     selected, _ = selector.parse_known_args()
     profile = get_profile(selected.dataset)
-    output_dir = Path(__file__).resolve().parent / "outputs"
+    output_root = Path(__file__).resolve().parent / "outputs"
+    output_dir = output_root if profile.name == "abide" else output_root / profile.name
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", choices=["abide", "abide_ii", "adhd200"], default=profile.name)
@@ -49,7 +50,11 @@ def parse_args():
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--lstm", action="store_true")
     parser.add_argument("--output-dir", type=Path, default=output_dir)
-    parser.add_argument("--bec-path", type=Path, default=output_dir / f"subject_navar_bec_{profile.name}.npz")
+    parser.add_argument(
+        "--bec-path",
+        type=Path,
+        default=output_dir / f"subject_navar_bec_{profile.name}.npz",
+    )
     parser.add_argument("--max-subjects", type=int)
     parser.add_argument("--progress-every", type=int, default=10)
     parser.add_argument("--gpu-id", default="auto")

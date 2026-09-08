@@ -1,10 +1,10 @@
-import numpy as np
 import torch
 import torch.nn as nn
 from .attention_modules import ScaledDotProductAttention
 
-class MultiHeadAttention(nn.Module):
-    ''' Multi-Head Attention module '''
+
+class SpatialMultiHeadAttention(nn.Module):
+    """Multi-head self-attention over the spatial/ROI dimension."""
 
     def __init__(self, n_head, d_model, d_k, d_v, dropout=0.1):
         # d_model is embed_size
@@ -25,7 +25,7 @@ class MultiHeadAttention(nn.Module):
         self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)
 
     def forward(self, q, k, v, mask=None):
-        # temporal:[B, N, T, d_model], spatial:[B, T, N, d_model], len1、len2 correspond to T or N
+        # temporal: [B, N, T, d_model], spatial: [B, T, N, d_model]
         d_k, d_v, n_head = self.d_k, self.d_v, self.n_head
         sz_b, len1_q, len1_k, len1_v = q.size(0), q.size(1), k.size(1), v.size(1)
         len2_q, len2_v, len2_k = q.size(2), k.size(2), v.size(2)

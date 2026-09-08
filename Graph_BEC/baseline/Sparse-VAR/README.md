@@ -80,3 +80,32 @@ PYTHONUNBUFFERED=1 python Graph_BEC/baseline/Sparse-VAR/run_sparse_var.py \
   --bec-path Graph_BEC/baseline/Sparse-VAR/outputs/smoke_abide_ii/subject_sparse_var_bec_abide_ii.npz \
   --regenerate-bec
 ```
+
+## ADHD200
+
+ADHD200 is supported through the shared Graph-BEC loader. The default input
+files are `dataset/ADHD200/Phenotypic_Processing.csv` and
+`dataset/ADHD200/cpac/filt_noglobal/*_rois_aal.1D`. `DX=0` is the control
+group, while `DX=1/2/3` is mapped to the patient group. The loader reads 116
+source ROIs and keeps the first 90, matching Sparse-VAR's BEC dimensions.
+ADHD200 outputs default to `Graph_BEC/baseline/Sparse-VAR/outputs/adhd200/`.
+
+Quick generation smoke test:
+
+```bash
+PYTHONUNBUFFERED=1 python Graph_BEC/baseline/Sparse-VAR/run_sparse_var.py \
+  --dataset adhd200 \
+  --data-root ./dataset/ADHD200 \
+  --max-subjects 2 \
+  --lags 1 \
+  --max-iter 1000 \
+  --generation-only \
+  --gpu-id cpu \
+  --output-dir Graph_BEC/baseline/Sparse-VAR/outputs/smoke_adhd200 \
+  --bec-path Graph_BEC/baseline/Sparse-VAR/outputs/smoke_adhd200/subject_sparse_var_bec_adhd200.npz \
+  --regenerate-bec
+```
+
+For a full ADHD200 run, remove `--max-subjects 2` and increase `--max-iter`
+as needed. `--lags 1` is recommended initially because ADHD200 subjects have
+short and variable scan lengths.

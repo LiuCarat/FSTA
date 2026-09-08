@@ -90,6 +90,37 @@ PYTHONUNBUFFERED=1 python Graph_BEC/baseline/GVAR/run_gvar.py \
   --regenerate-bec
 ```
 
+## ADHD200
+
+ADHD200 is supported through the shared Graph-BEC loader. The default input
+files are `dataset/ADHD200/Phenotypic_Processing.csv` and
+`dataset/ADHD200/cpac/filt_noglobal/*_rois_aal.1D`. `DX=0` is treated as the
+control group, while `DX=1/2/3` is mapped to the patient group. The loader
+reads 116 source ROIs and keeps the first 90, matching the GVAR input size.
+
+ADHD200 outputs default to the separate directory
+`Graph_BEC/baseline/GVAR/outputs/adhd200/`.
+
+Run a short generation smoke test:
+
+```bash
+PYTHONUNBUFFERED=1 python Graph_BEC/baseline/GVAR/run_gvar.py \
+  --dataset adhd200 \
+  --data-root ./dataset/ADHD200 \
+  --epochs 2 \
+  --batch-size 32 \
+  --max-subjects 2 \
+  --generation-only \
+  --gpu-id cpu \
+  --output-dir Graph_BEC/baseline/GVAR/outputs/smoke_adhd200 \
+  --bec-path Graph_BEC/baseline/GVAR/outputs/smoke_adhd200/subject_gvar_bec_adhd200.npz \
+  --regenerate-bec
+```
+
+For the full ADHD200 BEC archive, increase `--epochs` and remove
+`--max-subjects 2`. Use `--workers` greater than one only when the available
+CPU/GPU memory can support multiple independent subject models.
+
 ## Classification
 
 ```bash
