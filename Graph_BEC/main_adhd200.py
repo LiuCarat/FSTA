@@ -38,7 +38,7 @@ def add_stf_arguments(parser):
     group = parser.add_argument_group("STF-BEC encoder")
     group.add_argument("--window-length", type=int, default=76)
     group.add_argument("--stride", type=int, default=25)
-    group.add_argument("--epochs", type=int, default=131)
+    group.add_argument("--epochs", type=int, default=141)
     group.add_argument("--stf-checkpoint", choices=["final", "best"], default='final')
     group.add_argument("--loss-mode", choices=["original", "entropy"], default='entropy')
     group.add_argument("--loss-alpha", type=float, default=0.01)
@@ -66,7 +66,7 @@ def add_stf_arguments(parser):
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-mode", choices=["bec", "raw"], default='raw')
+    parser.add_argument("--input-mode", choices=["bec", "raw"], default='bec')
     parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=["original", "refined", "qc_refined"])
     parser.add_argument("--bec-path", type=Path, default=DATASET_CONFIG.bec_path)
     parser.add_argument("--refined-bec-path", type=Path, default=DATASET_CONFIG.refined_bec_path)
@@ -98,14 +98,14 @@ def parse_args():
 
     parser.add_argument("--qsr-qc-columns", nargs="+", default=list(QC_COLUMNS))
     parser.add_argument("--qsr-epochs", type=int, default=100)
-    parser.add_argument("--qsr-lr", type=float, default=0.03) #0.003
+    parser.add_argument("--qsr-lr", type=float, default=0.01)
     parser.add_argument("--qsr-hidden-channels", type=int, default=8)
-    parser.add_argument("--qsr-eta", type=float, default=0.5) #0.5
-    parser.add_argument("--qsr-r-max", type=float, default=0.03) #0.03
+    parser.add_argument("--qsr-eta", type=float, default=0.4)
+    parser.add_argument("--qsr-r-max", type=float, default=0.1)
     parser.add_argument("--qsr-corruption-scale", type=float, default=0.5)
-    parser.add_argument("--qsr-gate-max", type=float, default=0.5)
+    parser.add_argument("--qsr-gate-max", type=float, default=0.4)
     parser.add_argument("--qsr-gate-weight", type=float, default=0.01)
-    parser.add_argument("--qsr-variance-weight", type=float, default=0.3)
+    parser.add_argument("--qsr-variance-weight", type=float, default=0.25)
     parser.add_argument("--qsr-variance-retention", type=float, default=0.85)
     parser.add_argument("--qsr-basis-ridge", type=float, default=0.01)
 
