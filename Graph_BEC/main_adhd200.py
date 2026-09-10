@@ -106,7 +106,7 @@ def parse_args():
     parser.add_argument("--qsr-gate-max", type=float, default=0.4)
     parser.add_argument("--qsr-gate-weight", type=float, default=0.01)
     parser.add_argument("--qsr-variance-weight", type=float, default=0.25)
-    parser.add_argument("--qsr-variance-retention", type=float, default=0.85)
+    parser.add_argument("--qsr-variance-retention", type=float, default=0.95)
     parser.add_argument("--qsr-basis-ridge", type=float, default=0.01)
 
     parser.add_argument("--classifier-epochs", type=int, default=60)
