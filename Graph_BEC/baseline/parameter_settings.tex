@@ -1,0 +1,35 @@
+% Requires: \usepackage{booktabs,tabularx,array,makecell}
+\begin{table*}[t]
+    \centering
+    \caption{Parameter settings of the baseline methods.}
+    \label{tab:baseline-parameter-settings}
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.18\textwidth}c>{\raggedright\arraybackslash}X@{}}
+        \toprule
+        \textbf{Methods} & \textbf{Year} & \textbf{Parameters} \\
+        \midrule
+        Pearson-FC & -- & \makecell[l]{estimator = Pearson correlation;\\ diagonal = 0; symmetric FC matrix} \\
+        Partial-Correlation-FC & -- & \makecell[l]{estimator = Ledoit--Wolf shrinkage;\\ graphical-lasso optional, $\alpha_{\mathrm{GL}} = 0.1$, max\_iter = 100} \\
+        Sparse-VAR & -- & \makecell[l]{lags = 1, $\alpha = 0.03$, l1\_ratio = 1.0, lag\_decay = 1.0,\\ threshold = 0, max\_iter = 5000, tol = $10^{-4}$} \\
+        GVAR & -- & \makecell[l]{order = 1, hidden\_layer\_size = 16, hidden\_layers = 1,\\ epochs = 100, batch\_size = 32, $\lambda = 0.01$, $\gamma = 0$,\\ learning\_rate = $10^{-3}$, $\beta_1 = 0.9$, $\beta_2 = 0.999$, lag\_decay = 1.0} \\
+        NAVAR & -- & \makecell[l]{maxlags = 5, hidden\_nodes = 10, hidden\_layers = 1,\\ epochs = 500, batch\_size = 128, sparsity\_penalty = 0.1,\\ weight\_decay = 0.001, dropout = 0.5, learning\_rate = $3\times10^{-4}$} \\
+        CR-VAE & -- & \makecell[l]{context = 20, hidden = 64, max\_iter = 1000, batch\_size = 256,\\ check\_every = 50, learning\_rate = 0.05, $\lambda = 0.1$, ridge = 0} \\
+        NPI-MLP & 2025 & \makecell[l]{steps = 3, train\_proportion = 0.8, batch\_size = 50, epochs = 100,\\ learning\_rate = $10^{-3}$, l2 = $5\times10^{-5}$, perturbation strength = 1.0} \\
+        VarCoNet & -- & \makecell[l]{layers = 1, batch\_size = 64, min\_length = 30;\\ ABIDE-I: heads = 1, feedforward = 2048, $\tau = 0.0537$;\\ ABIDE-II/ADHD200: heads = 2, feedforward = 512, $\tau = 0.0541$} \\
+        FSTA-EC & -- & \makecell[l]{stride = 40, epochs = 51, $\alpha_{\mathrm{sp}} = 0.8$, batch\_size = 32,\\ d\_model = 16, d\_inner\_hid = 64, d\_k = d\_v = 8, n\_head = 2,\\ dropout = 0.2, n\_warmup\_steps = 4000, lr\_mul = 1.2} \\
+        \bottomrule
+    \end{tabularx}
+    \vspace{-2pt}
+    \begin{minipage}{0.96\textwidth}
+        \footnotesize
+        \emph{Note.} All methods use the same downstream protocol unless otherwise stated:
+        CPAC/filt\_noglobal/rois\_aal input, 90 AAL ROIs, 10-fold stratified evaluation,
+        validation size = 0.2, classifier epochs = 100, patience = 20,
+        learning rate = $10^{-3}$, and seed = 42. The year is left as ``--'' for
+        repository-level implementations or conventional estimators without a
+        uniquely specified source publication; replace these entries with the
+        publication years used in the manuscript bibliography.
+    \end{minipage}
+\end{table*}

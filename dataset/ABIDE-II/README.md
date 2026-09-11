@@ -27,8 +27,16 @@ ABIDEII/bids/abideii_bids_manifest.tsv
 dataset/ABIDE-II/ABIDEII_phenotype_graphbec.csv
 ```
 
-The phenotype converter maps ABIDE-II `dx_group=1` (ASD) to Graph-BEC `DX_GROUP=2`
-and `dx_group=2` (control) to `DX_GROUP=1`.
+The checked-in `Phenotypic_Processing.csv` uses the Graph-BEC convention
+`DX_GROUP=2` for ASD and `DX_GROUP=1` for TC/HC. This is a normalized copy of the
+official ABIDE-II convention (`1` = ASD, `2` = control), so the Graph-BEC loader
+maps `DX_GROUP=2` to its internal ASD label `1` and `DX_GROUP=1` to its internal
+TC/HC label `0`. To reproduce this conversion for a new phenotype file, run:
+
+```bash
+python dataset/ABIDE-II/normalize_labels.py \
+  input_phenotype.csv dataset/ABIDE-II/Phenotypic_Processing.csv
+```
 
 ## 2. Run fMRIPrep
 

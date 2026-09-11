@@ -37,7 +37,7 @@ def add_stf_arguments(parser):
     group = parser.add_argument_group("STF-BEC encoder")
     group.add_argument("--window-length", type=int, default=80) #80
     group.add_argument("--stride", type=int, default=40) #40
-    group.add_argument("--epochs", type=int, default=111)
+    group.add_argument("--epochs", type=int, default=81)
     group.add_argument("--stf-checkpoint", choices=["final", "best"], default='final')
     group.add_argument("--loss-mode", choices=["original", "entropy"], default='entropy')
     group.add_argument("--loss-alpha", type=float, default=0.01)
@@ -96,16 +96,16 @@ def parse_args():
     parser.add_argument("--variance-retention", type=float, default=0.85)
 
     parser.add_argument("--qsr-qc-columns", nargs="+", default=list(['func_mean_fd', 'func_dvars', 'func_quality']))
-    parser.add_argument("--qsr-epochs", type=int, default=80)
-    parser.add_argument("--qsr-lr", type=float, default=0.003)
+    parser.add_argument("--qsr-epochs", type=int, default=100)
+    parser.add_argument("--qsr-lr", type=float, default=0.03)
     parser.add_argument("--qsr-hidden-channels", type=int, default=8)
     parser.add_argument("--qsr-eta", type=float, default=0.3)
-    parser.add_argument("--qsr-r-max", type=float, default=0.04)
+    parser.add_argument("--qsr-r-max", type=float, default=0.18)
     parser.add_argument("--qsr-corruption-scale", type=float, default=0.5)
-    parser.add_argument("--qsr-gate-max", type=float, default=0.4)
+    parser.add_argument("--qsr-gate-max", type=float, default=0.45)
     parser.add_argument("--qsr-gate-weight", type=float, default=0.001)
-    parser.add_argument("--qsr-variance-weight", type=float, default=0.25)
-    parser.add_argument("--qsr-variance-retention", type=float, default=0.85)
+    parser.add_argument("--qsr-variance-weight", type=float, default=0.25) #0.25
+    parser.add_argument("--qsr-variance-retention", type=float, default=0.85) #调这个没用
     parser.add_argument("--qsr-basis-ridge", type=float, default=0.001)
 
     parser.add_argument("--classifier-epochs", type=int, default=100)

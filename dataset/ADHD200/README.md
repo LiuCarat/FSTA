@@ -10,7 +10,8 @@
 dataset/ADHD200/Phenotypic_Processing.csv
 ```
 
-当前文件包含 **798 个受试者**。筛选条件为：
+当前表型文件与 AAL ROI 时间序列一一对应，共包含 **788 个最终实验受试者**。
+筛选条件为：
 
 - `Age`、`Gender` 和 `Handedness` 均有记录；`Full4 IQ` 允许使用 ADHD200 的缺失编码 `-999`，Graph-BEC 会将其按缺失值处理；
 - 至少有一个 T1w 文件；
@@ -24,14 +25,24 @@ dataset/ADHD200/Phenotypic_Processing.csv
 | 站点 | 被试数 |
 |---|---:|
 | `KKI` | 83 |
-| `NYU` | 209 |
+| `NYU` | 200 |
 | `OHSU` | 113 |
 | `Peking_1` | 135 |
-| `Peking_2` | 67 |
+| `Peking_2` | 66 |
 | `Peking_3` | 42 |
 | `Pittsburgh` | 89 |
 | `WashU` | 60 |
-| **合计** | **798** |
+| **合计** | **788** |
+
+最终实验样本汇总如下，其中 `Gender=1` 表示男性，`Gender=0` 表示女性：
+
+| Dataset | Subjects | Diagnosis group | Control group | Age range (years) | Sex (M/F) | Sites |
+|---|---:|---:|---:|---:|---:|---:|
+| ADHD200 | 788 | 280 | 508 | 7.09–21.83 | 486/302 | 8 |
+
+患者组包括 `DX=1`（152 名）、`DX=2`（7 名）和 `DX=3`（121 名）；
+三个亚型在 Graph-BEC 二分类中统一映射为内部标签 `1`。`DX=0` 的 508 名
+对照受试者映射为内部标签 `0`。
 
 ### Peking_2、Peking_3 和 WashU 的表型说明
 
@@ -73,7 +84,10 @@ python dataset/ADHD200/scripts/download_ADHD200.py \
 `DX` 编码在 Graph-BEC 中按以下方式解释：
 
 - `DX=0`：对照组；
-- `DX=1/2/3`：患者组。
+- `DX=1`：ADHD combined type；
+- `DX=2`：ADHD hyperactive/impulsive type；
+- `DX=3`：ADHD inattentive type；
+- `DX=1/2/3` 在当前二分类任务中均属于患者组。
 
 ## 表型字段
 

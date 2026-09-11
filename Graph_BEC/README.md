@@ -110,6 +110,9 @@ python Graph_BEC/main_adhd200.py \
 
 ## 输出文件
 
+Baseline 方法及其默认参数的 LaTeX 汇总表见
+`Graph_BEC/baseline/parameter_settings.tex`。
+
 输出目录默认为：
 
 ```text
