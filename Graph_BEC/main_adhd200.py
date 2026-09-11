@@ -89,12 +89,12 @@ def parse_args():
     parser.add_argument("--permute-phenotype", action="store_true", default=False)
 
     parser.add_argument("--refiner-epochs", type=int, default=80)
-    parser.add_argument("--refiner-lr", type=float, default=0.03)
+    parser.add_argument("--refiner-lr", type=float, default=0.01)
     parser.add_argument("--gate-max", type=float, default=0.4)
     parser.add_argument("--gate-l1-weight", type=float, default=0.01)
     parser.add_argument("--anchor-weight", type=float, default=1.0)
     parser.add_argument("--variance-weight", type=float, default=1.0)
-    parser.add_argument("--variance-retention", type=float, default=0.75)
+    parser.add_argument("--variance-retention", type=float, default=0.65)
 
     parser.add_argument("--qsr-qc-columns", nargs="+", default=list(QC_COLUMNS))
     parser.add_argument("--qsr-epochs", type=int, default=100)
@@ -103,7 +103,7 @@ def parse_args():
     parser.add_argument("--qsr-eta", type=float, default=0.2)
     parser.add_argument("--qsr-r-max", type=float, default=0.25) #0.15
     parser.add_argument("--qsr-corruption-scale", type=float, default=0.5)
-    parser.add_argument("--qsr-gate-max", type=float, default=0.4)
+    parser.add_argument("--qsr-gate-max", type=float, default=0.38)
     parser.add_argument("--qsr-gate-weight", type=float, default=0.01)
     parser.add_argument("--qsr-variance-weight", type=float, default=0.25)
     parser.add_argument("--qsr-variance-retention", type=float, default=0.95)

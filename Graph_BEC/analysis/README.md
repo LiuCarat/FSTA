@@ -121,3 +121,25 @@ Graph_BEC/analysis/outputs/group_chord/chord_top10_rois_asd_tc.png
 ## 4. 解释限制
 
 Top-10 结果是描述性候选边/候选 ROI，不是统计显著结果。后续若需要“显著增强/显著减弱”，还要另行加入组间检验、置换检验和多重比较校正。
+
+## 5. ABIDE-I/II 跨队列复现分析
+
+固定 Top-k 不用于定义稳定异常。对 ABIDE-I 和 ABIDE-II 中相同的有向边分别完成
+ASD vs HC 的 Welch 检验和全边 Benjamini–Hochberg FDR 校正，再按以下规则定义
+replicated ASD-related BEC：
+
+```text
+q_ABIDE-I < 0.05
+q_ABIDE-II < 0.05
+sign(g_ABIDE-I) == sign(g_ABIDE-II)
+```
+
+运行：
+
+```bash
+python Graph_BEC/analysis/cross_cohort_replication/run_cross_cohort_replication.py
+```
+
+详细方法和结果见 `Graph_BEC/analysis/cross_cohort_replication/README.md`。
+其中单队列 Rank 只保留作描述，复现集合按平均绝对 Hedges' g 提供展示排序，
+不参与筛选。

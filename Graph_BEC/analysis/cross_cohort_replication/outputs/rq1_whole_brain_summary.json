@@ -1,0 +1,48 @@
+{
+  "n_directed_edges": 8010,
+  "alpha": 0.05,
+  "effect_size": {
+    "pearson_r": 0.3731518164041589,
+    "pearson_p_value_descriptive": 4.377014771406297e-263,
+    "pearson_95_ci": [
+      0.3541459224206918,
+      0.39184959531025854
+    ],
+    "spearman_rho": 0.35093446421103763,
+    "spearman_p_value_descriptive": 7.371700163692737e-231,
+    "spearman_95_ci": [
+      0.33158284958658174,
+      0.3699908954129052
+    ],
+    "regression_slope_II_on_I": 0.36992988719508096,
+    "regression_intercept": -0.024150563945760154,
+    "mean_g_abide_i": -0.0018715072386824127,
+    "mean_g_abide_ii": -0.024842890407450715,
+    "mean_absolute_g_abide_i": 0.09098105858025553,
+    "mean_absolute_g_abide_ii": 0.09484397041537188,
+    "mean_absolute_pairwise_difference": 0.10455295233782327,
+    "rmse_pairwise_difference": 0.13039238611648232
+  },
+  "direction": {
+    "same_direction_count": 4890,
+    "same_direction_rate": 0.6104868913857678,
+    "opposite_direction_count": 3120,
+    "opposite_direction_rate": 0.3895131086142322
+  },
+  "fdr_significance": {
+    "abide_i_q_below_alpha": 751,
+    "abide_ii_q_below_alpha": 1014,
+    "both_q_below_alpha": 173,
+    "abide_i_only": 578,
+    "abide_ii_only": 841,
+    "neither": 6418,
+    "both_significant_same_direction": 168,
+    "both_significant_same_direction_rate_of_all_edges": 0.020973782771535582,
+    "both_significant_same_direction_rate_of_both_significant": 0.9710982658959537,
+    "both_significant_opposite_direction": 5
+  },
+  "rank_stability_descriptive": {
+    "spearman_rho": 0.09948998708642551,
+    "p_value_descriptive": 4.45799884074094e-19
+  }
+}
