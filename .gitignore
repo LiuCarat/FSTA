@@ -21,7 +21,6 @@ Graph_BEC/outputs/
 *.pt
 *.pth
 *.ckpt
-*.npz
 *.npy
 *.part
 
@@ -42,12 +41,9 @@ dataset/ABIDE-I/*
 dataset/ABIDE-II/*
 !dataset/ABIDE-II/*.py
 !dataset/ABIDE-II/*.sh
-!dataset/ABIDE-II/README.md
-!dataset/ABIDE-II/Phenotypic_Processing.csv
 dataset/ADHD200/*
 !dataset/ADHD200/*.py
-!dataset/ADHD200/README.md
-
+!dataset/ADHD200/Phenotypic_Processing.csv
 # Download and pipeline temporary files
 *.download
 *.tmp

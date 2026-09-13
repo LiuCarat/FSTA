@@ -125,6 +125,13 @@ def load_pipeline_data(args, device):
             load_bec_archive(args.bec_path), FIXED_DATA_CONFIG["max_subjects"]
         )
 
+    if args.profile.name == "abide":
+        data["labels"] = _labels_from_abide_phenotype(
+            args.phenotype_csv,
+            data["subject_ids"],
+            args.profile,
+        )
+
     if args.graph_mode == "fusion":
         data["fmri_features"] = subject_fc_features(
             _aligned_graph_time_series(args, data, subjects)
@@ -146,6 +153,33 @@ def load_pipeline_data(args, device):
     data["bec"] = np.asarray(data["bec"], dtype=np.float32)
     data["labels"] = np.asarray(data["labels"], dtype=np.int64)
     return data, stf_metrics
+
+
+def _labels_from_abide_phenotype(phenotype_csv, subject_ids, profile):
+    """Build canonical TC=0/ASD=1 labels from the phenotype source.
+
+    BEC archives are feature caches and may have been produced by an older
+    run with the binary labels reversed.  The phenotype is the source of
+    truth, so labels are regenerated after archive loading and aligned by
+    subject ID.
+    """
+    diagnosis = load_aligned_phenotypes(
+        phenotype_csv,
+        subject_ids,
+        (profile.patient_column,),
+        profile,
+    )[:, 0]
+    patient_values = {float(value) for value in profile.patient_values}
+    control_values = {float(value) for value in profile.control_values}
+    labels = np.full(len(diagnosis), -1, dtype=np.int64)
+    labels[np.isin(diagnosis, list(patient_values))] = 1
+    labels[np.isin(diagnosis, list(control_values))] = 0
+    if np.any(labels < 0):
+        unknown = np.unique(diagnosis[labels < 0]).tolist()
+        raise ValueError(
+            f"Unknown ABIDE diagnosis values in phenotype for archive subjects: {unknown}"
+        )
+    return labels
 
 
 def _report_existing_archive_difference(path, generated):

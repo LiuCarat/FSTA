@@ -100,7 +100,7 @@ def save_results(args, fold_results, training_metrics):
         name for name, value in fold_results[0].items() if isinstance(value, dict)
     ]
     for name in names:
-        for metric in ("ACC", "SPE", "AUC", "Precision", "Recall", "F1"):
+        for metric in ("ACC", "Recall", "AUC", "Precision", "F1"):
             values = [row[f"{name}_{metric}"] for row in rows]
             mean = float(np.mean(values))
             std = float(np.std(values))
@@ -131,9 +131,13 @@ def save_results(args, fold_results, training_metrics):
 
 
 def print_summary_table(summary, title="mean±std (%)"):
-    metrics = ("ACC", "SPE", "AUC", "Precision", "Recall", "F1")
+    metrics = ("ACC", "Recall", "AUC", "Precision", "F1")
     print(f"\n{title}")
-    print("representation | " + " | ".join(metrics))
+    display_names = {"Recall": "SEN", "Precision": "Precision"}
+    print(
+        "representation | "
+        + " | ".join(display_names.get(name, name) for name in metrics)
+    )
     for name in summary["representations"]:
         values = [summary[f"{name}_{metric}_display"] for metric in metrics]
         print(f"{name:20s} | " + " | ".join(values))

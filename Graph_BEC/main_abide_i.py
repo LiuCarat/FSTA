@@ -39,7 +39,7 @@ def add_stf_arguments(parser):
     group = parser.add_argument_group("STF-BEC encoder")
     group.add_argument("--window-length", type=int, default=78)
     group.add_argument("--stride", type=int, default=39)
-    group.add_argument("--epochs", type=int, default=101)
+    group.add_argument("--epochs", type=int, default=81)
     group.add_argument("--stf-checkpoint", choices=["final", "best"], default='final')
     group.add_argument("--loss-mode", choices=["original", "entropy"], default='entropy')
     group.add_argument("--loss-alpha", type=float, default=0.01)
@@ -67,8 +67,8 @@ def add_stf_arguments(parser):
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-mode", choices=["bec", "raw"], default='bec')
-    parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=['original', 'refined', 'qc_refined'])
+    parser.add_argument("--input-mode", choices=["bec", "raw"], default="raw")
+    parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=["original", "refined", "qc_refined"])
     parser.add_argument("--bec-path", type=Path, default=DATASET_CONFIG.bec_path)
     parser.add_argument("--refined-bec-path", type=Path, default=DATASET_CONFIG.refined_bec_path)
     parser.add_argument("--qsr-refined-bec-path", type=Path, default=DATASET_CONFIG.qsr_refined_bec_path)
@@ -80,6 +80,7 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--seeds", type=int, nargs="+")
     parser.add_argument("--gpu-id", default='auto')
+
     parser.add_argument("--reference-k", type=int, default=20)
     parser.add_argument("--graph-mode", choices=["phenotype", "fusion"], default='fusion')
     parser.add_argument("--fusion-beta", type=float, default=0.6)
@@ -87,13 +88,15 @@ def parse_args():
     parser.add_argument("--categorical-penalty", type=float, default=4.0)
     parser.add_argument("--continuous-weights", type=float, nargs=len(DATASET_CONFIG.continuous_columns), default=[1.0, 0.3])
     parser.add_argument("--permute-phenotype", action="store_true", default=False)
+
     parser.add_argument("--refiner-epochs", type=int, default=80)
-    parser.add_argument("--refiner-lr", type=float, default=0.01)
-    parser.add_argument("--gate-max", type=float, default=0.5)
-    parser.add_argument("--gate-l1-weight", type=float, default=0.001)
-    parser.add_argument("--anchor-weight", type=float, default=1.0)
+    parser.add_argument("--refiner-lr", type=float, default=0.03)
+    parser.add_argument("--gate-max", type=float, default=0.4)
+    parser.add_argument("--gate-l1-weight", type=float, default=0.38)
+    parser.add_argument("--anchor-weight", type=float, default=0.8)
     parser.add_argument("--variance-weight", type=float, default=1.0)
     parser.add_argument("--variance-retention", type=float, default=0.85)
+
     parser.add_argument("--qsr-qc-columns", nargs="+", default=list(['func_mean_fd', 'func_dvars', 'func_quality']))
     parser.add_argument("--qsr-epochs", type=int, default=80)
     parser.add_argument("--qsr-lr", type=float, default=0.003)
@@ -106,6 +109,7 @@ def parse_args():
     parser.add_argument("--qsr-variance-weight", type=float, default=0.1)
     parser.add_argument("--qsr-variance-retention", type=float, default=0.85)
     parser.add_argument("--qsr-basis-ridge", type=float, default=0.001)
+
     parser.add_argument("--classifier-epochs", type=int, default=100)
     parser.add_argument("--classifier-patience", type=int, default=20)
     parser.add_argument("--classifier-lr", type=float, default=0.001)
