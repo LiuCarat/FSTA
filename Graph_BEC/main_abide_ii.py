@@ -99,7 +99,7 @@ def parse_args():
     parser.add_argument("--qsr-epochs", type=int, default=100)
     parser.add_argument("--qsr-lr", type=float, default=0.03)
     parser.add_argument("--qsr-hidden-channels", type=int, default=8)
-    parser.add_argument("--qsr-eta", type=float, default=0.32)
+    parser.add_argument("--qsr-eta", type=float, default=0.3)
     parser.add_argument("--qsr-r-max", type=float, default=0.18)
     parser.add_argument("--qsr-corruption-scale", type=float, default=0.5)
     parser.add_argument("--qsr-gate-max", type=float, default=0.45)

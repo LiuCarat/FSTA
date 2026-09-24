@@ -1,4 +1,4 @@
 Dataset,ASD_N,HC_N,Significant_Q_lt_alpha,Replicated
-ABIDE-I,468,403,751,
-ABIDE-II,513,462,1014,
-Cross-cohort replicated,,,,168
+ABIDE-I,403,468,764,
+ABIDE-II,462,513,1577,
+Cross-cohort replicated,,,,213
