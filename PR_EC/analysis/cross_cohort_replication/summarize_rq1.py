@@ -120,8 +120,8 @@ def main() -> None:
     r = summary["rank_stability_descriptive"]
     report = f"""# RQ1: Whole-brain reproducibility
 
-Input: `all_edges_cross_cohort.csv`  
-Edges: **{len(rows)} directed non-diagonal BEC edges**  
+Input: `all_edges_cross_cohort.csv`
+Edges: **{len(rows)} directed non-diagonal EC edges**
 Threshold: **BH-FDR q < {args.alpha:g}** within each cohort
 
 ## Results

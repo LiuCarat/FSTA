@@ -2,7 +2,7 @@
 
 The original VarCoNet paper repository expects pre-packed ``ABIDE*_nilearn``
 files and contains several unrelated experiments.  This entry point uses the
-Graph-BEC data loader and downstream classifier so that the only changed part
+Graph-EC data loader and downstream classifier so that the only changed part
 is the subject representation: a VarCoNet encoder is trained on each training
 fold with the original two-view InfoNCE objective.
 """
@@ -26,7 +26,7 @@ if str(ROOT) not in sys.path:
 from PR_EC.data import load_subject_dataset
 from PR_EC.dataset_configs import get_profile
 from PR_EC.downstream import train_classifier
-from PR_EC.utils.folds import fit_bec_scaler, make_stratified_splits, transform_bec
+from PR_EC.utils.folds import fit_ec_scaler, make_stratified_splits, transform_ec
 from PR_EC.utils.runtime import set_seed
 from PR_EC.baseline.VarCoNet.model_scripts.VarCoNet import VarCoNet
 
@@ -169,7 +169,7 @@ def encode(model, series, device, max_length, roi_count):
 
 def save_archive(path, representations, dataset, args):
     path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(path, bec=representations, labels=dataset["labels"], subject_ids=dataset["subject_ids"], site_ids=dataset["site_ids"], representation="varconet", dataset=args.dataset)
+    np.savez_compressed(path, ec=representations, labels=dataset["labels"], subject_ids=dataset["subject_ids"], site_ids=dataset["site_ids"], representation="varconet", dataset=args.dataset)
 
 
 def load_archive(path):
@@ -180,10 +180,10 @@ def load_archive(path):
 def classify_fold(args, train_fc, train_labels, val_fc, val_labels, test_fc, test_labels, device, fold):
     rows = []
     print(f"fold {fold}: train={len(train_labels)}, val={len(val_labels)}, test={len(test_labels)}")
-    mean, std = fit_bec_scaler(train_fc)
-    train_fc = transform_bec(train_fc, mean, std)
-    val_fc = transform_bec(val_fc, mean, std)
-    test_fc = transform_bec(test_fc, mean, std)
+    mean, std = fit_ec_scaler(train_fc)
+    train_fc = transform_ec(train_fc, mean, std)
+    val_fc = transform_ec(val_fc, mean, std)
+    test_fc = transform_ec(test_fc, mean, std)
     for repeat in range(args.classifier_repeats):
         metrics, _ = train_classifier(train_fc, train_labels, val_fc, val_labels, test_fc, test_labels, device=device, seed=args.seed + fold * 1000 + repeat + 1, max_epochs=args.classifier_epochs, patience=args.classifier_patience, batch_size=32, learning_rate=args.classifier_lr)
         rows.append({"fold": fold, "repeat": repeat + 1, **metrics})
@@ -269,7 +269,7 @@ def main():
                 model, dataset["time_series"], device, max_length, roi_count
             )
             archive = {
-                "bec": representations,
+                "ec": representations,
                 "labels": dataset["labels"],
                 "subject_ids": dataset["subject_ids"],
                 "site_ids": dataset["site_ids"],
@@ -289,15 +289,15 @@ def main():
                 save_results(output_dir, rows)
                 if fold == 1:
                     matrices.append(encode(model, dataset["time_series"], device, max_length, roi_count))
-            archive = {"bec": matrices[0], "labels": dataset["labels"], "subject_ids": dataset["subject_ids"], "site_ids": dataset["site_ids"]}
-            save_archive(representation_path, archive["bec"], dataset, args)
-    print(f"VarCoNet representation: {representation_path} shape={archive['bec'].shape}")
+            archive = {"ec": matrices[0], "labels": dataset["labels"], "subject_ids": dataset["subject_ids"], "site_ids": dataset["site_ids"]}
+            save_archive(representation_path, archive["ec"], dataset, args)
+    print(f"VarCoNet representation: {representation_path} shape={archive['ec'].shape}")
     if args.generation_only: return
     if args.classification_only:
         labels = archive["labels"].astype(np.int64)
         rows = []
         for fold, train_idx, val_idx, test_idx in make_stratified_splits(labels, args.n_splits, args.seed, args.validation_size):
-            rows.extend(classify_fold(args, archive["bec"][train_idx], labels[train_idx], archive["bec"][val_idx], labels[val_idx], archive["bec"][test_idx], labels[test_idx], device, fold))
+            rows.extend(classify_fold(args, archive["ec"][train_idx], labels[train_idx], archive["ec"][val_idx], labels[val_idx], archive["ec"][test_idx], labels[test_idx], device, fold))
     if args.classification_only:
         save_results(output_dir, rows)
 

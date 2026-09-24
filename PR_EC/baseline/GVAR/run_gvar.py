@@ -1,4 +1,4 @@
-"""Generate subject-level GVAR BECs and optionally run the Graph-BEC classifier."""
+"""Generate subject-level GVAR ECs and optionally run the Graph-EC classifier."""
 from __future__ import annotations
 
 import argparse
@@ -22,7 +22,7 @@ for path in (ROOT, BASELINE_DIR):
 from PR_EC.data import load_subject_dataset
 from PR_EC.downstream import train_classifier
 from PR_EC.dataset_configs import get_profile
-from PR_EC.utils.folds import fit_bec_scaler, make_stratified_splits, transform_bec
+from PR_EC.utils.folds import fit_ec_scaler, make_stratified_splits, transform_ec
 from PR_EC.utils.runtime import set_seed
 from training import training_procedure
 
@@ -55,9 +55,9 @@ def parse_args():
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--output-dir", type=Path, default=output_dir)
     parser.add_argument(
-        "--bec-path",
+        "--ec-path",
         type=Path,
-        default=output_dir / f"subject_gvar_bec_{profile.name}.npz",
+        default=output_dir / f"subject_gvar_ec_{profile.name}.npz",
     )
     parser.add_argument("--max-subjects", type=int, default=None)
     parser.add_argument("--workers", type=int, default=1)
@@ -71,7 +71,7 @@ def parse_args():
     parser.add_argument("--classifier-repeats", type=int, default=1)
     parser.add_argument("--patient-label", type=int, default=1, choices=[0, 1])
     parser.add_argument("--control-label", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--regenerate-bec", action="store_true")
+    parser.add_argument("--regenerate-ec", action="store_true")
     parser.add_argument("--generation-only", action="store_true")
     parser.add_argument("--classification-only", action="store_true")
     return parser.parse_args()
@@ -105,33 +105,33 @@ def gvar_config(args):
     }
 
 
-def load_bec_archive(path):
+def load_ec_archive(path):
     archive = np.load(path, allow_pickle=False)
-    required = {"bec", "labels", "subject_ids", "site_ids"}
+    required = {"ec", "labels", "subject_ids", "site_ids"}
     missing = required - set(archive.files)
     if missing:
-        raise ValueError(f"Missing BEC arrays: {sorted(missing)}")
+        raise ValueError(f"Missing EC arrays: {sorted(missing)}")
     return {key: archive[key] for key in archive.files}
 
 
-def save_bec_archive(path, bec, coefficients, dataset, args):
+def save_ec_archive(path, ec, coefficients, dataset, args):
     path.parent.mkdir(parents=True, exist_ok=True)
-    bec = np.asarray(bec, dtype=np.float32)
+    ec = np.asarray(ec, dtype=np.float32)
     coefficients = np.asarray(coefficients, dtype=np.float32)
-    if bec.ndim != 3 or bec.shape[1] != bec.shape[2]:
-        raise ValueError(f"Expected BEC [subjects, roi, roi], got {bec.shape}")
-    if coefficients.ndim != 4 or coefficients.shape[0] != bec.shape[0]:
+    if ec.ndim != 3 or ec.shape[1] != ec.shape[2]:
+        raise ValueError(f"Expected EC [subjects, roi, roi], got {ec.shape}")
+    if coefficients.ndim != 4 or coefficients.shape[0] != ec.shape[0]:
         raise ValueError("Expected GVAR coefficients [subjects, order, roi, roi]")
     np.savez_compressed(
         path,
-        bec=bec,
+        ec=ec,
         gvar_coefficients=coefficients,
         labels=np.asarray(dataset["labels"], dtype=np.int64),
         subject_ids=np.asarray(dataset["subject_ids"]),
         site_ids=np.asarray(dataset["site_ids"]),
-        representation=np.asarray("gvar_bec"),
+        representation=np.asarray("gvar_ec"),
         gvar_config=np.asarray(json.dumps(gvar_config(args), sort_keys=True)),
-        roi_names=np.asarray([f"ROI_{index + 1:03d}" for index in range(bec.shape[1])]),
+        roi_names=np.asarray([f"ROI_{index + 1:03d}" for index in range(ec.shape[1])]),
     )
 
 
@@ -159,9 +159,9 @@ def _fit_subject(task):
         raise ValueError(f"GVAR returned unexpected coefficients: {coefficients.shape}")
     lagged = np.median(coefficients, axis=0)
     weights = np.power(settings["lag_decay"], np.arange(settings["order"], dtype=np.float32))
-    bec = np.tensordot(weights, lagged, axes=(0, 0)) / weights.sum()
-    np.fill_diagonal(bec, 0.0)
-    return index, subject_id, bec, lagged, time.perf_counter() - started
+    ec = np.tensordot(weights, lagged, axes=(0, 0)) / weights.sum()
+    np.fill_diagonal(ec, 0.0)
+    return index, subject_id, ec, lagged, time.perf_counter() - started
 
 
 def _subject_tasks(args, dataset):
@@ -188,15 +188,15 @@ def _subject_tasks(args, dataset):
     ]
 
 
-def generate_bec_archive(args, dataset):
-    if args.bec_path.is_file() and not args.regenerate_bec:
-        archive = load_bec_archive(args.bec_path)
+def generate_ec_archive(args, dataset):
+    if args.ec_path.is_file() and not args.regenerate_ec:
+        archive = load_ec_archive(args.ec_path)
         if json.loads(str(archive["gvar_config"].item())) != gvar_config(args):
             raise ValueError("Existing archive uses a different GVAR configuration")
-        if len(archive["bec"]) == len(dataset["time_series"]):
-            print(f"using existing GVAR BEC archive: {args.bec_path}", flush=True)
+        if len(archive["ec"]) == len(dataset["time_series"]):
+            print(f"using existing GVAR EC archive: {args.ec_path}", flush=True)
             return archive
-        raise ValueError("Existing GVAR archive is incomplete; use --regenerate-bec")
+        raise ValueError("Existing GVAR archive is incomplete; use --regenerate-ec")
 
     tasks = _subject_tasks(args, dataset)
     total = len(tasks)
@@ -205,33 +205,33 @@ def generate_bec_archive(args, dataset):
     if args.workers == 1:
         completed = (_fit_subject(task) for task in tasks)
         for result in completed:
-            index, subject_id, bec, coefficients, elapsed = result
-            results[index - 1] = (bec, coefficients)
+            index, subject_id, ec, coefficients, elapsed = result
+            results[index - 1] = (ec, coefficients)
             print(f"finished subject {index}/{total}: {subject_id} in {elapsed / 60:.2f} min", flush=True)
     else:
         context = mp.get_context("spawn")
         with ProcessPoolExecutor(max_workers=args.workers, mp_context=context) as executor:
             futures = {executor.submit(_fit_subject, task): task[0] for task in tasks}
             for future in as_completed(futures):
-                index, subject_id, bec, coefficients, elapsed = future.result()
-                results[index - 1] = (bec, coefficients)
+                index, subject_id, ec, coefficients, elapsed = future.result()
+                results[index - 1] = (ec, coefficients)
                 print(f"finished subject {index}/{total}: {subject_id} in {elapsed / 60:.2f} min", flush=True)
-    bec, coefficients = zip(*results)
-    save_bec_archive(args.bec_path, bec, coefficients, dataset, args)
-    return load_bec_archive(args.bec_path)
+    ec, coefficients = zip(*results)
+    save_ec_archive(args.ec_path, ec, coefficients, dataset, args)
+    return load_ec_archive(args.ec_path)
 
 
-def classify_bec(args, archive, device):
+def classify_ec(args, archive, device):
     labels = np.asarray(archive["labels"], dtype=np.int64)
     rows = []
     for fold, train_index, val_index, test_index in make_stratified_splits(labels, args.n_splits, args.seed, args.validation_size):
-        train_mean, train_std = fit_bec_scaler(archive["bec"][train_index])
-        train_bec = transform_bec(archive["bec"][train_index], train_mean, train_std)
-        val_bec = transform_bec(archive["bec"][val_index], train_mean, train_std)
-        test_bec = transform_bec(archive["bec"][test_index], train_mean, train_std)
+        train_mean, train_std = fit_ec_scaler(archive["ec"][train_index])
+        train_ec = transform_ec(archive["ec"][train_index], train_mean, train_std)
+        val_ec = transform_ec(archive["ec"][val_index], train_mean, train_std)
+        test_ec = transform_ec(archive["ec"][test_index], train_mean, train_std)
         print(f"fold {fold}: train={len(train_index)}, val={len(val_index)}, test={len(test_index)}", flush=True)
         for repeat in range(args.classifier_repeats):
-            metrics, _ = train_classifier(train_bec, labels[train_index], val_bec, labels[val_index], test_bec, labels[test_index], device=device, seed=args.seed + fold * 1000 + repeat + 1, max_epochs=args.classifier_epochs, patience=args.classifier_patience, batch_size=32, learning_rate=args.classifier_lr)
+            metrics, _ = train_classifier(train_ec, labels[train_index], val_ec, labels[val_index], test_ec, labels[test_index], device=device, seed=args.seed + fold * 1000 + repeat + 1, max_epochs=args.classifier_epochs, patience=args.classifier_patience, batch_size=32, learning_rate=args.classifier_lr)
             rows.append({"fold": fold, "repeat": repeat + 1, **metrics})
             print("  " + ", ".join(f"{name}={value * 100:.2f}%" for name, value in metrics.items()), flush=True)
     return rows
@@ -274,16 +274,16 @@ def main():
     device = choose_device(args.gpu_id, args.cpu)
     print(f"dataset: {args.dataset}; classifier device: {device}; CUDA available: {torch.cuda.is_available()}", flush=True)
     if args.classification_only:
-        archive = load_bec_archive(args.bec_path)
+        archive = load_ec_archive(args.ec_path)
     else:
         print(f"loading fMRI data from {args.data_root}", flush=True)
         dataset = load_subject_dataset(args.data_root, pipeline=args.pipeline, strategy=args.strategy, derivative=args.derivative, profile=profile, standardize=True, max_subjects=args.max_subjects, patient_label=args.patient_label, control_label=args.control_label)
         print(f"loaded {len(dataset['time_series'])} subjects; starting subject-wise fitting", flush=True)
-        archive = generate_bec_archive(args, dataset)
-    print(f"GVAR BEC archive: {args.bec_path} shape={archive['bec'].shape}", flush=True)
+        archive = generate_ec_archive(args, dataset)
+    print(f"GVAR EC archive: {args.ec_path} shape={archive['ec'].shape}", flush=True)
     if args.generation_only:
         return
-    save_results(args, classify_bec(args, archive, device))
+    save_results(args, classify_ec(args, archive, device))
 
 
 if __name__ == "__main__":

@@ -46,15 +46,15 @@ Typical installation time is approximately 5 minutes on a "normal" desktop compu
 
 ## **How to run**
 
-The Graph-BEC baseline entry point is `run_npi_classifier.py`. It independently
+The Graph-EC baseline entry point is `run_npi_classifier.py`. It independently
 fits one MLP surrogate brain to each subject's standardized AAL90 ROI time
-series, computes one individual NPI-BEC matrix, and evaluates it with the
-Graph-BEC classification protocol.
+series, computes one individual NPI-EC matrix, and evaluates it with the
+Graph-EC classification protocol.
 
-The saved BEC convention is explicit:
+The saved EC convention is explicit:
 
 ```text
-bec[source, target] = average target-output change after perturbing source
+ec[source, target] = average target-output change after perturbing source
 ```
 
 The convention follows `model_EC` in `NPI.py`: the perturbed node indexes the
@@ -69,7 +69,7 @@ python PR_EC/baseline/NPI/run_npi_classifier.py \
   --gpu-id 0
 ```
 
-Use `--generation-only` to create only the individual NPI-BEC archive, or
+Use `--generation-only` to create only the individual NPI-EC archive, or
 `--classification-only` to classify an existing archive.
 
 This baseline intentionally uses subject-wise surrogate fitting. It does not
@@ -91,7 +91,7 @@ Copyright © 2024 NCC Lab, Southern University of Science and Technology, Shenzh
 
 ## ABIDE-II
 
-The Graph-BEC baseline runner also supports ABIDE-II:
+The Graph-EC baseline runner also supports ABIDE-II:
 
 ```bash
 python PR_EC/baseline/NPI-MLP/run_npi_classifier.py \
@@ -104,7 +104,7 @@ It uses the ABIDE-II profile, reading
 `dataset/ABIDE-II/Phenotypic_Processing.csv` and the standardized ROI files
 under `dataset/ABIDE-II/cpac/filt_noglobal/`. Results are written to
 `PR_EC/baseline/NPI-MLP/outputs/`, with the archive named
-`subject_npi_mlp_bec_abide_ii.npz`.
+`subject_npi_mlp_ec_abide_ii.npz`.
 
 For a smoke test:
 
@@ -138,6 +138,6 @@ python PR_EC/baseline/NPI-MLP/run_npi_classifier.py \
   --generation-only \
   --gpu-id cpu \
   --output-dir PR_EC/baseline/NPI-MLP/outputs/smoke_adhd200 \
-  --bec-path PR_EC/baseline/NPI-MLP/outputs/smoke_adhd200/subject_npi_mlp_bec_adhd200.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/NPI-MLP/outputs/smoke_adhd200/subject_npi_mlp_ec_adhd200.npz \
+  --regenerate-ec
 ```

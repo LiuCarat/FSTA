@@ -1,7 +1,7 @@
-"""Generate subject-level CR-VAE BECs, then run 10-fold classification.
+"""Generate subject-level CR-VAE ECs, then run 10-fold classification.
 
 CR-VAE exposes one Granger-causality matrix per fitted model. Consequently,
-subject-level BEC evaluation requires fitting one CR-VAE model per subject.
+subject-level EC evaluation requires fitting one CR-VAE model per subject.
 The generated matrices are saved once and reused by the downstream folds.
 """
 from __future__ import annotations
@@ -24,9 +24,9 @@ from PR_EC.data import load_subject_dataset
 from PR_EC.dataset_configs import get_profile
 from PR_EC.downstream import train_classifier
 from PR_EC.utils.folds import (
-    fit_bec_scaler,
+    fit_ec_scaler,
     make_stratified_splits,
-    transform_bec,
+    transform_ec,
 )
 from PR_EC.utils.runtime import set_seed
 from models.cgru_error import CRVAE, train_phase1
@@ -54,23 +54,23 @@ def parse_args():
     parser.add_argument("--max-subjects", type=int, default=None)
     parser.add_argument("--output-dir", type=Path, default=output_dir)
     parser.add_argument(
-        "--bec-path",
+        "--ec-path",
         type=Path,
-        default=output_dir / f"subject_bec_{profile.name}.npz",
+        default=output_dir / f"subject_ec_{profile.name}.npz",
     )
-    parser.add_argument("--regenerate-bec", action="store_true")
+    parser.add_argument("--regenerate-ec", action="store_true")
     parser.add_argument("--generation-only", action="store_true")
     parser.add_argument("--classification-only", action="store_true")
     parser.add_argument(
         "--fast",
         action="store_true",
-        help="use 100 CR-VAE iterations and batch size 64 for quick BEC generation",
+        help="use 100 CR-VAE iterations and batch size 64 for quick EC generation",
     )
     parser.add_argument(
         "--checkpoint-every",
         type=int,
         default=1,
-        help="save the BEC archive every N subjects (default: 1)",
+        help="save the EC archive every N subjects (default: 1)",
     )
 
     parser.add_argument("--seed", type=int, default=42)
@@ -119,9 +119,9 @@ def crvae_config(args):
     }
 
 
-def save_bec_archive(path, bec, dataset, args):
+def save_ec_archive(path, ec, dataset, args):
     path.parent.mkdir(parents=True, exist_ok=True)
-    count = len(bec)
+    count = len(ec)
     temporary_path = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -130,7 +130,7 @@ def save_bec_archive(path, bec, dataset, args):
             temporary_path = Path(handle.name)
         np.savez_compressed(
             temporary_path,
-            bec=np.asarray(bec, dtype=np.float32),
+            ec=np.asarray(ec, dtype=np.float32),
             labels=np.asarray(dataset["labels"][:count], dtype=np.int64),
             subject_ids=np.asarray(dataset["subject_ids"][:count]),
             site_ids=np.asarray(dataset["site_ids"][:count]),
@@ -143,31 +143,31 @@ def save_bec_archive(path, bec, dataset, args):
             temporary_path.with_name(temporary_path.name + ".npz").unlink(missing_ok=True)
 
 
-def load_bec_archive(path):
+def load_ec_archive(path):
     with np.load(path, allow_pickle=False) as archive:
-        required = {"bec", "labels", "subject_ids", "site_ids"}
+        required = {"ec", "labels", "subject_ids", "site_ids"}
         missing = required - set(archive.files)
         if missing:
-            raise ValueError(f"Missing CR-VAE BEC arrays: {sorted(missing)}")
+            raise ValueError(f"Missing CR-VAE EC arrays: {sorted(missing)}")
         return {key: archive[key] for key in archive.files}
 
 
 def validate_archive(archive, dataset, args):
-    count = len(archive["bec"])
+    count = len(archive["ec"])
     if count > len(dataset["subject_ids"]):
-        raise ValueError("BEC archive contains more subjects than the current dataset")
+        raise ValueError("EC archive contains more subjects than the current dataset")
     expected = np.asarray(dataset["subject_ids"][:count]).astype(str)
     archived = np.asarray(archive["subject_ids"]).astype(str)
     if not np.array_equal(expected, archived):
-        raise ValueError("BEC archive subject order does not match the current dataset")
-    if archive["bec"].ndim != 3 or archive["bec"].shape[1] != archive["bec"].shape[2]:
-        raise ValueError(f"Expected BEC shape [N, R, R], got {archive['bec'].shape}")
+        raise ValueError("EC archive subject order does not match the current dataset")
+    if archive["ec"].ndim != 3 or archive["ec"].shape[1] != archive["ec"].shape[2]:
+        raise ValueError(f"Expected EC shape [N, R, R], got {archive['ec'].shape}")
     if "crvae_config" in archive:
         archived_config = json.loads(str(archive["crvae_config"].item()))
         if archived_config != crvae_config(args):
             raise ValueError(
-                "Existing BEC archive uses different CR-VAE parameters; "
-                "use --regenerate-bec or restore the archived parameters"
+                "Existing EC archive uses different CR-VAE parameters; "
+                "use --regenerate-ec or restore the archived parameters"
             )
 
 
@@ -194,64 +194,64 @@ def train_subject_crvae(series, args, device, seed):
         verbose=args.crvae_verbose,
         batch_size=args.crvae_batch_size,
     )
-    bec = model.GC(threshold=False).detach().cpu().numpy().astype(np.float32)
+    ec = model.GC(threshold=False).detach().cpu().numpy().astype(np.float32)
     diagonal = np.arange(dimension)
-    bec[diagonal, diagonal] = 0.0
-    return bec
+    ec[diagonal, diagonal] = 0.0
+    return ec
 
 
-def generate_subject_bec(args, dataset, device):
+def generate_subject_ec(args, dataset, device):
     existing = None
-    if args.bec_path.is_file() and not args.regenerate_bec:
-        existing = load_bec_archive(args.bec_path)
+    if args.ec_path.is_file() and not args.regenerate_ec:
+        existing = load_ec_archive(args.ec_path)
         validate_archive(existing, dataset, args)
-        if len(existing["bec"]) == len(dataset["time_series"]):
-            print(f"using complete BEC archive: {args.bec_path}")
+        if len(existing["ec"]) == len(dataset["time_series"]):
+            print(f"using complete EC archive: {args.ec_path}")
             return existing
         print(
-            f"resuming BEC generation at subject {len(existing['bec']) + 1} "
-            f"from {args.bec_path}"
+            f"resuming EC generation at subject {len(existing['ec']) + 1} "
+            f"from {args.ec_path}"
         )
 
-    bec = [] if existing is None else list(existing["bec"])
+    ec = [] if existing is None else list(existing["ec"])
     total = len(dataset["time_series"])
-    for index in range(len(bec), total):
+    for index in range(len(ec), total):
         subject_id = dataset["subject_ids"][index]
-        print(f"CR-VAE BEC [{index + 1}/{total}] subject={subject_id}")
-        subject_bec = train_subject_crvae(
+        print(f"CR-VAE EC [{index + 1}/{total}] subject={subject_id}")
+        subject_ec = train_subject_crvae(
             dataset["time_series"][index], args, device, args.seed + index
         )
-        bec.append(subject_bec)
+        ec.append(subject_ec)
         if (index + 1) % args.checkpoint_every == 0 or index + 1 == total:
-            save_bec_archive(args.bec_path, bec, dataset, args)
-        del subject_bec
+            save_ec_archive(args.ec_path, ec, dataset, args)
+        del subject_ec
 
-    archive = load_bec_archive(args.bec_path)
+    archive = load_ec_archive(args.ec_path)
     validate_archive(archive, dataset, args)
     return archive
 
 
-def classify_bec(args, archive, device):
+def classify_ec(args, archive, device):
     labels = np.where(archive["labels"] == 1, args.patient_label, args.control_label)
     rows = []
     for fold, train_index, val_index, test_index in make_stratified_splits(
         labels, args.n_splits, args.seed, args.validation_size
     ):
-        mean, std = fit_bec_scaler(archive["bec"][train_index])
-        train_bec = transform_bec(archive["bec"][train_index], mean, std)
-        val_bec = transform_bec(archive["bec"][val_index], mean, std)
-        test_bec = transform_bec(archive["bec"][test_index], mean, std)
+        mean, std = fit_ec_scaler(archive["ec"][train_index])
+        train_ec = transform_ec(archive["ec"][train_index], mean, std)
+        val_ec = transform_ec(archive["ec"][val_index], mean, std)
+        test_ec = transform_ec(archive["ec"][test_index], mean, std)
         print(
             f"fold {fold}: train={len(train_index)}, "
             f"val={len(val_index)}, test={len(test_index)}"
         )
         for repeat in range(args.classifier_repeats):
             metrics, _ = train_classifier(
-                train_bec,
+                train_ec,
                 labels[train_index],
-                val_bec,
+                val_ec,
                 labels[val_index],
-                test_bec,
+                test_ec,
                 labels[test_index],
                 device=device,
                 seed=args.seed + fold * 1000 + repeat + 1,
@@ -327,9 +327,9 @@ def main():
     device = choose_device(args.gpu_id)
     print(f"device: {device}")
     if args.classification_only:
-        archive = load_bec_archive(args.bec_path)
-        print(f"subject BEC archive: {args.bec_path} shape={archive['bec'].shape}")
-        rows = classify_bec(args, archive, device)
+        archive = load_ec_archive(args.ec_path)
+        print(f"subject EC archive: {args.ec_path} shape={archive['ec'].shape}")
+        rows = classify_ec(args, archive, device)
         save_classification_results(args, rows)
         print(f"classification results: {args.output_dir}")
         return
@@ -344,11 +344,11 @@ def main():
         patient_label=args.patient_label,
         control_label=args.control_label,
     )
-    archive = generate_subject_bec(args, dataset, device)
-    print(f"subject BEC archive: {args.bec_path} shape={archive['bec'].shape}")
+    archive = generate_subject_ec(args, dataset, device)
+    print(f"subject EC archive: {args.ec_path} shape={archive['ec'].shape}")
     if args.generation_only:
         return
-    rows = classify_bec(args, archive, device)
+    rows = classify_ec(args, archive, device)
     save_classification_results(args, rows)
     print(f"classification results: {args.output_dir}")
 

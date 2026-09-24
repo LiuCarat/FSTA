@@ -1,7 +1,7 @@
-"""Generate subject-level partial-correlation FC matrices and run the BEC classifier probe.
+"""Generate subject-level partial-correlation FC matrices and run the EC classifier probe.
 
-This baseline keeps the downstream evaluation identical to Graph-BEC. Only the
-subject-level representation changes: FSTA/Graph-BEC BEC is replaced by a
+This baseline keeps the downstream evaluation identical to Graph-EC. Only the
+subject-level representation changes: FSTA/Graph-EC EC is replaced by a
 Graphical-Lasso partial-correlation matrix of each subject's ROI time series.
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
 from PR_EC.data import load_subject_dataset
 from PR_EC.downstream import train_classifier
 from PR_EC.dataset_configs import get_profile
-from PR_EC.utils.folds import fit_bec_scaler, make_stratified_splits, transform_bec
+from PR_EC.utils.folds import fit_ec_scaler, make_stratified_splits, transform_ec
 from PR_EC.utils.runtime import set_seed
 
 
@@ -146,7 +146,7 @@ def save_fc_archive(path, fc, dataset, args):
     count = len(fc)
     np.savez_compressed(
         path,
-        bec=np.asarray(fc, dtype=np.float32),
+        ec=np.asarray(fc, dtype=np.float32),
         labels=np.asarray(dataset["labels"][:count], dtype=np.int64),
         subject_ids=np.asarray(dataset["subject_ids"][:count]),
         site_ids=np.asarray(dataset["site_ids"][:count]),
@@ -157,7 +157,7 @@ def save_fc_archive(path, fc, dataset, args):
 
 def load_fc_archive(path):
     with np.load(path, allow_pickle=False) as archive:
-        required = {"bec", "labels", "subject_ids", "site_ids"}
+        required = {"ec", "labels", "subject_ids", "site_ids"}
         missing = required - set(archive.files)
         if missing:
             raise ValueError(f"Missing Partial Correlation FC arrays: {sorted(missing)}")
@@ -165,15 +165,15 @@ def load_fc_archive(path):
 
 
 def validate_archive(archive, dataset, args):
-    count = len(archive["bec"])
+    count = len(archive["ec"])
     if count > len(dataset["subject_ids"]):
         raise ValueError("FC archive contains more subjects than the current dataset")
     expected_ids = np.asarray(dataset["subject_ids"][:count]).astype(str)
     archive_ids = np.asarray(archive["subject_ids"]).astype(str)
     if not np.array_equal(expected_ids, archive_ids):
         raise ValueError("FC archive subject order does not match the current dataset")
-    if archive["bec"].ndim != 3 or archive["bec"].shape[1] != archive["bec"].shape[2]:
-        raise ValueError(f"Expected FC shape [N, R, R], got {archive['bec'].shape}")
+    if archive["ec"].ndim != 3 or archive["ec"].shape[1] != archive["ec"].shape[2]:
+        raise ValueError(f"Expected FC shape [N, R, R], got {archive['ec'].shape}")
     if "fc_config" in archive:
         archived_config = json.loads(str(archive["fc_config"].item()))
         if archived_config != fc_config(args):
@@ -184,7 +184,7 @@ def generate_fc_archive(args, dataset):
     if args.fc_path.is_file() and not args.regenerate_fc:
         archive = load_fc_archive(args.fc_path)
         validate_archive(archive, dataset, args)
-        if len(archive["bec"]) == len(dataset["time_series"]):
+        if len(archive["ec"]) == len(dataset["time_series"]):
             print(f"using existing Partial Correlation FC archive: {args.fc_path}")
             return archive
         raise ValueError("Existing Partial Correlation FC archive is incomplete; use --regenerate-fc")
@@ -211,10 +211,10 @@ def classify_fc(args, archive, device):
     for fold, train_index, val_index, test_index in make_stratified_splits(
         labels, args.n_splits, args.seed, args.validation_size
     ):
-        train_mean, train_std = fit_bec_scaler(archive["bec"][train_index])
-        train_fc = transform_bec(archive["bec"][train_index], train_mean, train_std)
-        val_fc = transform_bec(archive["bec"][val_index], train_mean, train_std)
-        test_fc = transform_bec(archive["bec"][test_index], train_mean, train_std)
+        train_mean, train_std = fit_ec_scaler(archive["ec"][train_index])
+        train_fc = transform_ec(archive["ec"][train_index], train_mean, train_std)
+        val_fc = transform_ec(archive["ec"][val_index], train_mean, train_std)
+        test_fc = transform_ec(archive["ec"][test_index], train_mean, train_std)
         print(f"fold {fold}: train={len(train_index)}, val={len(val_index)}, test={len(test_index)}")
         for repeat in range(args.classifier_repeats):
             metrics, _ = train_classifier(
@@ -299,7 +299,7 @@ def main():
             control_label=args.control_label,
         )
         archive = generate_fc_archive(args, dataset)
-    print(f"Partial Correlation FC archive: {args.fc_path} shape={archive['bec'].shape}")
+    print(f"Partial Correlation FC archive: {args.fc_path} shape={archive['ec'].shape}")
     if args.generation_only:
         return
     rows = classify_fc(args, archive, device)

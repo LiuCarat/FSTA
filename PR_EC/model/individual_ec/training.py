@@ -1,8 +1,8 @@
-"""STF-BEC training helpers used by the Original-BEC pipeline.
+"""STF-EC training helpers used by the Original-EC pipeline.
 
 This module only defines reusable training functions; it is not a command-line
 entry point. `the dataset-specific main entry point` starts the pipeline and calls these helpers
-through ``bec_generation.generate_subject_bec`` when ``input_mode`` is ``raw``.
+through ``ec_generation.generate_subject_ec`` when ``input_mode`` is ``raw``.
 """
 from __future__ import annotations
 import argparse
@@ -21,7 +21,7 @@ def build_stf_encoder(args, device):
     return STFEncoder(options, args.window_length, args.d_model, args.d_inner_hid, args.n_head, args.d_k, args.d_v, args.dropout).to(device)
 
 
-def train_stf_bec(args, time_series, device, window_ranges=None):
+def train_stf_ec(args, time_series, device, window_ranges=None):
     set_seed(args.seed)
     dataset = RandomSubjectWindowDataset(
         time_series, args.window_length, args.seed, window_ranges
@@ -45,8 +45,8 @@ def train_stf_bec(args, time_series, device, window_ranges=None):
         if metrics["loss"] < best_loss:
             best_loss, best_state = metrics["loss"], copy.deepcopy(model.state_dict())
         if epoch == 1 or epoch % args.log_every == 0 or epoch == args.epochs:
-            print(f"STF-BEC epoch={epoch}/{args.epochs} loss={metrics['loss']:.6f} reconstruction={metrics['reconstruction_loss']:.6f}")
-    # Historical subject_bec.npz files were extracted from the final epoch.
+            print(f"STF-EC epoch={epoch}/{args.epochs} loss={metrics['loss']:.6f} reconstruction={metrics['reconstruction_loss']:.6f}")
+    # Historical subject_ec.npz files were extracted from the final epoch.
     # Keep that behavior by default; best-epoch selection is opt-in for new runs.
     if getattr(args, "stf_checkpoint", "final") == "best" and best_state is not None:
         model.load_state_dict(best_state)

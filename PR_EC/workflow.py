@@ -5,7 +5,7 @@ import numpy as np
 
 from PR_EC.downstream import train_classifier
 from PR_EC.model.mpr.population_reference import (
-    bec_separability,
+    ec_separability,
     edge_effect_sizes,
     normative_reference,
 )
@@ -66,7 +66,7 @@ def build_fold_reference(args, arrays, fmri_arrays=None):
     reference = {}
     for split in ("train", "val", "test"):
         reference[f"{split}_neighbor"], _ = normative_reference(
-            arrays["train_bec"], weights[split]
+            arrays["train_ec"], weights[split]
         )
         reference[f"{split}_weights"] = weights[split]
     return reference
@@ -85,7 +85,7 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         else prepare_fold_arrays
     )
     arrays = prepare_arrays(
-        data["bec"][train_index], data["bec"][val_index], data["bec"][test_index],
+        data["ec"][train_index], data["ec"][val_index], data["ec"][test_index],
         data["continuous"][train_index], data["continuous"][val_index], data["continuous"][test_index],
         data["categorical_raw"][train_index], data["categorical_raw"][val_index], data["categorical_raw"][test_index],
     )
@@ -121,13 +121,13 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
     if needs_pgr:
         set_seed(fold_seed)
         pgr_model, train_pgr, pgr_metrics = train_pgr_refiner(
-            args, arrays["train_bec"], reference["train_neighbor"], device
+            args, arrays["train_ec"], reference["train_neighbor"], device
         )
         val_pgr = apply_pgr_refiner(
-            pgr_model, arrays["val_bec"], reference["val_neighbor"], device
+            pgr_model, arrays["val_ec"], reference["val_neighbor"], device
         )
         test_pgr = apply_pgr_refiner(
-            pgr_model, arrays["test_bec"], reference["test_neighbor"], device
+            pgr_model, arrays["test_ec"], reference["test_neighbor"], device
         )
 
     qsr_metrics = {}
@@ -135,21 +135,21 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
     if needs_qsr:
         set_seed(fold_seed + 1)
         qsr_refiner, train_qsr, sensitive_map, qsr_metrics = train_qsr_refiner(
-            args, arrays["train_bec"], reference["train_neighbor"],
+            args, arrays["train_ec"], reference["train_neighbor"],
             data["qsr_qc"][train_index], qsr_train_confound,
             data["site_ids"][train_index], device, fold_seed + 1,
         )
         val_qsr = apply_qsr_refiner(
-            qsr_refiner, arrays["val_bec"], reference["val_neighbor"], sensitive_map, device
+            qsr_refiner, arrays["val_ec"], reference["val_neighbor"], sensitive_map, device
         )
         test_qsr = apply_qsr_refiner(
-            qsr_refiner, arrays["test_bec"], reference["test_neighbor"], sensitive_map, device
+            qsr_refiner, arrays["test_ec"], reference["test_neighbor"], sensitive_map, device
         )
 
     all_representations = {
         "original": {
-            "train": arrays["train_bec"], "val": arrays["val_bec"],
-            "test": arrays["test_bec"],
+            "train": arrays["train_ec"], "val": arrays["val_ec"],
+            "test": arrays["test_ec"],
         },
     }
     if needs_pgr:
@@ -204,7 +204,7 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         original_test, labels["test"], args.asd_label
     )
     for name, representation in representations.items():
-        group = bec_separability(
+        group = ec_separability(
             representation["test"], labels["test"], args.asd_label
         )
         edge, effect = edge_effect_sizes(
@@ -226,17 +226,17 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         "test_pgr": test_pgr,
         "test_qc": test_qsr,
         "test_index": test_index,
-        "bec_mean": arrays["bec_mean"],
-        "bec_std": arrays["bec_std"],
+        "ec_mean": arrays["ec_mean"],
+        "ec_std": arrays["ec_std"],
         "refinement_metrics": {**pgr_metrics, **qsr_metrics},
     }
 
 
 def run_cross_validation(args, data, device):
-    """Run all folds and assemble test-only out-of-fold refined BECs."""
-    oof_pgr = np.full_like(data["bec"], np.nan, dtype=np.float32)
-    oof_qc = np.full_like(data["bec"], np.nan, dtype=np.float32)
-    fold_ids = np.full(len(data["bec"]), -1, dtype=np.int64)
+    """Run all folds and assemble test-only out-of-fold refined ECs."""
+    oof_pgr = np.full_like(data["ec"], np.nan, dtype=np.float32)
+    oof_qc = np.full_like(data["ec"], np.nan, dtype=np.float32)
+    fold_ids = np.full(len(data["ec"]), -1, dtype=np.int64)
     results, refinement_metrics = [], []
     for fold, train_index, val_index, test_index in make_stratified_splits(
         data["labels"], args.n_splits, args.seed, args.validation_size
@@ -247,16 +247,16 @@ def run_cross_validation(args, data, device):
         heldout = fold_result["test_index"]
         if fold_result["test_pgr"] is not None:
             restored_pgr = (
-                fold_result["test_pgr"] * fold_result["bec_std"]
-                + fold_result["bec_mean"]
+                fold_result["test_pgr"] * fold_result["ec_std"]
+                + fold_result["ec_mean"]
             ).astype(np.float32)
             diagonal = np.arange(restored_pgr.shape[-1])
             restored_pgr[:, diagonal, diagonal] = 0.0
             oof_pgr[heldout] = restored_pgr
         if fold_result["test_qc"] is not None:
             restored_qc = (
-                fold_result["test_qc"] * fold_result["bec_std"]
-                + fold_result["bec_mean"]
+                fold_result["test_qc"] * fold_result["ec_std"]
+                + fold_result["ec_mean"]
             ).astype(np.float32)
             diagonal = np.arange(restored_qc.shape[-1])
             restored_qc[:, diagonal, diagonal] = 0.0

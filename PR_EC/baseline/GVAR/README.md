@@ -2,8 +2,8 @@
 
 This baseline uses the original GVAR self-explaining neural autoregressive
 model (`SENNGC`) to fit one subject at a time from fMRI ROI time series. It
-exports a signed directed `ROI x ROI` BEC and optionally uses the shared
-Graph-BEC classifier.
+exports a signed directed `ROI x ROI` EC and optionally uses the shared
+Graph-EC classifier.
 
 ## Install
 
@@ -30,7 +30,7 @@ PYTHONUNBUFFERED=1 python PR_EC/baseline/GVAR/run_gvar.py \
   --generation-only
 ```
 
-## Full BEC generation
+## Full EC generation
 
 ```bash
 PYTHONUNBUFFERED=1 python PR_EC/baseline/GVAR/run_gvar.py \
@@ -45,12 +45,12 @@ PYTHONUNBUFFERED=1 python PR_EC/baseline/GVAR/run_gvar.py \
 The default output is:
 
 ```text
-PR_EC/baseline/GVAR/outputs/subject_gvar_bec_abide.npz
+PR_EC/baseline/GVAR/outputs/subject_gvar_ec_abide.npz
 ```
 
 ## ABIDE-II
 
-ABIDE-II uses the shared Graph-BEC loader and the default layout under
+ABIDE-II uses the shared Graph-EC loader and the default layout under
 `dataset/ABIDE-II/cpac/filt_noglobal/`. Use a dataset-specific output path so
 that ABIDE-I results are not overwritten:
 
@@ -64,14 +64,14 @@ PYTHONUNBUFFERED=1 python PR_EC/baseline/GVAR/run_gvar.py \
   --workers 1 \
   --gpu-id auto \
   --output-dir PR_EC/baseline/GVAR/outputs/abide_ii \
-  --bec-path PR_EC/baseline/GVAR/outputs/abide_ii/subject_gvar_bec_abide_ii.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/GVAR/outputs/abide_ii/subject_gvar_ec_abide_ii.npz \
+  --regenerate-ec
 ```
 
 For ABIDE-II, `epochs=100` is a reasonable smoke-test value and `epochs=200`
-is a practical starting point for the full BEC generation. Compare
+is a practical starting point for the full EC generation. Compare
 `epochs=100`, `200`, and `300` on the same subjects; use `300` only if the
-resulting BECs are still changing materially. The runner trains one GVAR per
+resulting ECs are still changing materially. The runner trains one GVAR per
 subject, so increasing epochs increases total runtime approximately linearly.
 
 Quick smoke test:
@@ -86,13 +86,13 @@ PYTHONUNBUFFERED=1 python PR_EC/baseline/GVAR/run_gvar.py \
   --generation-only \
   --gpu-id auto \
   --output-dir PR_EC/baseline/GVAR/outputs/smoke_abide_ii \
-  --bec-path PR_EC/baseline/GVAR/outputs/smoke_abide_ii/subject_gvar_bec_abide_ii.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/GVAR/outputs/smoke_abide_ii/subject_gvar_ec_abide_ii.npz \
+  --regenerate-ec
 ```
 
 ## ADHD200
 
-ADHD200 is supported through the shared Graph-BEC loader. The default input
+ADHD200 is supported through the shared Graph-EC loader. The default input
 files are `dataset/ADHD200/Phenotypic_Processing.csv` and
 `dataset/ADHD200/cpac/filt_noglobal/*_rois_aal.1D`. `DX=0` is treated as the
 control group, while `DX=1/2/3` is mapped to the patient group. The loader
@@ -113,11 +113,11 @@ PYTHONUNBUFFERED=1 python PR_EC/baseline/GVAR/run_gvar.py \
   --generation-only \
   --gpu-id cpu \
   --output-dir PR_EC/baseline/GVAR/outputs/smoke_adhd200 \
-  --bec-path PR_EC/baseline/GVAR/outputs/smoke_adhd200/subject_gvar_bec_adhd200.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/GVAR/outputs/smoke_adhd200/subject_gvar_ec_adhd200.npz \
+  --regenerate-ec
 ```
 
-For the full ADHD200 BEC archive, increase `--epochs` and remove
+For the full ADHD200 EC archive, increase `--epochs` and remove
 `--max-subjects 2`. Use `--workers` greater than one only when the available
 CPU/GPU memory can support multiple independent subject models.
 
@@ -137,7 +137,7 @@ The output files are `metrics_abide.csv`, `metrics_abide.json`, and
 The method reported in tables should be `GVAR`. `gvar_coefficients` stores
 median signed generalized coefficient matrices with shape
 `[subjects, order, roi, roi]`; the lag matrices are weighted by
-`--lag-decay` to form `bec`. The default `--workers 1` is serial, while larger
+`--lag-decay` to form `ec`. The default `--workers 1` is serial, while larger
 values fit independent subjects in separate CPU/GPU processes and preserve
 subject ordering in the archive. Do not use more GPU workers than available
 GPU memory allows.

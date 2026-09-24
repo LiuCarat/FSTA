@@ -1,4 +1,4 @@
-"""Generate subject-level FSTA-EC BECs and run downstream classification."""
+"""Generate subject-level FSTA-EC ECs and run downstream classification."""
 
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ from arguments import add_fsta_arguments
 from PR_EC.data import load_subject_dataset
 from PR_EC.downstream import train_classifier
 from PR_EC.dataset_configs import get_profile
-from PR_EC.utils.folds import fit_bec_scaler, make_stratified_splits, transform_bec
+from PR_EC.utils.folds import fit_ec_scaler, make_stratified_splits, transform_ec
 from PR_EC.utils.runtime import select_device, set_seed
-from bec_generation import generate_subject_bec
+from ec_generation import generate_subject_ec
 
 
 def parse_args():
@@ -48,9 +48,9 @@ def parse_args():
     parser.add_argument("--derivative", default="rois_aal")
     parser.add_argument("--output-dir", type=Path, default=output_dir)
     parser.add_argument(
-        "--bec-path",
+        "--ec-path",
         type=Path,
-        default=output_dir / f"subject_fsta_ec_bec_{profile.name}.npz",
+        default=output_dir / f"subject_fsta_ec_ec_{profile.name}.npz",
     )
     parser.add_argument("--max-subjects", type=int)
     parser.add_argument("--gpu-id", default="auto")
@@ -63,7 +63,7 @@ def parse_args():
     parser.add_argument("--classifier-repeats", type=int, default=1)
     parser.add_argument("--patient-label", type=int, default=1, choices=[0, 1])
     parser.add_argument("--control-label", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--regenerate-bec", action="store_true")
+    parser.add_argument("--regenerate-ec", action="store_true")
     parser.add_argument("--generation-only", action="store_true")
     parser.add_argument("--classification-only", action="store_true")
     add_fsta_arguments(parser)
@@ -87,7 +87,7 @@ def fsta_config(args):
 
 def load_archive(path):
     archive = np.load(path, allow_pickle=False)
-    required = {"bec", "labels", "subject_ids", "site_ids"}
+    required = {"ec", "labels", "subject_ids", "site_ids"}
     missing = required - set(archive.files)
     if missing:
         raise ValueError(f"Missing FSTA-EC arrays: {sorted(missing)}")
@@ -98,20 +98,20 @@ def save_archive(path, generated, args):
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         path,
-        bec=np.asarray(generated["bec"], dtype=np.float32),
+        ec=np.asarray(generated["ec"], dtype=np.float32),
         labels=np.asarray(generated["labels"], dtype=np.int64),
         subject_ids=np.asarray(generated["subject_ids"]).astype(str),
         site_ids=np.asarray(generated["site_ids"]).astype(str),
         reconstruction_mse=np.asarray(generated["reconstruction_mse"], dtype=np.float32),
         representation=np.asarray("fsta_ec_original"),
         fsta_config=np.asarray(json.dumps(fsta_config(args), sort_keys=True)),
-        roi_names=np.asarray([f"ROI_{index + 1:03d}" for index in range(generated["bec"].shape[1])]),
+        roi_names=np.asarray([f"ROI_{index + 1:03d}" for index in range(generated["ec"].shape[1])]),
     )
 
 
 def generate_archive(args, dataset, device):
-    if args.bec_path.is_file() and not args.regenerate_bec:
-        archive = load_archive(args.bec_path)
+    if args.ec_path.is_file() and not args.regenerate_ec:
+        archive = load_archive(args.ec_path)
         stored_config = json.loads(str(archive["fsta_config"].item()))
         current_config = fsta_config(args)
         if stored_config != current_config:
@@ -122,17 +122,17 @@ def generate_archive(args, dataset, device):
             }
             raise ValueError(
                 "Existing archive uses a different FSTA-EC configuration: "
-                f"{differences}. Use --regenerate-bec to rebuild it."
+                f"{differences}. Use --regenerate-ec to rebuild it."
             )
-        if len(archive["bec"]) == len(dataset["time_series"]):
-            print(f"using existing FSTA-EC archive: {args.bec_path}", flush=True)
+        if len(archive["ec"]) == len(dataset["time_series"]):
+            print(f"using existing FSTA-EC archive: {args.ec_path}", flush=True)
             return archive
-        raise ValueError("Existing FSTA-EC archive is incomplete; use --regenerate-bec")
+        raise ValueError("Existing FSTA-EC archive is incomplete; use --regenerate-ec")
 
-    generated, metrics = generate_subject_bec(args, dataset, device)
+    generated, metrics = generate_subject_ec(args, dataset, device)
     generated["fsta_training"] = metrics
-    save_archive(args.bec_path, generated, args)
-    return load_archive(args.bec_path)
+    save_archive(args.ec_path, generated, args)
+    return load_archive(args.ec_path)
 
 
 def classify_archive(args, archive, device):
@@ -141,10 +141,10 @@ def classify_archive(args, archive, device):
     for fold, train_index, val_index, test_index in make_stratified_splits(
         labels, args.n_splits, args.seed, args.validation_size
     ):
-        mean, std = fit_bec_scaler(archive["bec"][train_index])
-        train_bec = transform_bec(archive["bec"][train_index], mean, std)
-        val_bec = transform_bec(archive["bec"][val_index], mean, std)
-        test_bec = transform_bec(archive["bec"][test_index], mean, std)
+        mean, std = fit_ec_scaler(archive["ec"][train_index])
+        train_ec = transform_ec(archive["ec"][train_index], mean, std)
+        val_ec = transform_ec(archive["ec"][val_index], mean, std)
+        test_ec = transform_ec(archive["ec"][test_index], mean, std)
         print(
             f"fold {fold}: train={len(train_index)}, val={len(val_index)}, "
             f"test={len(test_index)}",
@@ -152,8 +152,8 @@ def classify_archive(args, archive, device):
         )
         for repeat in range(args.classifier_repeats):
             metrics, _ = train_classifier(
-                train_bec, labels[train_index], val_bec, labels[val_index],
-                test_bec, labels[test_index], device=device,
+                train_ec, labels[train_index], val_ec, labels[val_index],
+                test_ec, labels[test_index], device=device,
                 seed=args.seed + fold * 1000 + repeat + 1,
                 max_epochs=args.classifier_epochs,
                 patience=args.classifier_patience,
@@ -218,7 +218,7 @@ def main():
     set_seed(args.seed)
     device = select_device(args.gpu_id)
     if args.classification_only:
-        archive = load_archive(args.bec_path)
+        archive = load_archive(args.ec_path)
     else:
         profile = get_profile(args.dataset)
         dataset = load_subject_dataset(
@@ -240,7 +240,7 @@ def main():
             flush=True,
         )
         archive = generate_archive(args, dataset, device)
-    print(f"FSTA-EC archive: {args.bec_path}; shape={archive['bec'].shape}; device={device}", flush=True)
+    print(f"FSTA-EC archive: {args.ec_path}; shape={archive['ec'].shape}; device={device}", flush=True)
     if not args.generation_only:
         save_results(args, classify_archive(args, archive, device))
 

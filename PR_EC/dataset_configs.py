@@ -11,9 +11,9 @@ class ExperimentProfile:
     data_root: Path
     phenotype_path: Path
     output_dir: Path
-    bec_path: Path
-    refined_bec_path: Path
-    qsr_refined_bec_path: Path
+    ec_path: Path
+    refined_ec_path: Path
+    qsr_refined_ec_path: Path
     phenotype_format: str
     phenotype_id_column: str
     patient_column: str

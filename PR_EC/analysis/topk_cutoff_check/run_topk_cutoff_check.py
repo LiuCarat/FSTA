@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check whether common top-k edge cutoffs form natural effect-size gaps.
 
-For each dataset, all off-diagonal directed BEC edges are compared between
+For each dataset, all off-diagonal directed EC edges are compared between
 ASD (label 1) and HC/TC (label 0). Edges are sorted by absolute Hedges' g,
 and the values immediately around the requested ranks are reported.
 
@@ -22,8 +22,8 @@ HC_LABEL = 0
 ASD_LABEL = 1
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_DATASETS = {
-    "ABIDE-I": ROOT / "PR_EC/outputs/abide-i/abide_qsr_refined_subject_bec.npz",
-    "ABIDE-II": ROOT / "PR_EC/outputs/abide-ii/abide_ii_qsr_refined_subject_bec.npz",
+    "ABIDE-I": ROOT / "PR_EC/outputs/abide-i/abide_qsr_refined_subject_ec.npz",
+    "ABIDE-II": ROOT / "PR_EC/outputs/abide-ii/abide_ii_qsr_refined_subject_ec.npz",
 }
 DEFAULT_OUTPUT_DIR = ROOT / "PR_EC/analysis/topk_cutoff_check/outputs"
 DEFAULT_RANKS = (10, 20)
@@ -35,18 +35,18 @@ def parse_args() -> argparse.Namespace:
         "--abide-i",
         type=Path,
         default=DEFAULT_DATASETS["ABIDE-I"],
-        help="ABIDE-I BEC .npz archive",
+        help="ABIDE-I EC .npz archive",
     )
     parser.add_argument(
         "--abide-ii",
         type=Path,
         default=DEFAULT_DATASETS["ABIDE-II"],
-        help="ABIDE-II BEC .npz archive",
+        help="ABIDE-II EC .npz archive",
     )
     parser.add_argument(
-        "--bec-key",
-        choices=("bec", "refined_bec", "qc_refined_bec", "original_bec"),
-        default="bec",
+        "--ec-key",
+        choices=("ec", "refined_ec", "qc_refined_ec", "original_ec"),
+        default="ec",
         help="Array key used as the subject-level edge representation",
     )
     parser.add_argument(
@@ -60,38 +60,38 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_archive(path: Path, bec_key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_archive(path: Path, ec_key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if not path.is_file():
-        raise FileNotFoundError(f"BEC archive not found: {path}")
+        raise FileNotFoundError(f"EC archive not found: {path}")
     with np.load(path, allow_pickle=False) as archive:
-        required = {bec_key, "labels"}
+        required = {ec_key, "labels"}
         missing = required - set(archive.files)
         if missing:
-            raise ValueError(f"BEC archive is missing: {sorted(missing)}")
-        bec = np.asarray(archive[bec_key], dtype=np.float64)
+            raise ValueError(f"EC archive is missing: {sorted(missing)}")
+        ec = np.asarray(archive[ec_key], dtype=np.float64)
         labels = np.asarray(archive["labels"], dtype=np.int64).reshape(-1)
         roi_names = (
             np.asarray(archive["roi_names"]).astype(str).reshape(-1)
             if "roi_names" in archive.files
-            else np.asarray([f"ROI {index + 1}" for index in range(bec.shape[1])])
+            else np.asarray([f"ROI {index + 1}" for index in range(ec.shape[1])])
         )
-    if bec.ndim != 3 or bec.shape[1] != bec.shape[2]:
-        raise ValueError(f"Expected BEC shape [subjects, nodes, nodes], got {bec.shape}")
-    if len(labels) != len(bec) or len(roi_names) != bec.shape[1]:
-        raise ValueError("BEC, labels, and roi_names have incompatible lengths")
-    if not np.isfinite(bec).all():
-        raise ValueError("BEC contains NaN or infinite values")
+    if ec.ndim != 3 or ec.shape[1] != ec.shape[2]:
+        raise ValueError(f"Expected EC shape [subjects, nodes, nodes], got {ec.shape}")
+    if len(labels) != len(ec) or len(roi_names) != ec.shape[1]:
+        raise ValueError("EC, labels, and roi_names have incompatible lengths")
+    if not np.isfinite(ec).all():
+        raise ValueError("EC contains NaN or infinite values")
     if np.any(~np.isin(labels, (HC_LABEL, ASD_LABEL))):
         raise ValueError("Labels outside the canonical groups 0=HC/TC and 1=ASD were found")
     if not (labels == HC_LABEL).any() or not (labels == ASD_LABEL).any():
         raise ValueError("Both HC/TC and ASD groups are required")
-    return bec, labels, roi_names
+    return ec, labels, roi_names
 
 
-def hedges_g(bec: np.ndarray, labels: np.ndarray) -> np.ndarray:
+def hedges_g(ec: np.ndarray, labels: np.ndarray) -> np.ndarray:
     """Return directed-edge Hedges' g for ASD minus HC/TC."""
-    asd = bec[labels == ASD_LABEL]
-    hc = bec[labels == HC_LABEL]
+    asd = ec[labels == ASD_LABEL]
+    hc = ec[labels == HC_LABEL]
     n_asd, n_hc = len(asd), len(hc)
     degrees_of_freedom = n_asd + n_hc - 2
     if degrees_of_freedom <= 0:
@@ -179,8 +179,8 @@ def main() -> None:
     all_edges: list[dict[str, object]] = []
     summary: list[dict[str, object]] = []
     for dataset, path in (("ABIDE-I", args.abide_i), ("ABIDE-II", args.abide_ii)):
-        bec, labels, roi_names = load_archive(path, args.bec_key)
-        g_values = hedges_g(bec, labels)
+        ec, labels, roi_names = load_archive(path, args.ec_key)
+        g_values = hedges_g(ec, labels)
         rows = sorted_edge_rows(g_values, roi_names)
         if any(rank + 1 > len(rows) for rank in ranks):
             raise ValueError(

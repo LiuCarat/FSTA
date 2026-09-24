@@ -1,12 +1,12 @@
-# NAVAR Graph-BEC Baseline
+# NAVAR Graph-EC Baseline
 
 This directory contains the original NAVAR model implementation and a thin
-Graph-BEC experiment runner. NAVAR is a Neural Additive Vector Autoregression
+Graph-EC experiment runner. NAVAR is a Neural Additive Vector Autoregression
 model for learning directed dependencies in multivariate time series.
 
 The original model is kept in `NAVAR.py`; the reusable training function is in
 `train_NAVAR.py`; and `dataloader.py` prepares lagged time-series examples.
-`run_navar_baseline.py` is the only experiment entry point used by Graph-BEC.
+`run_navar_baseline.py` is the only experiment entry point used by Graph-EC.
 
 ## Baseline protocol
 
@@ -17,12 +17,12 @@ For every subject, the runner:
 3. computes the standard deviation of the learned additive contributions;
 4. sets diagonal self-contributions to zero;
 5. stores the resulting directed matrix in a subject-level `.npz` archive;
-6. evaluates the archive with the shared Graph-BEC downstream classifier.
+6. evaluates the archive with the shared Graph-EC downstream classifier.
 
 The matrix convention follows NAVAR: `[source, target]` is the contribution
 from a source ROI to a target ROI. The archive fields are:
 
-- `bec`: matrices with shape `[subjects, ROIs, ROIs]`;
+- `ec`: matrices with shape `[subjects, ROIs, ROIs]`;
 - `navar_scores`: the same matrices under a method-specific name;
 - `labels`, `subject_ids`, `site_ids`: subject metadata;
 - `navar_config`: NAVAR parameters used to generate the archive;
@@ -72,8 +72,8 @@ python PR_EC/baseline/NAVAR/run_navar_baseline.py \
   --generation-only \
   --gpu-id cpu \
   --output-dir PR_EC/baseline/NAVAR/outputs/smoke_adhd200 \
-  --bec-path PR_EC/baseline/NAVAR/outputs/smoke_adhd200/subject_navar_bec_adhd200.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/NAVAR/outputs/smoke_adhd200/subject_navar_ec_adhd200.npz \
+  --regenerate-ec
 ```
 
 For a quick smoke test, reduce both NAVAR and classifier training:
@@ -89,11 +89,11 @@ python PR_EC/baseline/NAVAR/run_navar_baseline.py \
   --classifier-epochs 1 \
   --classifier-patience 1 \
   --output-dir PR_EC/baseline/NAVAR/outputs/smoke_abide_ii \
-  --bec-path PR_EC/baseline/NAVAR/outputs/smoke_abide_ii/subject_navar_bec_abide_ii.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/NAVAR/outputs/smoke_abide_ii/subject_navar_ec_abide_ii.npz \
+  --regenerate-ec
 ```
 
-Generate only subject-level BEC matrices:
+Generate only subject-level EC matrices:
 
 ```bash
 python PR_EC/baseline/NAVAR/run_navar_baseline.py \
@@ -111,15 +111,15 @@ python PR_EC/baseline/NAVAR/run_navar_baseline.py \
 ```
 
 The default archive is saved to
-`outputs/subject_navar_bec_<dataset>.npz`. Metrics are saved to
+`outputs/subject_navar_ec_<dataset>.npz`. Metrics are saved to
 `outputs/metrics_navar_<dataset>.json`,
 `outputs/metrics_navar_<dataset>.csv`, and
 `outputs/summary_navar_<dataset>.json`.
 
-Use `--regenerate-bec` after changing any NAVAR fitting parameter. Use
+Use `--regenerate-ec` after changing any NAVAR fitting parameter. Use
 `--gpu-id cpu` to force CPU execution; otherwise NAVAR fitting and the
 downstream classifier use CUDA when available.
 
 The original NAVAR paper and supplementary material are retained in `paper/`;
 the original DREAM/CauseMe example data are retained in `experiments/` as
-reference assets, but they are not used by the Graph-BEC runner.
+reference assets, but they are not used by the Graph-EC runner.

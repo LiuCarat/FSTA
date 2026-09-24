@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Identify BEC edges replicated across ABIDE-I and ABIDE-II.
+"""Identify EC edges replicated across ABIDE-I and ABIDE-II.
 
 Replication is defined per identical directed edge (source -> target): both
 cohorts must have BH-FDR q < alpha and the ASD-minus-HC effect must have the
@@ -20,8 +20,8 @@ HC_LABEL = 0
 ASD_LABEL = 1
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_INPUTS = {
-    "ABIDE-I": ROOT / "PR_EC/outputs/abide-i/abide_qsr_refined_subject_bec.npz",
-    "ABIDE-II": ROOT / "PR_EC/outputs/abide-ii/abide_ii_qsr_refined_subject_bec.npz",
+    "ABIDE-I": ROOT / "PR_EC/outputs/abide-i/abide_qsr_refined_subject_ec.npz",
+    "ABIDE-II": ROOT / "PR_EC/outputs/abide-ii/abide_ii_qsr_refined_subject_ec.npz",
 }
 DEFAULT_OUTPUT_DIR = ROOT / "PR_EC/analysis/cross_cohort_replication/outputs"
 
@@ -31,40 +31,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--abide-i", type=Path, default=DEFAULT_INPUTS["ABIDE-I"])
     parser.add_argument("--abide-ii", type=Path, default=DEFAULT_INPUTS["ABIDE-II"])
     parser.add_argument(
-        "--bec-key",
-        choices=("bec", "refined_bec", "qc_refined_bec", "original_bec"),
-        default="bec",
+        "--ec-key",
+        choices=("ec", "refined_ec", "qc_refined_ec", "original_ec"),
+        default="ec",
     )
     parser.add_argument("--alpha", type=float, default=0.05)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     return parser.parse_args()
 
 
-def load_archive(path: Path, bec_key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_archive(path: Path, ec_key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if not path.is_file():
-        raise FileNotFoundError(f"BEC archive not found: {path}")
+        raise FileNotFoundError(f"EC archive not found: {path}")
     with np.load(path, allow_pickle=False) as archive:
-        missing = {bec_key, "labels"} - set(archive.files)
+        missing = {ec_key, "labels"} - set(archive.files)
         if missing:
-            raise ValueError(f"BEC archive is missing: {sorted(missing)}")
-        bec = np.asarray(archive[bec_key], dtype=np.float64)
+            raise ValueError(f"EC archive is missing: {sorted(missing)}")
+        ec = np.asarray(archive[ec_key], dtype=np.float64)
         labels = np.asarray(archive["labels"], dtype=np.int64).reshape(-1)
         roi_names = (
             np.asarray(archive["roi_names"]).astype(str).reshape(-1)
             if "roi_names" in archive.files
-            else np.asarray([f"ROI_{index + 1:03d}" for index in range(bec.shape[1])])
+            else np.asarray([f"ROI_{index + 1:03d}" for index in range(ec.shape[1])])
         )
-    if bec.ndim != 3 or bec.shape[1] != bec.shape[2]:
-        raise ValueError(f"Expected BEC shape [subjects, nodes, nodes], got {bec.shape}")
-    if len(labels) != len(bec) or len(roi_names) != bec.shape[1]:
-        raise ValueError("BEC, labels, and roi_names have incompatible lengths")
-    if not np.isfinite(bec).all():
-        raise ValueError("BEC contains NaN or infinite values")
+    if ec.ndim != 3 or ec.shape[1] != ec.shape[2]:
+        raise ValueError(f"Expected EC shape [subjects, nodes, nodes], got {ec.shape}")
+    if len(labels) != len(ec) or len(roi_names) != ec.shape[1]:
+        raise ValueError("EC, labels, and roi_names have incompatible lengths")
+    if not np.isfinite(ec).all():
+        raise ValueError("EC contains NaN or infinite values")
     if np.any(~np.isin(labels, (HC_LABEL, ASD_LABEL))):
         raise ValueError("Labels outside 0=HC/TC and 1=ASD were found")
     if not (labels == HC_LABEL).any() or not (labels == ASD_LABEL).any():
         raise ValueError("Both HC/TC and ASD groups are required")
-    return bec, labels, roi_names
+    return ec, labels, roi_names
 
 
 def benjamini_hochberg(values: np.ndarray) -> np.ndarray:
@@ -79,10 +79,10 @@ def benjamini_hochberg(values: np.ndarray) -> np.ndarray:
 
 
 def compute_effects_and_tests(
-    bec: np.ndarray, labels: np.ndarray,
+    ec: np.ndarray, labels: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    asd = bec[labels == ASD_LABEL]
-    hc = bec[labels == HC_LABEL]
+    asd = ec[labels == ASD_LABEL]
+    hc = ec[labels == HC_LABEL]
     n_asd, n_hc = len(asd), len(hc)
     degrees_of_freedom = n_asd + n_hc - 2
     asd_mean = asd.mean(axis=0)
@@ -210,8 +210,8 @@ def main() -> None:
 
     cohort_tables = {}
     for dataset, path in (("ABIDE-I", args.abide_i), ("ABIDE-II", args.abide_ii)):
-        bec, labels, roi_names = load_archive(path, args.bec_key)
-        asd_mean, hc_mean, hedges_g, q_values = compute_effects_and_tests(bec, labels)
+        ec, labels, roi_names = load_archive(path, args.ec_key)
+        asd_mean, hc_mean, hedges_g, q_values = compute_effects_and_tests(ec, labels)
         cohort_tables[dataset] = edge_table(
             dataset, asd_mean, hc_mean, hedges_g, q_values, roi_names
         )

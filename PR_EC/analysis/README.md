@@ -25,8 +25,8 @@ python PR_EC/analysis/group_edge_difference.py
 ```
 
 默认输入是 ABIDE II 模型阶段生成的
-`PR_EC/outputs/abide-ii/abide_ii_qsr_refined_subject_bec.npz`，默认分析
-`bec`，输出为：
+`PR_EC/outputs/abide-ii/abide_ii_qsr_refined_subject_ec.npz`，默认分析
+`ec`，输出为：
 
 ```text
 PR_EC/analysis/outputs/group_edge_difference/top_edges_abide_ii.csv
@@ -47,7 +47,7 @@ ABIDE I 仍可显式指定输入文件运行：
 
 ```bash
 python3 PR_EC/analysis/group_edge_difference.py \
-  --bec-path PR_EC/outputs/abide-i/abide_refined_subject_bec.npz \
+  --ec-path PR_EC/outputs/abide-i/abide_refined_subject_ec.npz \
   --output-dir PR_EC/analysis/outputs/group_edge_difference/abide_i \
   --output-name top_edges_abide_i.csv
 ```
@@ -55,7 +55,7 @@ python3 PR_EC/analysis/group_edge_difference.py \
 如需分析 QC 弱监督结果：
 
 ```bash
-python PR_EC/analysis/group_edge_difference.py --bec-key qc_refined_bec
+python PR_EC/analysis/group_edge_difference.py --ec-key qc_refined_ec
 ```
 
 ## 2. Top-10 差异 ROI
@@ -83,7 +83,7 @@ TotalDifferenceScore(ROI) = mean(abs(Difference))
 QC 弱监督 ROI 分析：
 
 ```bash
-python PR_EC/analysis/group_roi_difference.py --bec-key qc_refined_bec
+python PR_EC/analysis/group_roi_difference.py --ec-key qc_refined_ec
 ```
 
 ## 3. Top-K ROI 有向弦图
@@ -114,9 +114,9 @@ PR_EC/analysis/outputs/group_chord/chord_top10_rois_asd_tc.png
 `group_roi_difference/top_rois_asd_vs_tc.csv` 中的 `ASDEnhancedScore` /
 `TCEnhancedScore` 列。
 
-默认输入为 `PR_EC/outputs/pgr_bec_refined_subject_bec.npz`（键 `bec`），
-可用 `--bec-key refined_bec` 或 `--bec-key original_bec` 切换（`refined_bec`
-与 `bec` 数值相同）。
+默认输入为 `PR_EC/outputs/pgr_ec_refined_subject_ec.npz`（键 `ec`），
+可用 `--ec-key refined_ec` 或 `--ec-key original_ec` 切换（`refined_ec`
+与 `ec` 数值相同）。
 
 ## 4. 解释限制
 
@@ -126,7 +126,7 @@ Top-10 结果是描述性候选边/候选 ROI，不是统计显著结果。后�
 
 固定 Top-k 不用于定义稳定异常。对 ABIDE-I 和 ABIDE-II 中相同的有向边分别完成
 ASD vs HC 的 Welch 检验和全边 Benjamini–Hochberg FDR 校正，再按以下规则定义
-replicated ASD-related BEC：
+replicated ASD-related EC：
 
 ```text
 q_ABIDE-I < 0.05

@@ -1,6 +1,6 @@
 # Sparse VAR baseline
 
-This baseline replaces Graph-BEC's learned BEC with a subject-level sparse
+This baseline replaces Graph-EC's learned EC with a subject-level sparse
 vector autoregressive representation. For each subject, ROI `j` is regressed
 on lagged values of every ROI using an elastic-net penalty:
 
@@ -9,7 +9,7 @@ y_t = A_1 y_(t-1) + ... + A_p y_(t-p) + e_t
 ```
 
 The lagged coefficient matrices are weighted and averaged into one signed,
-directed `ROI x ROI` BEC. The generated BEC is then passed to the same
+directed `ROI x ROI` EC. The generated EC is then passed to the same
 fold-safe scaling, stratified splits, BrainNetCNN classifier, and metrics as
 the other baselines.
 
@@ -27,7 +27,7 @@ python PR_EC/baseline/Sparse-VAR/run_sparse_var.py \
 ```
 
 Useful modes are `--generation-only`, `--classification-only`, and
-`--regenerate-bec`. The archive contains `bec`, labels, subject/site IDs, and
+`--regenerate-ec`. The archive contains `ec`, labels, subject/site IDs, and
 `var_coefficients` with shape `[subjects, lags, roi, roi]`.
 
 `alpha` controls sparsity; larger values produce fewer directed edges.
@@ -50,8 +50,8 @@ PYTHONUNBUFFERED=1 python PR_EC/baseline/Sparse-VAR/run_sparse_var.py \
   --max-iter 10000 \
   --tol 1e-4 \
   --output-dir PR_EC/baseline/Sparse-VAR/outputs/abide_ii \
-  --bec-path PR_EC/baseline/Sparse-VAR/outputs/abide_ii/subject_sparse_var_bec_abide_ii.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/Sparse-VAR/outputs/abide_ii/subject_sparse_var_ec_abide_ii.npz \
+  --regenerate-ec
 ```
 
 Sparse-VAR has no neural-network `epoch`. Its generation-side convergence
@@ -63,7 +63,7 @@ appear. For regularization, compare `alpha=0.01`, `0.03`, and `0.1` while
 keeping the other settings fixed.
 
 The `--classifier-epochs` and `--classifier-patience` options only control the
-downstream Graph-BEC classifier, not Sparse-VAR BEC generation. The existing
+downstream Graph-EC classifier, not Sparse-VAR EC generation. The existing
 defaults `100` and `20` are appropriate starting values.
 
 Quick smoke test:
@@ -77,17 +77,17 @@ PYTHONUNBUFFERED=1 python PR_EC/baseline/Sparse-VAR/run_sparse_var.py \
   --n-splits 2 \
   --generation-only \
   --output-dir PR_EC/baseline/Sparse-VAR/outputs/smoke_abide_ii \
-  --bec-path PR_EC/baseline/Sparse-VAR/outputs/smoke_abide_ii/subject_sparse_var_bec_abide_ii.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/Sparse-VAR/outputs/smoke_abide_ii/subject_sparse_var_ec_abide_ii.npz \
+  --regenerate-ec
 ```
 
 ## ADHD200
 
-ADHD200 is supported through the shared Graph-BEC loader. The default input
+ADHD200 is supported through the shared Graph-EC loader. The default input
 files are `dataset/ADHD200/Phenotypic_Processing.csv` and
 `dataset/ADHD200/cpac/filt_noglobal/*_rois_aal.1D`. `DX=0` is the control
 group, while `DX=1/2/3` is mapped to the patient group. The loader reads 116
-source ROIs and keeps the first 90, matching Sparse-VAR's BEC dimensions.
+source ROIs and keeps the first 90, matching Sparse-VAR's EC dimensions.
 ADHD200 outputs default to `PR_EC/baseline/Sparse-VAR/outputs/adhd200/`.
 
 Quick generation smoke test:
@@ -102,8 +102,8 @@ PYTHONUNBUFFERED=1 python PR_EC/baseline/Sparse-VAR/run_sparse_var.py \
   --generation-only \
   --gpu-id cpu \
   --output-dir PR_EC/baseline/Sparse-VAR/outputs/smoke_adhd200 \
-  --bec-path PR_EC/baseline/Sparse-VAR/outputs/smoke_adhd200/subject_sparse_var_bec_adhd200.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/Sparse-VAR/outputs/smoke_adhd200/subject_sparse_var_ec_adhd200.npz \
+  --regenerate-ec
 ```
 
 For a full ADHD200 run, remove `--max-subjects 2` and increase `--max-iter`

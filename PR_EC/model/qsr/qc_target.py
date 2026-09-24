@@ -1,4 +1,4 @@
-"""Fold-safe QC supervision utilities for QSR-BEC training."""
+"""Fold-safe QC supervision utilities for QSR-EC training."""
 from __future__ import annotations
 
 import csv
@@ -8,7 +8,6 @@ import numpy as np
 
 
 DEFAULT_QC_COLUMNS = ("func_mean_fd", "func_dvars", "func_quality")
-QC_GOODNESS_COLUMNS = frozenset(("func_quality",))
 
 
 def _subject_row(rows, subject_id):
@@ -30,7 +29,7 @@ def _parse_numeric(value):
 
 
 def load_aligned_qc(csv_path, subject_ids, columns=DEFAULT_QC_COLUMNS, profile=None):
-    """Load QC values in BEC order, preserving quality goodness scores."""
+    """Load QC values in EC order, preserving QC sensitivity scores."""
     columns = tuple(columns)
     identifier = profile.phenotype_id_column if profile else "FILE_ID"
     delimiter = "\t" if profile and profile.phenotype_format == "tsv" else ","
@@ -77,7 +76,7 @@ def fit_qc_scaler(train_qc):
     }
 
 
-def transform_qc_badness(qc, scaler):
+def transform_qc_sensitivity(qc, scaler):
     """Return one-sided, fold-normalized QC scores."""
     values = np.asarray(qc, dtype=np.float64)
     fill = np.asarray(scaler["fill"], dtype=np.float64)
@@ -112,28 +111,28 @@ def build_confound_design(site_ids, phenotype_values):
     return continuous.astype(np.float32)
 
 
-def fit_qc_artifact_basis(train_bec, train_qc_badness, train_confounds, ridge=1e-3):
-    """Estimate confound-controlled QC-associated directed BEC basis maps."""
-    bec = np.asarray(train_bec, dtype=np.float64)
-    qc_badness = np.asarray(train_qc_badness, dtype=np.float64)
+def fit_qc_sensitivity_basis(train_ec, train_qc_sensitivity, train_confounds, ridge=1e-3):
+    """Estimate confound-controlled QC-sensitivity EC basis maps."""
+    ec = np.asarray(train_ec, dtype=np.float64)
+    qc_sensitivity = np.asarray(train_qc_sensitivity, dtype=np.float64)
     confounds = np.asarray(train_confounds, dtype=np.float64)
-    if bec.ndim != 3 or len(bec) != len(qc_badness) or len(bec) != len(confounds):
-        raise ValueError("BEC, QC, and confounds must have the same subject count")
+    if ec.ndim != 3 or len(ec) != len(qc_sensitivity) or len(ec) != len(confounds):
+        raise ValueError("EC, QC, and confounds must have the same subject count")
     if ridge < 0.0:
         raise ValueError("ridge must be non-negative")
     design = np.concatenate(
-        (np.ones((len(bec), 1), dtype=np.float64), qc_badness, confounds), axis=1
+        (np.ones((len(ec), 1), dtype=np.float64), qc_sensitivity, confounds), axis=1
     )
     penalty = np.eye(design.shape[1], dtype=np.float64) * float(ridge)
     penalty[0, 0] = 0.0
     coefficients = np.linalg.solve(
         design.T @ design + penalty,
-        design.T @ bec.reshape(len(bec), -1),
+        design.T @ ec.reshape(len(ec), -1),
     )
-    basis = coefficients[1:1 + qc_badness.shape[1]].reshape(
-        qc_badness.shape[1], bec.shape[1], bec.shape[2]
+    basis = coefficients[1:1 + qc_sensitivity.shape[1]].reshape(
+        qc_sensitivity.shape[1], ec.shape[1], ec.shape[2]
     )
-    diagonal = np.arange(bec.shape[-1])
+    diagonal = np.arange(ec.shape[-1])
     basis[:, diagonal, diagonal] = 0.0
     return basis.astype(np.float32)
 
@@ -167,22 +166,22 @@ def _limit_relative_change(base, proposal, maximum_ratio):
     return bounded.astype(np.float32)
 
 
-def build_pseudo_target(bec, qc_badness, qc_basis, eta, maximum_ratio):
+def build_pseudo_target(ec, qc_sensitivity, qc_basis, eta, maximum_ratio):
     """Create a conservative QC-guided pseudo-target for training subjects."""
     if eta < 0.0:
         raise ValueError("eta must be non-negative")
     component = np.tensordot(
-        np.asarray(qc_badness, dtype=np.float32),
+        np.asarray(qc_sensitivity, dtype=np.float32),
         np.asarray(qc_basis, dtype=np.float32),
         axes=(1, 0),
     )
-    proposal = np.asarray(bec, dtype=np.float32) - float(eta) * component
-    return _limit_relative_change(bec, proposal, maximum_ratio)
+    proposal = np.asarray(ec, dtype=np.float32) - float(eta) * component
+    return _limit_relative_change(ec, proposal, maximum_ratio)
 
 
-def sample_joint_qc_delta(train_qc_badness, rng):
+def sample_joint_qc_delta(train_qc_sensitivity, rng):
     """Sample correlated QC changes from two real training-fold subjects."""
-    values = np.asarray(train_qc_badness, dtype=np.float32)
+    values = np.asarray(train_qc_sensitivity, dtype=np.float32)
     if len(values) < 2:
         return np.zeros_like(values)
     first = rng.integers(0, len(values), size=len(values))
@@ -190,8 +189,8 @@ def sample_joint_qc_delta(train_qc_badness, rng):
     return values[first] - values[second]
 
 
-def qc_corrupt(pseudo_bec, qc_basis, qc_delta, scale, maximum_ratio):
-    """Add bounded, joint-distribution QC-like perturbations to pseudo-targets."""
+def apply_qc_perturbation(pseudo_ec, qc_basis, qc_delta, scale, maximum_ratio):
+    """Add bounded, joint-distribution QC perturbations to pseudo-targets."""
     if scale < 0.0:
         raise ValueError("scale must be non-negative")
     component = np.tensordot(
@@ -199,8 +198,8 @@ def qc_corrupt(pseudo_bec, qc_basis, qc_delta, scale, maximum_ratio):
         np.asarray(qc_basis, dtype=np.float32),
         axes=(1, 0),
     )
-    proposal = np.asarray(pseudo_bec, dtype=np.float32) + float(scale) * component
-    return _limit_relative_change(pseudo_bec, proposal, maximum_ratio)
+    proposal = np.asarray(pseudo_ec, dtype=np.float32) + float(scale) * component
+    return _limit_relative_change(pseudo_ec, proposal, maximum_ratio)
 
 
 def relative_change(reference, updated):
@@ -216,12 +215,12 @@ __all__ = [
     "DEFAULT_QC_COLUMNS",
     "load_aligned_qc",
     "fit_qc_scaler",
-    "transform_qc_badness",
+    "transform_qc_sensitivity",
     "build_confound_design",
-    "fit_qc_artifact_basis",
+    "fit_qc_sensitivity_basis",
     "build_qc_sensitive_map",
     "build_pseudo_target",
     "sample_joint_qc_delta",
-    "qc_corrupt",
+    "apply_qc_perturbation",
     "relative_change",
 ]

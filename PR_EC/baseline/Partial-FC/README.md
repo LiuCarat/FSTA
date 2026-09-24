@@ -1,13 +1,13 @@
 # Partial Correlation FC baseline
 
-This baseline replaces the subject-level FSTA/Graph-BEC BEC with a sparse
+This baseline replaces the subject-level FSTA/Graph-EC EC with a sparse
 partial-correlation matrix estimated from each subject's ROI time series using a regularized precision
 matrix. The default is Ledoit-Wolf shrinkage; Graphical Lasso is available as
-an optional sparse estimator. The downstream evaluation is kept identical to Graph-BEC:
+an optional sparse estimator. The downstream evaluation is kept identical to Graph-EC:
 
 - same subject labels and subject order;
 - same stratified train/validation/test folds;
-- fold-local BEC/FC standardization;
+- fold-local EC/FC standardization;
 - same Directed BrainNetCNN classifier;
 - same classifier hyperparameters and metrics.
 
@@ -20,7 +20,7 @@ P[i,j] = -Theta[i,j] / sqrt(Theta[i,i] * Theta[j,j])
 
 The diagonal is set to zero. Zero-variance ROIs are excluded from the fit and
 represented by all-zero rows and columns. The archive uses the common
-`subject_bec.npz` layout, with the matrix stored in the `bec` field.
+`subject_ec.npz` layout, with the matrix stored in the `ec` field.
 
 ## ABIDE-I
 

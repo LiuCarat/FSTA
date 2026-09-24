@@ -1,7 +1,7 @@
-"""Generate Sparse VAR BECs and run the Graph-BEC classifier probe.
+"""Generate Sparse VAR ECs and run the Graph-EC classifier probe.
 
 The estimator is a subject-level VAR(p) with elastic-net regularization.  Its
-lagged directed coefficients are aggregated into a signed square BEC, while
+lagged directed coefficients are aggregated into a signed square EC, while
 the downstream split, scaling, model, and metrics remain unchanged.
 """
 from __future__ import annotations
@@ -24,9 +24,9 @@ for path in (ROOT, BASELINE_DIR):
 from PR_EC.data import load_subject_dataset
 from PR_EC.downstream import train_classifier
 from PR_EC.dataset_configs import get_profile
-from PR_EC.utils.folds import fit_bec_scaler, make_stratified_splits, transform_bec
+from PR_EC.utils.folds import fit_ec_scaler, make_stratified_splits, transform_ec
 from PR_EC.utils.runtime import set_seed
-from sparse_var import SparseVARConfig, generate_sparse_var_bec
+from sparse_var import SparseVARConfig, generate_sparse_var_ec
 
 
 def parse_args():
@@ -52,9 +52,9 @@ def parse_args():
     parser.add_argument("--tol", type=float, default=1e-4)
     parser.add_argument("--output-dir", type=Path, default=output_dir)
     parser.add_argument(
-        "--bec-path",
+        "--ec-path",
         type=Path,
-        default=output_dir / f"subject_sparse_var_bec_{profile.name}.npz",
+        default=output_dir / f"subject_sparse_var_ec_{profile.name}.npz",
     )
     parser.add_argument("--max-subjects", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42)
@@ -67,7 +67,7 @@ def parse_args():
     parser.add_argument("--classifier-repeats", type=int, default=1)
     parser.add_argument("--patient-label", type=int, default=1, choices=[0, 1])
     parser.add_argument("--control-label", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--regenerate-bec", action="store_true")
+    parser.add_argument("--regenerate-ec", action="store_true")
     parser.add_argument("--generation-only", action="store_true")
     parser.add_argument("--classification-only", action="store_true")
     return parser.parse_args()
@@ -97,40 +97,40 @@ def var_config(args):
     }
 
 
-def load_bec_archive(path):
+def load_ec_archive(path):
     archive = np.load(path, allow_pickle=False)
-    required = {"bec", "labels", "subject_ids", "site_ids"}
+    required = {"ec", "labels", "subject_ids", "site_ids"}
     missing = required - set(archive.files)
     if missing:
-        raise ValueError(f"Missing BEC arrays: {sorted(missing)}")
+        raise ValueError(f"Missing EC arrays: {sorted(missing)}")
     return {key: archive[key] for key in archive.files}
 
 
-def save_bec_archive(path, bec, coefficients, dataset, args):
+def save_ec_archive(path, ec, coefficients, dataset, args):
     path.parent.mkdir(parents=True, exist_ok=True)
-    bec = np.asarray(bec, dtype=np.float32)
+    ec = np.asarray(ec, dtype=np.float32)
     coefficients = np.asarray(coefficients, dtype=np.float32)
-    if bec.ndim != 3 or bec.shape[1] != bec.shape[2]:
-        raise ValueError(f"Expected BEC [subjects, roi, roi], got {bec.shape}")
-    if coefficients.ndim != 4 or coefficients.shape[0] != bec.shape[0]:
+    if ec.ndim != 3 or ec.shape[1] != ec.shape[2]:
+        raise ValueError(f"Expected EC [subjects, roi, roi], got {ec.shape}")
+    if coefficients.ndim != 4 or coefficients.shape[0] != ec.shape[0]:
         raise ValueError(
-            "Expected VAR coefficients [subjects, lags, roi, roi] matching BEC; "
-            f"got {coefficients.shape} for {bec.shape}"
+            "Expected VAR coefficients [subjects, lags, roi, roi] matching EC; "
+            f"got {coefficients.shape} for {ec.shape}"
         )
     np.savez_compressed(
         path,
-        bec=bec,
+        ec=ec,
         var_coefficients=coefficients,
         labels=np.asarray(dataset["labels"], dtype=np.int64),
         subject_ids=np.asarray(dataset["subject_ids"]),
         site_ids=np.asarray(dataset["site_ids"]),
-        representation=np.asarray("sparse_var_bec"),
+        representation=np.asarray("sparse_var_ec"),
         var_config=np.asarray(json.dumps(var_config(args), sort_keys=True)),
-        roi_names=np.asarray([f"ROI_{index + 1:03d}" for index in range(bec.shape[1])]),
+        roi_names=np.asarray([f"ROI_{index + 1:03d}" for index in range(ec.shape[1])]),
     )
 
 
-def generate_bec_archive(args, dataset):
+def generate_ec_archive(args, dataset):
     config = SparseVARConfig(
         lags=args.lags,
         alpha=args.alpha,
@@ -140,42 +140,42 @@ def generate_bec_archive(args, dataset):
         lag_decay=args.lag_decay,
         threshold=args.threshold,
     )
-    if args.bec_path.is_file() and not args.regenerate_bec:
-        archive = load_bec_archive(args.bec_path)
+    if args.ec_path.is_file() and not args.regenerate_ec:
+        archive = load_ec_archive(args.ec_path)
         if json.loads(str(archive["var_config"].item())) != var_config(args):
             raise ValueError("Existing archive uses a different Sparse VAR configuration")
-        if len(archive["bec"]) == len(dataset["time_series"]):
-            print(f"using existing Sparse VAR BEC archive: {args.bec_path}")
+        if len(archive["ec"]) == len(dataset["time_series"]):
+            print(f"using existing Sparse VAR EC archive: {args.ec_path}")
             return archive
-        raise ValueError("Existing Sparse VAR archive is incomplete; use --regenerate-bec")
+        raise ValueError("Existing Sparse VAR archive is incomplete; use --regenerate-ec")
 
-    bec, coefficients = [], []
+    ec, coefficients = [], []
     total = len(dataset["time_series"])
     for index, series in enumerate(dataset["time_series"], start=1):
-        subject_bec, subject_coefficients = generate_sparse_var_bec(series, config)
-        bec.append(subject_bec)
+        subject_ec, subject_coefficients = generate_sparse_var_ec(series, config)
+        ec.append(subject_ec)
         coefficients.append(subject_coefficients)
         if index % 25 == 0 or index == total:
-            print(f"Sparse VAR BEC [{index}/{total}]")
-    save_bec_archive(args.bec_path, bec, coefficients, dataset, args)
-    return load_bec_archive(args.bec_path)
+            print(f"Sparse VAR EC [{index}/{total}]")
+    save_ec_archive(args.ec_path, ec, coefficients, dataset, args)
+    return load_ec_archive(args.ec_path)
 
 
-def classify_bec(args, archive, device):
+def classify_ec(args, archive, device):
     labels = np.asarray(archive["labels"], dtype=np.int64)
     rows = []
     for fold, train_index, val_index, test_index in make_stratified_splits(
         labels, args.n_splits, args.seed, args.validation_size
     ):
-        train_mean, train_std = fit_bec_scaler(archive["bec"][train_index])
-        train_bec = transform_bec(archive["bec"][train_index], train_mean, train_std)
-        val_bec = transform_bec(archive["bec"][val_index], train_mean, train_std)
-        test_bec = transform_bec(archive["bec"][test_index], train_mean, train_std)
+        train_mean, train_std = fit_ec_scaler(archive["ec"][train_index])
+        train_ec = transform_ec(archive["ec"][train_index], train_mean, train_std)
+        val_ec = transform_ec(archive["ec"][val_index], train_mean, train_std)
+        test_ec = transform_ec(archive["ec"][test_index], train_mean, train_std)
         print(f"fold {fold}: train={len(train_index)}, val={len(val_index)}, test={len(test_index)}")
         for repeat in range(args.classifier_repeats):
             metrics, _ = train_classifier(
-                train_bec, labels[train_index], val_bec, labels[val_index],
-                test_bec, labels[test_index], device=device,
+                train_ec, labels[train_index], val_ec, labels[val_index],
+                test_ec, labels[test_index], device=device,
                 seed=args.seed + fold * 1000 + repeat + 1,
                 max_epochs=args.classifier_epochs, patience=args.classifier_patience,
                 batch_size=32, learning_rate=args.classifier_lr,
@@ -226,7 +226,7 @@ def main():
     device = choose_device(args.gpu_id)
     print(f"dataset: {args.dataset}; device: {device}")
     if args.classification_only:
-        archive = load_bec_archive(args.bec_path)
+        archive = load_ec_archive(args.ec_path)
     else:
         dataset = load_subject_dataset(
             args.data_root, pipeline=args.pipeline, strategy=args.strategy,
@@ -234,11 +234,11 @@ def main():
             max_subjects=args.max_subjects, patient_label=args.patient_label,
             control_label=args.control_label,
         )
-        archive = generate_bec_archive(args, dataset)
-    print(f"Sparse VAR BEC archive: {args.bec_path} shape={archive['bec'].shape}")
+        archive = generate_ec_archive(args, dataset)
+    print(f"Sparse VAR EC archive: {args.ec_path} shape={archive['ec'].shape}")
     if args.generation_only:
         return
-    rows = classify_bec(args, archive, device)
+    rows = classify_ec(args, archive, device)
     save_results(args, rows)
 
 

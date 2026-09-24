@@ -1,4 +1,4 @@
-"""Shared data utilities for Graph-BEC dataset loaders."""
+"""Shared data utilities for Graph-EC dataset loaders."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,19 +29,19 @@ def validate_time_series(time_series, subject_id, roi_count=ROI_COUNT):
     return time_series.astype(np.float32, copy=False)
 
 
-def load_bec_archive(path):
+def load_ec_archive(path):
     archive = np.load(Path(path), allow_pickle=False)
-    required = {"bec", "labels", "subject_ids", "site_ids"}
+    required = {"ec", "labels", "subject_ids", "site_ids"}
     missing = required - set(archive.files)
     if missing:
-        raise ValueError(f"Missing BEC arrays: {sorted(missing)}")
+        raise ValueError(f"Missing EC arrays: {sorted(missing)}")
     return {key: archive[key] for key in archive.files}
 
 
 def limit_archive_subjects(data, max_subjects):
     if max_subjects is None:
         return data
-    subject_count = len(data["bec"])
+    subject_count = len(data["ec"])
     return {
         key: value[:max_subjects]
         if hasattr(value, "__len__") and len(value) == subject_count

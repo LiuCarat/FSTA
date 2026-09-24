@@ -1,9 +1,9 @@
-"""Sparse vector autoregressive BEC generation.
+"""Sparse vector autoregressive EC generation.
 
 This module implements the subject-wise penalized VAR estimator used by the
 Sparse VAR baseline.  Each response ROI is regressed on lagged ROI values with
 an elastic-net penalty.  The resulting directed coefficient matrices are
-aggregated across lags into a square BEC representation.
+aggregated across lags into a square EC representation.
 """
 from __future__ import annotations
 
@@ -97,24 +97,24 @@ def fit_sparse_var(time_series: np.ndarray, config: SparseVARConfig | None = Non
     return coefficients
 
 
-def coefficients_to_bec(coefficients: np.ndarray, lag_decay: float = 1.0) -> np.ndarray:
-    """Aggregate lagged directed coefficients into one signed BEC matrix."""
+def coefficients_to_ec(coefficients: np.ndarray, lag_decay: float = 1.0) -> np.ndarray:
+    """Aggregate lagged directed coefficients into one signed EC matrix."""
     values = np.asarray(coefficients, dtype=np.float32)
     if values.ndim != 3 or values.shape[1] != values.shape[2]:
         raise ValueError(f"Expected [lags, roi, roi] coefficients, got {values.shape}")
     weights = np.power(float(lag_decay), np.arange(values.shape[0], dtype=np.float32))
-    bec = np.tensordot(weights, values, axes=(0, 0)) / np.sum(weights)
-    bec = np.asarray(bec, dtype=np.float32)
-    np.fill_diagonal(bec, 0.0)
-    if not np.isfinite(bec).all():
-        raise ValueError("Sparse VAR BEC contains non-finite values")
-    return bec
+    ec = np.tensordot(weights, values, axes=(0, 0)) / np.sum(weights)
+    ec = np.asarray(ec, dtype=np.float32)
+    np.fill_diagonal(ec, 0.0)
+    if not np.isfinite(ec).all():
+        raise ValueError("Sparse VAR EC contains non-finite values")
+    return ec
 
 
-def generate_sparse_var_bec(
+def generate_sparse_var_ec(
     time_series: np.ndarray, config: SparseVARConfig | None = None
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Fit one subject and return ``(BEC, lagged_coefficients)``."""
+    """Fit one subject and return ``(EC, lagged_coefficients)``."""
     config = config or SparseVARConfig()
     coefficients = fit_sparse_var(time_series, config)
-    return coefficients_to_bec(coefficients, config.lag_decay), coefficients
+    return coefficients_to_ec(coefficients, config.lag_decay), coefficients

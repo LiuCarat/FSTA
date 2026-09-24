@@ -1,6 +1,6 @@
-"""Parameterized BEC estimation: STF-BEC loss and extraction.
+"""Parameterized EC estimation: STF-EC loss and extraction.
 
-Merged from: fsta_graph_bec, bec_extractor, losses, bec_refiner.
+Merged from: fsta_graph_ec, ec_extractor, losses, ec_refiner.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from PR_EC.utils import fixed_window_starts
 
 
 # ---------------------------------------------------------------------------
-# 1.  Unsupervised STF-BEC window loss
+# 1.  Unsupervised STF-EC window loss
 # ---------------------------------------------------------------------------
 
 class STFWindowLoss(nn.Module):
@@ -45,15 +45,15 @@ class STFWindowLoss(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# 2.  Subject-level BEC extraction  (was bec_extractor)
+# 2.  Subject-level EC extraction  (was ec_extractor)
 # ---------------------------------------------------------------------------
 
 @torch.no_grad()
-def extract_subject_bec(
+def extract_subject_ec(
     model, records, time_series, window_length, stride, device, window_ranges=None
 ):
     model.eval()
-    all_bec, all_mse = [], []
+    all_ec, all_mse = [], []
     for index, (record, series) in enumerate(zip(records, time_series), 1):
         attentions, errors = [], []
         ranges = (
@@ -81,17 +81,17 @@ def extract_subject_bec(
             errors.append(
                 float((reconstruction - window).pow(2).mean().item())
             )
-        bec = np.mean(np.stack(attentions), axis=0).T.astype(np.float32)
-        np.fill_diagonal(bec, 0.0)
-        all_bec.append(bec)
+        ec = np.mean(np.stack(attentions), axis=0).T.astype(np.float32)
+        np.fill_diagonal(ec, 0.0)
+        all_ec.append(ec)
         all_mse.append(np.mean(errors))
         if index == 1 or index == len(records) or index % 100 == 0:
             print(
-                f"BEC [{index}/{len(records)}] subject={record.subject_id} "
+                f"EC [{index}/{len(records)}] subject={record.subject_id} "
                 f"runs={len(ranges)} windows={len(starts)} "
                 f"mse={np.mean(errors):.6f}"
             )
     return {
-        "bec": np.stack(all_bec),
+        "ec": np.stack(all_ec),
         "reconstruction_mse": np.asarray(all_mse, dtype=np.float32),
     }

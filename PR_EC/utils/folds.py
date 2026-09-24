@@ -8,15 +8,15 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from PR_EC.model.mpr.population_reference import apply_continuous_scaler, fit_continuous_scaler
 
 
-def fit_bec_scaler(train_bec):
-    mean = np.asarray(train_bec).mean(axis=0)
-    std = np.asarray(train_bec).std(axis=0)
+def fit_ec_scaler(train_ec):
+    mean = np.asarray(train_ec).mean(axis=0)
+    std = np.asarray(train_ec).std(axis=0)
     std[~np.isfinite(std) | (std < 1e-6)] = 1.0
     return mean.astype(np.float32), std.astype(np.float32)
 
 
-def transform_bec(bec, mean, std):
-    scaled = ((np.asarray(bec) - mean) / std).astype(np.float32)
+def transform_ec(ec, mean, std):
+    scaled = ((np.asarray(ec) - mean) / std).astype(np.float32)
     diagonal = np.arange(scaled.shape[-1])
     scaled[:, diagonal, diagonal] = 0.0
     return scaled
@@ -54,9 +54,9 @@ def _encode_category_splits(train_cat, val_cat, test_cat):
 
 
 def prepare_fold_arrays(
-    train_bec,
-    val_bec,
-    test_bec,
+    train_ec,
+    val_ec,
+    test_ec,
     train_cont,
     val_cont,
     test_cont,
@@ -64,23 +64,23 @@ def prepare_fold_arrays(
     val_cat,
     test_cat,
 ):
-    bec_mean, bec_std = fit_bec_scaler(train_bec)
+    ec_mean, ec_std = fit_ec_scaler(train_ec)
     continuous_scaler = fit_continuous_scaler(train_cont)
     encoded_train, encoded_val, encoded_test = _encode_category_splits(
         train_cat, val_cat, test_cat
     )
     return {
-        "train_bec": transform_bec(train_bec, bec_mean, bec_std),
-        "val_bec": transform_bec(val_bec, bec_mean, bec_std),
-        "test_bec": transform_bec(test_bec, bec_mean, bec_std),
+        "train_ec": transform_ec(train_ec, ec_mean, ec_std),
+        "val_ec": transform_ec(val_ec, ec_mean, ec_std),
+        "test_ec": transform_ec(test_ec, ec_mean, ec_std),
         "train_cont": apply_continuous_scaler(train_cont, continuous_scaler),
         "val_cont": apply_continuous_scaler(val_cont, continuous_scaler),
         "test_cont": apply_continuous_scaler(test_cont, continuous_scaler),
         "train_cat": encoded_train,
         "val_cat": encoded_val,
         "test_cat": encoded_test,
-        "bec_mean": bec_mean,
-        "bec_std": bec_std,
+        "ec_mean": ec_mean,
+        "ec_std": ec_std,
         "continuous_scaler": continuous_scaler,
     }
 

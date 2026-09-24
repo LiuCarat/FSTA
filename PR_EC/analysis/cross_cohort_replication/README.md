@@ -7,7 +7,7 @@
 
 对每一条相同的有向连接 `i -> j`，在 ABIDE-I 和 ABIDE-II 中分别完成 ASD vs HC
 分析，并在每个队列内部对全部非对角有向边进行 Benjamini–Hochberg FDR 校正。
-当且仅当满足以下三个条件时，该连接进入 replicated ASD-related BEC set：
+当且仅当满足以下三个条件时，该连接进入 replicated ASD-related EC set：
 
 ```text
 q_I  < 0.05
@@ -17,8 +17,8 @@ sign(g_I) == sign(g_II)
 
 其中 `g` 是 ASD − HC 的 Hedges' g：
 
-- `g_I > 0` 且 `g_II > 0`：`replicated ASD-enhanced BEC`；
-- `g_I < 0` 且 `g_II < 0`：`replicated ASD-reduced BEC`。
+- `g_I > 0` 且 `g_II > 0`：`replicated ASD-enhanced EC`；
+- `g_I < 0` 且 `g_II < 0`：`replicated ASD-reduced EC`。
 
 因此，一条连接即使在 ABIDE-I 排名第 17、在 ABIDE-II 排名第 35，只要两个队列都
 显著且方向一致，仍然进入 replicated set。相反，单个队列 Rank 1 但另一个队列
@@ -55,7 +55,7 @@ python3 PR_EC/analysis/cross_cohort_replication/run_cross_cohort_replication.py
 
 ```bash
 python3 PR_EC/analysis/cross_cohort_replication/run_cross_cohort_replication.py \
-  --bec-key original_bec --alpha 0.05
+  --ec-key original_ec --alpha 0.05
 ```
 
 ## 输出
@@ -66,7 +66,7 @@ python3 PR_EC/analysis/cross_cohort_replication/run_cross_cohort_replication.py 
 
 ## RQ1：Whole-brain reproducibility
 
-若问题是“ABIDE-I 与 ABIDE-II 的全部 8010 条 BEC disease effects 是否整体一致”，
+若问题是“ABIDE-I 与 ABIDE-II 的全部 8010 条 EC disease effects 是否整体一致”，
 可运行：
 
 ```bash
@@ -85,7 +85,7 @@ python3 PR_EC/analysis/cross_cohort_replication/summarize_rq1.py
 - `outputs/rq1_whole_brain_summary.json`；
 - `outputs/rq1_whole_brain_report.md`。
 
-当前 `bec` 结果显示 Pearson `r = 0.373`、Spearman `rho = 0.351`，全边方向一致率
+当前 `ec` 结果显示 Pearson `r = 0.373`、Spearman `rho = 0.351`，全边方向一致率
 为 `61.0%`；168/8010 条边同时满足双队列 FDR 显著且方向一致。因此结论应表述为：
 两个队列存在**阳性但中等程度的整体效应模式一致性**，但不是所有边的普遍复现；
 可复现性是选择性的。两队列 rank 相关仅为 `rho = 0.099`，支持“不用 rank 定义核心异常”。
@@ -95,11 +95,11 @@ python3 PR_EC/analysis/cross_cohort_replication/summarize_rq1.py
 
 ## Methods wording
 
-> To identify robust ASD-related BEC alterations, we prioritized cross-cohort
+> To identify robust ASD-related EC alterations, we prioritized cross-cohort
 > reproducibility rather than within-cohort effect-size ranking. A directed
 > connection was considered cross-cohort replicated when it showed a
 > statistically significant ASD–HC difference in both ABIDE-I and ABIDE-II and
 > exhibited the same direction of effect across the two cohorts. Connections
 > showing ASD > HC in both cohorts were classified as replicated ASD-enhanced
-> BECs, whereas those showing ASD < HC in both cohorts were classified as
-> replicated ASD-reduced BECs.
+> ECs, whereas those showing ASD < HC in both cohorts were classified as
+> replicated ASD-reduced ECs.

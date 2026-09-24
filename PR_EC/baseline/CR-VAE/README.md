@@ -2,7 +2,7 @@
 
 `run_abide_classifier.py` evaluates whether subject-level CR-VAE causal
 matrices can distinguish the patient and control groups. It supports ABIDE-I,
-ABIDE-II, and ADHD200, and does not modify the Graph-BEC main program.
+ABIDE-II, and ADHD200, and does not modify the Graph-EC main program.
 
 ## Evaluation protocol
 
@@ -12,14 +12,14 @@ produce one shared matrix, which cannot serve as subject-level classification
 features. This runner instead uses the following protocol:
 
 1. Fit one CR-VAE model to each subject's time series.
-2. Extract the continuous `GC(threshold=False)` matrix as that subject's BEC.
-3. Save all matrices once to `outputs/subject_bec.npz`.
-4. Keep those BECs frozen during stratified 10-fold classification.
-5. Fit the BEC scaler and BrainNetCNN classifier only on each fold's training
+2. Extract the continuous `GC(threshold=False)` matrix as that subject's EC.
+3. Save all matrices once to `outputs/subject_ec.npz`.
+4. Keep those ECs frozen during stratified 10-fold classification.
+5. Fit the EC scaler and BrainNetCNN classifier only on each fold's training
    data, with validation-based early stopping.
 
-The archive contains `bec`, `labels`, `subject_ids`, and `site_ids`, matching
-the core layout of the Graph-BEC `subject_bec.npz` file.
+The archive contains `ec`, `labels`, `subject_ids`, and `site_ids`, matching
+the core layout of the Graph-EC `subject_ec.npz` file.
 
 ## Run generation and classification
 
@@ -59,14 +59,14 @@ that behavior clear in a command.
 
 ## Run the two stages separately
 
-Generate BECs once:
+Generate ECs once:
 
 ```bash
 python PR_EC/baseline/CR-VAE/run_abide_classifier.py \
   --data-root dataset/ABIDE-I \
   --gpu-id auto \
   --fast \
-  --bec-path PR_EC/baseline/CR-VAE/outputs/subject_bec_fast.npz \
+  --ec-path PR_EC/baseline/CR-VAE/outputs/subject_ec_fast.npz \
   --generation-only
 ```
 
@@ -74,12 +74,12 @@ Run only 10-fold classification using the frozen archive:
 
 ```bash
 python PR_EC/baseline/CR-VAE/run_abide_classifier.py \
-  --bec-path PR_EC/baseline/CR-VAE/outputs/subject_bec.npz \
+  --ec-path PR_EC/baseline/CR-VAE/outputs/subject_ec.npz \
   --gpu-id auto \
   --classification-only
 ```
 
-Use `--regenerate-bec` to discard the logical checkpoint and regenerate BECs
+Use `--regenerate-ec` to discard the logical checkpoint and regenerate ECs
 from subject 1. Classification outputs are saved as `metrics.csv`,
 `metrics.json`, and `summary.json` in the CR-VAE output directory.
 
@@ -105,8 +105,8 @@ python PR_EC/baseline/CR-VAE/run_abide_classifier.py \
   --classifier-epochs 100 \
   --classifier-patience 20 \
   --output-dir PR_EC/baseline/CR-VAE/outputs/abide_ii \
-  --bec-path PR_EC/baseline/CR-VAE/outputs/abide_ii/subject_bec_abide_ii.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/CR-VAE/outputs/abide_ii/subject_ec_abide_ii.npz \
+  --regenerate-ec
 ```
 
 ## ADHD200
@@ -115,9 +115,9 @@ ADHD200 uses the shared loader and the prepared files under
 `dataset/ADHD200/cpac/filt_noglobal/`. The phenotype file is
 `dataset/ADHD200/Phenotypic_Processing.csv`; `DX=0` is the control group and
 `DX=1/2/3` is mapped to the patient group. The loader reads the 116 source
-ROIs and uses the first 90, matching the rest of Graph-BEC.
+ROIs and uses the first 90, matching the rest of Graph-EC.
 
-Generate subject BECs and run classification:
+Generate subject ECs and run classification:
 
 ```bash
 python PR_EC/baseline/CR-VAE/run_abide_classifier.py \
@@ -130,12 +130,12 @@ python PR_EC/baseline/CR-VAE/run_abide_classifier.py \
   --crvae-batch-size 128 \
   --n-splits 10 \
   --output-dir PR_EC/baseline/CR-VAE/outputs/adhd200 \
-  --bec-path PR_EC/baseline/CR-VAE/outputs/adhd200/subject_bec_adhd200.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/CR-VAE/outputs/adhd200/subject_ec_adhd200.npz \
+  --regenerate-ec
 ```
 
 For a smoke test, limit the number of subjects and iterations. Use
-`--generation-only` to validate BEC generation before starting classification:
+`--generation-only` to validate EC generation before starting classification:
 
 ```bash
 python PR_EC/baseline/CR-VAE/run_abide_classifier.py \
@@ -146,14 +146,14 @@ python PR_EC/baseline/CR-VAE/run_abide_classifier.py \
   --crvae-batch-size 64 \
   --generation-only \
   --output-dir PR_EC/baseline/CR-VAE/outputs/smoke_adhd200 \
-  --bec-path PR_EC/baseline/CR-VAE/outputs/smoke_adhd200/subject_bec.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/CR-VAE/outputs/smoke_adhd200/subject_ec.npz \
+  --regenerate-ec
 ```
 
 CR-VAE generation does not use neural-network `epoch`; `--crvae-max-iter`
 controls the number of Phase-I optimization iterations for each subject. For
 ABIDE-II, use `100` for a smoke test, `300` as a fast pilot, and `500` as the
-recommended starting point for the full BEC archive. Compare `300`, `500`, and
+recommended starting point for the full EC archive. Compare `300`, `500`, and
 `1000` on the same subjects before selecting the final value. Because the
 runner fits one model per subject, runtime grows approximately linearly with
 `--crvae-max-iter`.
@@ -174,6 +174,6 @@ python PR_EC/baseline/CR-VAE/run_abide_classifier.py \
   --crvae-batch-size 64 \
   --generation-only \
   --output-dir PR_EC/baseline/CR-VAE/outputs/smoke_abide_ii \
-  --bec-path PR_EC/baseline/CR-VAE/outputs/smoke_abide_ii/subject_bec_abide_ii.npz \
-  --regenerate-bec
+  --ec-path PR_EC/baseline/CR-VAE/outputs/smoke_abide_ii/subject_ec_abide_ii.npz \
+  --regenerate-ec
 ```

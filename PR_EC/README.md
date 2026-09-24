@@ -1,22 +1,22 @@
-# Graph-QSR-BEC
+# Graph-QSR-EC
 
-本目录实现一个从 ROI 时间序列生成个体化有向 BEC，并使用患者相似图进行无诊断标签修正的流程。最终通过 Directed BrainNetCNN 比较不同 BEC 表示的 ASD/TC 分类性能。
+本目录实现一个从 ROI 时间序列生成个体化有向 EC，并使用患者相似图进行无诊断标签修正的流程。最终通过 Directed BrainNetCNN 比较不同 EC 表示的 ASD/TC 分类性能。
 
 ## 主要流程
 
 ```text
 ROI 时间序列
-    ↓ STF-BEC Encoder（无监督重建）
-个体化有向 BEC
+    ↓ STF-EC Encoder（无监督重建）
+个体化有向 EC
     ↓ phenotype / fusion 患者图
-邻居参考 BEC
-    ↓ PGR-BEC / QSR-BEC（仅使用训练 fold）
-Original、Refined、QC-refined BEC
+邻居参考 EC
+    ↓ PGR-EC / QSR-EC（仅使用训练 fold）
+Original、Refined、QC-refined EC
     ↓ Directed BrainNetCNN
 交叉验证分类与结果汇总
 ```
 
-- BEC 生成、患者图构建和 BEC 修正不使用诊断标签。
+- EC 生成、患者图构建和 EC 修正不使用诊断标签。
 - 诊断标签仅用于下游分类和群体差异分析。
 - 默认使用 `fusion` 图，同时考虑表型和 fMRI 功能连接；也可以使用 `phenotype` 图。
 - 现在每个数据集都有独立主入口，参数和默认配置直接写在对应的 `main_*.py` 中。
@@ -46,13 +46,13 @@ dataset/
 
 ### ABIDE-I
 
-使用已有 BEC（默认模式）：
+使用已有 EC（默认模式）：
 
 ```bash
 python PR_EC/main_abide_i.py
 ```
 
-从 ROI 时间序列重新生成 BEC：
+从 ROI 时间序列重新生成 EC：
 
 ```bash
 python PR_EC/main_abide_i.py --input-mode raw
@@ -60,13 +60,13 @@ python PR_EC/main_abide_i.py --input-mode raw
 
 ### ADHD200
 
-使用已有 BEC（默认模式）：
+使用已有 EC（默认模式）：
 
 ```bash
 python PR_EC/main_adhd200.py
 ```
 
-从 ROI 时间序列重新生成 BEC：
+从 ROI 时间序列重新生成 EC：
 
 ```bash
 python PR_EC/main_adhd200.py --input-mode raw
@@ -88,7 +88,7 @@ python PR_EC/main_abide_ii.py --input-mode raw
 python PR_EC/main_abide_i.py --graph-mode phenotype
 python PR_EC/main_adhd200.py --graph-mode fusion
 
-# 仅比较指定 BEC 表示
+# 仅比较指定 EC 表示
 python PR_EC/main_abide_i.py \
   --representations original refined qc_refined
 
@@ -97,7 +97,7 @@ python PR_EC/main_adhd200.py --gpu-id 0
 python PR_EC/main_adhd200.py --gpu-id cpu
 ```
 
-`--input-mode bec`（默认）要求对应 `main_*.py` 中配置的 BEC 文件已经存在；`--input-mode raw` 会读取原始 ROI 时间序列、训练 STF-BEC 编码器，并覆盖保存对应的 BEC 文件。数据根目录或表型文件位置不采用默认值时，可使用 `--data-root` 和 `--phenotype-csv` 覆盖。
+`--input-mode ec`（默认）要求对应 `main_*.py` 中配置的 EC 文件已经存在；`--input-mode raw` 会读取原始 ROI 时间序列、训练 STF-EC 编码器，并覆盖保存对应的 EC 文件。数据根目录或表型文件位置不采用默认值时，可使用 `--data-root` 和 `--phenotype-csv` 覆盖。
 
 不同数据集需要的连续表型权重数量不同：ABIDE-I 为 2 个，ADHD200 为 3 个。例如：
 
@@ -123,9 +123,9 @@ PR_EC/outputs/adhd200/
 
 主要文件包括：
 
-- `*_subject_bec.npz`：原始 BEC；
-- `*_refined_subject_bec.npz`：PGR-BEC 修正结果；
-- `*_qsr_refined_subject_bec.npz`：QC/QSR 修正结果；
+- `*_subject_ec.npz`：原始 EC；
+- `*_refined_subject_ec.npz`：PGR-EC 修正结果；
+- `*_qsr_refined_subject_ec.npz`：QC/QSR 修正结果；
 - `experiment_summary.csv`：各表示的交叉验证指标；
 - `summary.json`：运行配置和汇总结果。
 
@@ -141,10 +141,10 @@ PR_EC/
 ├── runner.py                # 三个入口共享的完整运行流程
 ├── dataset_configs.py       # 非主流程工具的兼容配置注册
 ├── data/                    # 数据、表型和 QC 加载
-├── model/individual_ec/        # STF-BEC 编码器与 BEC 生成
-├── model/mpr/                 # 患者相似图与参考 BEC
+├── model/individual_ec/        # STF-EC 编码器与 EC 生成
+├── model/mpr/                 # 患者相似图与参考 EC
 ├── model/ablation/mpr_refinement.py  # 去除 QC 的 PGR 消融结构
-├── model/qsr/                   # 最终 QSR-BEC 修正模型
+├── model/qsr/                   # 最终 QSR-EC 修正模型
 ├── downstream/              # BrainNetCNN、分类器和指标
 └── analysis/                # 结果分析与可视化
 ```
@@ -153,4 +153,4 @@ PR_EC/
 
 - 运行前请安装项目所需的 Python 依赖，并确保 PyTorch 可以正常使用目标设备。
 - 三个数据集的表型文件格式、字段名、默认路径和默认超参数已分别写入对应 `main_*.py`；更换数据位置时优先使用命令行参数覆盖。
-- 结果解释应同时报告 Original、Refined 和 QC-refined BEC，避免只比较单一表示。
+- 结果解释应同时报告 Original、Refined 和 QC-refined EC，避免只比较单一表示。

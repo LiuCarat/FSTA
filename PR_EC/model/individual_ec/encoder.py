@@ -1,4 +1,4 @@
-"""STF-BEC encoder for subject-specific directed BEC estimation."""
+"""STF-EC encoder for subject-specific directed EC estimation."""
 import torch
 import torch.nn as nn
 from .temporal_attention import (
@@ -26,7 +26,7 @@ class STFEncoder(nn.Module):
         )
 
     def _encode(self, inputs, slf_attn_mask=None):
-        """Compute the shared STF-BEC representation before spatial fusion."""
+        """Compute the shared STF-EC representation before spatial fusion."""
         embedded = inputs.unsqueeze(0).permute(1, 0, 2, 3)
         embedded = self.conv1(embedded).permute(0, 2, 3, 1)
         position = self.position_enc(embedded).unsqueeze(2).expand(embedded.shape)

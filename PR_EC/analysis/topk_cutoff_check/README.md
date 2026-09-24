@@ -7,7 +7,7 @@
 
 每个数据集分别进行 ASD vs HC（仓库标签约定为 `0 = HC/TC`、`1 = ASD`）：
 
-1. 对每个受试者的 90×90 BEC 矩阵计算组间效应量；
+1. 对每个受试者的 90×90 EC 矩阵计算组间效应量；
 2. 排除 90 条自连接，仅保留 90×89 条有向边；
 3. 使用 ASD − HC/TC 的 Hedges' g，并按 `abs(Hedges' g)` 从大到小排序；
 4. 检查 Rank 10 vs Rank 11、Rank 20 vs Rank 21，并计算
@@ -33,15 +33,15 @@ python3 PR_EC/analysis/topk_cutoff_check/run_topk_cutoff_check.py
 默认读取：
 
 ```text
-PR_EC/outputs/abide-i/abide_qsr_refined_subject_bec.npz
-PR_EC/outputs/abide-ii/abide_ii_qsr_refined_subject_bec.npz
+PR_EC/outputs/abide-i/abide_qsr_refined_subject_ec.npz
+PR_EC/outputs/abide-ii/abide_ii_qsr_refined_subject_ec.npz
 ```
 
-也可以切换 BEC 数组，例如：
+也可以切换 EC 数组，例如：
 
 ```bash
 python3 PR_EC/analysis/topk_cutoff_check/run_topk_cutoff_check.py \
-  --bec-key original_bec \
+  --ec-key original_ec \
   --ranks 10 20 50
 ```
 

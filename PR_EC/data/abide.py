@@ -33,7 +33,7 @@ class ABIDERecord:
 def load_abide_records(data_root, pipeline="cpac", strategy="filt_noglobal", derivative="rois_aal", profile=None):
     data_root = Path(data_root)
     phenotype_candidates = ((Path(profile.phenotype_path),) if profile is not None else ()) + (
-        data_root / "ABIDEII_population_similaritybec.csv",
+        data_root / "ABIDEII_population_similarityec.csv",
         data_root / "Phenotypic_V1_0b_preprocessed1.csv",
         data_root / "Phenotypic_Processing_filled.csv",
     )

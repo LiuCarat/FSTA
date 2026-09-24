@@ -1,4 +1,4 @@
-"""Reference-BEC utilities for patient-similarity graph construction."""
+"""Reference-EC utilities for patient-similarity graph construction."""
 from __future__ import annotations
 import csv
 import numpy as np
@@ -90,27 +90,27 @@ def reference_diagnostics(weights, reference_labels=None):
     weights = np.asarray(weights, dtype=np.float32)
     return {"reference_mean_neighbors": float((weights > 0).sum(axis=1).mean()), "reference_effective_sample_size": float((1.0 / np.maximum((weights ** 2).sum(axis=1), 1e-8)).mean())}
 
-def to_directed_channels(bec):
-    bec = torch.as_tensor(bec) if not torch.is_tensor(bec) else bec
-    if bec.ndim != 3:
-        raise ValueError(f"Expected BEC [N, nodes, nodes], got {tuple(bec.shape)}")
-    return torch.stack((bec, bec.transpose(-1, -2)), dim=1)
+def to_directed_channels(ec):
+    ec = torch.as_tensor(ec) if not torch.is_tensor(ec) else ec
+    if ec.ndim != 3:
+        raise ValueError(f"Expected EC [N, nodes, nodes], got {tuple(ec.shape)}")
+    return torch.stack((ec, ec.transpose(-1, -2)), dim=1)
 
-def bec_separability(bec, labels, asd_label=1):
-    bec = np.asarray(bec, dtype=np.float64).reshape(len(bec), -1)
+def ec_separability(ec, labels, asd_label=1):
+    ec = np.asarray(ec, dtype=np.float64).reshape(len(ec), -1)
     labels = np.asarray(labels)
-    tc_group, asd_group = bec[labels != asd_label], bec[labels == asd_label]
+    tc_group, asd_group = ec[labels != asd_label], ec[labels == asd_label]
     if len(tc_group) == 0 or len(asd_group) == 0:
-        return {"bec_centroid_distance": np.nan, "bec_within_dispersion": np.nan, "bec_fisher_ratio": np.nan}
+        return {"ec_centroid_distance": np.nan, "ec_within_dispersion": np.nan, "ec_fisher_ratio": np.nan}
     tc_mean, asd_mean = tc_group.mean(0), asd_group.mean(0)
     distance = np.linalg.norm(tc_mean - asd_mean)
     within = 0.5 * (np.linalg.norm(tc_group - tc_mean, axis=1).mean() + np.linalg.norm(asd_group - asd_mean, axis=1).mean())
-    return {"bec_centroid_distance": float(distance), "bec_within_dispersion": float(within), "bec_fisher_ratio": float(distance ** 2 / max(within ** 2, 1e-12))}
+    return {"ec_centroid_distance": float(distance), "ec_within_dispersion": float(within), "ec_fisher_ratio": float(distance ** 2 / max(within ** 2, 1e-12))}
 
-def edge_effect_sizes(bec, labels, asd_label=1):
-    bec = np.asarray(bec, dtype=np.float64)
+def edge_effect_sizes(ec, labels, asd_label=1):
+    ec = np.asarray(ec, dtype=np.float64)
     labels = np.asarray(labels)
-    tc_group, asd_group = bec[labels != asd_label], bec[labels == asd_label]
+    tc_group, asd_group = ec[labels != asd_label], ec[labels == asd_label]
     mean_difference = asd_group.mean(0) - tc_group.mean(0)
     pooled = np.sqrt((tc_group.var(0) + asd_group.var(0)) / 2.0)
     effect = mean_difference / np.maximum(pooled, 1e-8)

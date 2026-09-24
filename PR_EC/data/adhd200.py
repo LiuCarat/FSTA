@@ -75,7 +75,7 @@ def apply_numeric_imputer(values, fills):
 
 
 def prepare_adhd_fold_arrays(
-    train_bec, val_bec, test_bec,
+    train_ec, val_ec, test_ec,
     train_cont, val_cont, test_cont,
     train_cat, val_cat, test_cat,
 ):
@@ -90,7 +90,7 @@ def prepare_adhd_fold_arrays(
         for values in (train_cont, val_cont, test_cont)
     )
     arrays = prepare_fold_arrays(
-        train_bec, val_bec, test_bec,
+        train_ec, val_ec, test_ec,
         train_cont, val_cont, test_cont,
         train_cat, val_cat, test_cat,
     )

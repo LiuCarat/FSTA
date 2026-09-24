@@ -1,7 +1,7 @@
 # RQ1: Whole-brain reproducibility
 
-Input: `all_edges_cross_cohort.csv`  
-Edges: **8010 directed non-diagonal BEC edges**  
+Input: `all_edges_cross_cohort.csv`
+Edges: **8010 directed non-diagonal EC edges**
 Threshold: **BH-FDR q < 0.05** within each cohort
 
 ## Results

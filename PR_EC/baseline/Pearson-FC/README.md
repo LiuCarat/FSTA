@@ -1,17 +1,17 @@
 # Pearson FC baseline
 
-This baseline replaces the subject-level FSTA/Graph-BEC BEC with a standard
+This baseline replaces the subject-level FSTA/Graph-EC EC with a standard
 Pearson correlation matrix computed from each subject's ROI time series. The
-downstream evaluation is kept identical to Graph-BEC:
+downstream evaluation is kept identical to Graph-EC:
 
 - same subject labels and subject order;
 - same stratified train/validation/test folds;
-- fold-local BEC/FC standardization;
+- fold-local EC/FC standardization;
 - same Directed BrainNetCNN classifier;
 - same classifier hyperparameters and metrics.
 
-The generated archive uses the common `subject_bec.npz` layout, with the
-matrix stored in the `bec` field so it can be passed through the existing
+The generated archive uses the common `subject_ec.npz` layout, with the
+matrix stored in the `ec` field so it can be passed through the existing
 classifier code. Pearson FC is symmetric and has its diagonal set to zero.
 
 ## ABIDE-I
@@ -48,7 +48,7 @@ archive is saved as `subject_fc_abide_ii.npz` under
 ADHD200 uses `dataset/ADHD200/Phenotypic_Processing.csv` and
 `dataset/ADHD200/cpac/filt_noglobal/` by default. `DX=0` is the control group,
 and `DX=1/2/3` is mapped to the patient group. The shared loader reads 116
-source ROIs and keeps the first 90, matching the other Graph-BEC baselines.
+source ROIs and keeps the first 90, matching the other Graph-EC baselines.
 ADHD200 archives and classification results are stored under
 `PR_EC/baseline/Pearson-FC/outputs/adhd200/` by default.
 

@@ -1,4 +1,4 @@
-"""Classification metrics and threshold utilities for downstream BEC probes."""
+"""Classification metrics and threshold utilities for downstream EC probes."""
 from __future__ import annotations
 
 import numpy as np

@@ -1,4 +1,4 @@
-"""Independent deterministic classifier for frozen BEC matrices."""
+"""Independent deterministic classifier for frozen EC matrices."""
 from __future__ import annotations
 import copy
 import torch
@@ -20,23 +20,23 @@ def add_classifier_arguments(parser):
     return parser
 
 
-def train_classifier(train_bec, train_labels, val_bec, val_labels,
-                     test_bec, test_labels, device, seed,
+def train_classifier(train_ec, train_labels, val_ec, val_labels,
+                     test_ec, test_labels, device, seed,
                      max_epochs=80, patience=12, batch_size=32,
                      learning_rate=1e-3):
     """Use a stage-local seed and keep test labels out of model selection."""
     set_seed(seed)
-    model = DirectedBrainNetCNN(nodes_num=train_bec.shape[-1], dropout=0.3).to(device)
+    model = DirectedBrainNetCNN(nodes_num=train_ec.shape[-1], dropout=0.3).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     criterion = nn.BCEWithLogitsLoss()
-    train_x = to_directed_channels(torch.from_numpy(train_bec)).float()
+    train_x = to_directed_channels(torch.from_numpy(train_ec)).float()
     train_y = torch.from_numpy(train_labels).float()
     generator = torch.Generator().manual_seed(seed)
     loader = DataLoader(
         TensorDataset(train_x, train_y), batch_size=batch_size,
         shuffle=True, generator=generator, num_workers=0,
     )
-    validation_x = to_directed_channels(torch.from_numpy(val_bec)).float().to(device)
+    validation_x = to_directed_channels(torch.from_numpy(val_ec)).float().to(device)
     validation_y = torch.from_numpy(val_labels).float().to(device)
     best_state, best_loss, waiting = None, float("inf"), 0
     for _ in range(max_epochs):
@@ -62,7 +62,7 @@ def train_classifier(train_bec, train_labels, val_bec, val_labels,
     with torch.no_grad():
         validation_probabilities = torch.sigmoid(model(validation_x)).cpu().numpy()
         test_probabilities = torch.sigmoid(
-            model(to_directed_channels(torch.from_numpy(test_bec)).float().to(device))
+            model(to_directed_channels(torch.from_numpy(test_ec)).float().to(device))
         ).cpu().numpy()
     threshold = select_youden_threshold(val_labels, validation_probabilities)
     return classification_metrics(test_labels, test_probabilities, threshold), model

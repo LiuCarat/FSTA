@@ -1,4 +1,4 @@
-"""Writers for refined BEC archives and experiment summaries."""
+"""Writers for refined EC archives and experiment summaries."""
 from __future__ import annotations
 
 import csv
@@ -8,28 +8,28 @@ from pathlib import Path
 import numpy as np
 
 
-def save_refined_bec_archive(
-    output_path, data, pgr_bec, qc_refined_bec, fold_ids, source_bec_path
+def save_refined_ec_archive(
+    output_path, data, pgr_ec, qc_refined_ec, fold_ids, source_ec_path
 ):
-    """Save aligned test-only OOF PGR and QC-refined BEC matrices."""
-    pgr_bec = np.asarray(pgr_bec, dtype=np.float32)
-    qc_refined_bec = np.asarray(qc_refined_bec, dtype=np.float32)
-    if pgr_bec.shape != np.asarray(data["bec"]).shape:
+    """Save aligned test-only OOF PGR and QC-refined EC matrices."""
+    pgr_ec = np.asarray(pgr_ec, dtype=np.float32)
+    qc_refined_ec = np.asarray(qc_refined_ec, dtype=np.float32)
+    if pgr_ec.shape != np.asarray(data["ec"]).shape:
         raise ValueError(
-            f"OOF PGR-BEC shape {pgr_bec.shape} does not match input "
-            f"shape {np.asarray(data['bec']).shape}"
+            f"OOF PGR-EC shape {pgr_ec.shape} does not match input "
+            f"shape {np.asarray(data['ec']).shape}"
         )
-    if qc_refined_bec.shape != pgr_bec.shape:
-        raise ValueError("PGR-BEC and QC-refined BEC shapes do not match")
+    if qc_refined_ec.shape != pgr_ec.shape:
+        raise ValueError("PGR-EC and QC-refined EC shapes do not match")
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         output_path,
-        bec=pgr_bec,
-        pgr_bec=pgr_bec,
-        refined_bec=pgr_bec,
-        qc_refined_bec=qc_refined_bec,
-        original_bec=np.asarray(data["bec"], dtype=np.float32),
+        ec=pgr_ec,
+        pgr_ec=pgr_ec,
+        refined_ec=pgr_ec,
+        qc_refined_ec=qc_refined_ec,
+        original_ec=np.asarray(data["ec"], dtype=np.float32),
         labels=np.asarray(data["labels"], dtype=np.int64),
         subject_ids=np.asarray(data["subject_ids"]).astype(str),
         site_ids=np.asarray(data["site_ids"]).astype(str),
@@ -37,34 +37,34 @@ def save_refined_bec_archive(
         roi_names=np.asarray(
             data.get(
                 "roi_names",
-                [f"ROI_{index + 1:03d}" for index in range(pgr_bec.shape[1])],
+                [f"ROI_{index + 1:03d}" for index in range(pgr_ec.shape[1])],
             )
         ).astype(str),
         representation=np.asarray("pgr_and_qc_refined"),
-        source_bec_path=np.asarray(str(Path(source_bec_path).resolve())),
+        source_ec_path=np.asarray(str(Path(source_ec_path).resolve())),
     )
     return output_path
 
 
-def save_qsr_bec_archive(
-    output_path, data, qc_refined_bec, fold_ids, source_bec_path
+def save_qsr_ec_archive(
+    output_path, data, qc_refined_ec, fold_ids, source_ec_path
 ):
-    """Save the held-out QSR-refined BECs as a standalone archive."""
-    qc_refined_bec = np.asarray(qc_refined_bec, dtype=np.float32)
-    original_bec = np.asarray(data["bec"], dtype=np.float32)
-    if qc_refined_bec.shape != original_bec.shape:
+    """Save the held-out QSR-refined ECs as a standalone archive."""
+    qc_refined_ec = np.asarray(qc_refined_ec, dtype=np.float32)
+    original_ec = np.asarray(data["ec"], dtype=np.float32)
+    if qc_refined_ec.shape != original_ec.shape:
         raise ValueError(
-            f"QSR-refined BEC shape {qc_refined_bec.shape} does not match "
-            f"input shape {original_bec.shape}"
+            f"QSR-refined EC shape {qc_refined_ec.shape} does not match "
+            f"input shape {original_ec.shape}"
         )
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         output_path,
-        bec=qc_refined_bec,
-        refined_bec=qc_refined_bec,
-        qc_refined_bec=qc_refined_bec,
-        original_bec=original_bec,
+        ec=qc_refined_ec,
+        refined_ec=qc_refined_ec,
+        qc_refined_ec=qc_refined_ec,
+        original_ec=original_ec,
         labels=np.asarray(data["labels"], dtype=np.int64),
         subject_ids=np.asarray(data["subject_ids"]).astype(str),
         site_ids=np.asarray(data["site_ids"]).astype(str),
@@ -72,11 +72,11 @@ def save_qsr_bec_archive(
         roi_names=np.asarray(
             data.get(
                 "roi_names",
-                [f"ROI_{index + 1:03d}" for index in range(qc_refined_bec.shape[1])],
+                [f"ROI_{index + 1:03d}" for index in range(qc_refined_ec.shape[1])],
             )
         ).astype(str),
         representation=np.asarray("qsr_refined"),
-        source_bec_path=np.asarray(str(Path(source_bec_path).resolve())),
+        source_ec_path=np.asarray(str(Path(source_ec_path).resolve())),
     )
     return output_path
 
@@ -93,7 +93,7 @@ def save_results(args, fold_results, training_metrics):
 
     summary = {
         "config": vars(args),
-        "stf_bec_training": training_metrics,
+        "stf_ec_training": training_metrics,
         "folds": rows,
     }
     names = [

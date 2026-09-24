@@ -1,4 +1,4 @@
-"""Dataset loading and experiment-input assembly for Graph-BEC."""
+"""Dataset loading and experiment-input assembly for Graph-EC."""
 from __future__ import annotations
 
 import numpy as np
@@ -26,7 +26,7 @@ from PR_EC.data.common import (
     ROI_COUNT,
     SOURCE_ROI_COUNT,
     limit_archive_subjects,
-    load_bec_archive,
+    load_ec_archive,
 )
 from PR_EC.model.mpr import (
     load_aligned_phenotypes,
@@ -98,8 +98,8 @@ def load_subject_dataset(
 
 
 def load_pipeline_data(args, device):
-    """Load or generate BEC matrices and attach graph/QC covariates."""
-    from PR_EC.model.individual_ec import generate_subject_bec, save_subject_bec
+    """Load or generate EC matrices and attach graph/QC covariates."""
+    from PR_EC.model.individual_ec import generate_subject_ec, save_subject_ec
 
     stf_metrics = None
     subjects = None
@@ -115,14 +115,14 @@ def load_pipeline_data(args, device):
             patient_label=args.patient_label,
             control_label=args.control_label,
         )
-        print(f"Training STF-BEC from {len(subjects['records'])} subject time series...")
-        data, stf_metrics = generate_subject_bec(args, subjects, device)
-        _report_existing_archive_difference(args.bec_path, data)
-        save_subject_bec(args.bec_path, data)
-        print(f"Saved STF-BEC archive: {args.bec_path.resolve()}")
+        print(f"Training STF-EC from {len(subjects['records'])} subject time series...")
+        data, stf_metrics = generate_subject_ec(args, subjects, device)
+        _report_existing_archive_difference(args.ec_path, data)
+        save_subject_ec(args.ec_path, data)
+        print(f"Saved STF-EC archive: {args.ec_path.resolve()}")
     else:
         data = limit_archive_subjects(
-            load_bec_archive(args.bec_path), FIXED_DATA_CONFIG["max_subjects"]
+            load_ec_archive(args.ec_path), FIXED_DATA_CONFIG["max_subjects"]
         )
 
     if args.profile.name == "abide":
@@ -150,7 +150,7 @@ def load_pipeline_data(args, device):
         args.profile.confound_columns,
         args.profile,
     ).astype(np.float32)
-    data["bec"] = np.asarray(data["bec"], dtype=np.float32)
+    data["ec"] = np.asarray(data["ec"], dtype=np.float32)
     data["labels"] = np.asarray(data["labels"], dtype=np.int64)
     return data, stf_metrics
 
@@ -158,7 +158,7 @@ def load_pipeline_data(args, device):
 def _labels_from_abide_phenotype(phenotype_csv, subject_ids, profile):
     """Build canonical TC=0/ASD=1 labels from the phenotype source.
 
-    BEC archives are feature caches and may have been produced by an older
+    EC archives are feature caches and may have been produced by an older
     run with the binary labels reversed.  The phenotype is the source of
     truth, so labels are regenerated after archive loading and aligned by
     subject ID.
@@ -185,14 +185,14 @@ def _labels_from_abide_phenotype(phenotype_csv, subject_ids, profile):
 def _report_existing_archive_difference(path, generated):
     if not path.is_file():
         return
-    archived = load_bec_archive(path)
+    archived = load_ec_archive(path)
     if not np.array_equal(
         generated["subject_ids"].astype(str), archived["subject_ids"].astype(str)
     ):
         return
-    difference = np.abs(generated["bec"] - archived["bec"])
+    difference = np.abs(generated["ec"] - archived["ec"])
     print(
-        "raw-vs-archive BEC: "
+        "raw-vs-archive EC: "
         f"max_abs={difference.max():.3e}, mean_abs={difference.mean():.3e}"
     )
 
@@ -221,7 +221,7 @@ def _aligned_graph_time_series(args, data, raw_subjects):
         return [by_subject[str(subject_id)] for subject_id in data["subject_ids"]]
     except KeyError as error:
         raise ValueError(
-            "Fusion mode requires raw ROI time series for every BEC subject"
+            "Fusion mode requires raw ROI time series for every EC subject"
         ) from error
 
 
@@ -229,6 +229,6 @@ __all__ = [
     "ABIDERecord", "ADHD200Record", "ASD_LABEL", "DX_TO_LABEL",
     "FIXED_DATA_CONFIG", "LABEL_TO_GROUP", "ROI_COUNT", "SOURCE_ROI_COUNT",
     "TC_LABEL", "load_abide_records", "load_abide_time_series",
-    "load_adhd200_records", "load_adhd200_time_series", "load_bec_archive",
+    "load_adhd200_records", "load_adhd200_time_series", "load_ec_archive",
     "load_pipeline_data", "load_subject_dataset", "load_aligned_phenotypes",
 ]

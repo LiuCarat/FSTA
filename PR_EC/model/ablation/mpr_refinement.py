@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class PGRBECStatic(nn.Module):
+class PGRECStatic(nn.Module):
     """Predict a subject-specific edge gate from [A, N, |N-A|]."""
     def __init__(self, nodes_num=90, hidden_channels=16, gate_max=0.2):
         super().__init__()
@@ -20,15 +20,15 @@ class PGRBECStatic(nn.Module):
             nn.Conv2d(hidden_channels, 1, kernel_size=1),
         )
 
-    def forward(self, initial_bec, neighbor_bec, return_parts=False):
-        difference = neighbor_bec - initial_bec
+    def forward(self, initial_ec, neighbor_ec, return_parts=False):
+        difference = neighbor_ec - initial_ec
         gate_input = torch.stack(
-            (initial_bec, neighbor_bec, difference.abs()), dim=1
+            (initial_ec, neighbor_ec, difference.abs()), dim=1
         )
         gate = self.gate_max * torch.sigmoid(self.gate_network(gate_input)).squeeze(1)
-        diagonal = torch.eye(self.nodes_num, device=initial_bec.device, dtype=torch.bool)[None]
+        diagonal = torch.eye(self.nodes_num, device=initial_ec.device, dtype=torch.bool)[None]
         gate = gate.masked_fill(diagonal, 0.0)
-        refined = (initial_bec + gate * difference).masked_fill(diagonal, 0.0)
+        refined = (initial_ec + gate * difference).masked_fill(diagonal, 0.0)
         if return_parts:
             return refined, gate, difference
         return refined
@@ -47,12 +47,12 @@ def static_refinement_loss(refined, initial, gate, variance_retention=0.85,
     return total, {"anchor_loss": anchor, "gate_loss": sparse, "variance_loss": variance}
 
 
-def train_pgr_refiner(args, bec, neighbor, device):
+def train_pgr_refiner(args, ec, neighbor, device):
     """Train the label-free static phenotype-guided refiner."""
-    model = PGRBECStatic(
-        bec.shape[-1], hidden_channels=16, gate_max=args.gate_max
+    model = PGRECStatic(
+        ec.shape[-1], hidden_channels=16, gate_max=args.gate_max
     ).to(device)
-    original = torch.from_numpy(bec).float().to(device)
+    original = torch.from_numpy(ec).float().to(device)
     neighbor_tensor = torch.from_numpy(neighbor).float().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.refiner_lr)
     best_state, best_loss, metrics = None, float("inf"), {}
@@ -84,10 +84,10 @@ def train_pgr_refiner(args, bec, neighbor, device):
     return model, refined.cpu().numpy(), metrics
 
 
-def apply_pgr_refiner(model, bec, neighbor, device):
-    """Apply a trained PGR refiner to BEC and neighbor reference arrays."""
+def apply_pgr_refiner(model, ec, neighbor, device):
+    """Apply a trained PGR refiner to EC and neighbor reference arrays."""
     with torch.no_grad():
         return model(
-            torch.from_numpy(bec).float().to(device),
+            torch.from_numpy(ec).float().to(device),
             torch.from_numpy(neighbor).float().to(device),
         ).cpu().numpy()

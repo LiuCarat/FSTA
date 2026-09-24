@@ -1,1 +1,1 @@
-from .mpr_refinement import PGRBECStatic, apply_pgr_refiner, train_pgr_refiner
+from .mpr_refinement import PGRECStatic, apply_pgr_refiner, train_pgr_refiner

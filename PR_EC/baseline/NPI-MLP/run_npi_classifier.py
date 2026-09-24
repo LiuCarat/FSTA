@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Individual NPI-MLP BEC generation with the Graph-BEC classifier protocol.
+"""Individual NPI-MLP EC generation with the Graph-EC classifier protocol.
 
 Each subject gets an independently fitted MLP surrogate brain. Its NPI EC
-matrix is then evaluated with the same fold construction, BEC scaling,
+matrix is then evaluated with the same fold construction, EC scaling,
 DirectedBrainNetCNN, early stopping, threshold selection, and metrics used by
-Graph-BEC.
+Graph-EC.
 """
 from __future__ import annotations
 
@@ -28,9 +28,9 @@ from PR_EC.data import load_subject_dataset
 from PR_EC.downstream import train_classifier
 from PR_EC.dataset_configs import get_profile
 from PR_EC.utils.folds import (
-    fit_bec_scaler,
+    fit_ec_scaler,
     make_stratified_splits,
-    transform_bec,
+    transform_ec,
 )
 from PR_EC.utils.runtime import select_device, set_seed
 
@@ -60,9 +60,9 @@ def parse_args():
     parser.add_argument("--derivative", default="rois_aal")
     parser.add_argument("--output-dir", type=Path, default=output_dir)
     parser.add_argument(
-        "--bec-path",
+        "--ec-path",
         type=Path,
-        default=output_dir / f"subject_npi_mlp_bec_{profile.name}.npz",
+        default=output_dir / f"subject_npi_mlp_ec_{profile.name}.npz",
     )
     parser.add_argument("--max-subjects", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42)
@@ -104,7 +104,7 @@ def parse_args():
     )
     parser.add_argument("--patient-label", type=int, default=1, choices=[0, 1])
     parser.add_argument("--control-label", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--regenerate-bec", action="store_true")
+    parser.add_argument("--regenerate-ec", action="store_true")
     parser.add_argument("--generation-only", action="store_true")
     parser.add_argument("--classification-only", action="store_true")
     return parser.parse_args()
@@ -129,42 +129,42 @@ def npi_config(args, roi_count):
     }
 
 
-def load_bec_archive(path):
+def load_ec_archive(path):
     archive = np.load(path, allow_pickle=False)
-    required = {"bec", "labels", "subject_ids", "site_ids"}
+    required = {"ec", "labels", "subject_ids", "site_ids"}
     missing = required - set(archive.files)
     if missing:
-        raise ValueError(f"Missing BEC arrays: {sorted(missing)}")
+        raise ValueError(f"Missing EC arrays: {sorted(missing)}")
     return {key: archive[key] for key in archive.files}
 
 
-def save_bec_archive(
+def save_ec_archive(
     path,
-    bec,
+    ec,
     test_reconstruction_mse,
     train_reconstruction_mse,
     dataset,
     config,
 ):
     path.parent.mkdir(parents=True, exist_ok=True)
-    bec = np.asarray(bec, dtype=np.float32)
+    ec = np.asarray(ec, dtype=np.float32)
     test_reconstruction_mse = np.asarray(test_reconstruction_mse, dtype=np.float32)
     train_reconstruction_mse = np.asarray(train_reconstruction_mse, dtype=np.float32)
-    if bec.ndim != 3 or bec.shape[1] != bec.shape[2]:
-        raise ValueError(f"Expected BEC [subjects, roi, roi], got {bec.shape}")
-    if test_reconstruction_mse.shape != (len(bec),):
+    if ec.ndim != 3 or ec.shape[1] != ec.shape[2]:
+        raise ValueError(f"Expected EC [subjects, roi, roi], got {ec.shape}")
+    if test_reconstruction_mse.shape != (len(ec),):
         raise ValueError(
             "Expected one reconstruction MSE per subject; "
-            f"got {test_reconstruction_mse.shape} for {bec.shape}"
+            f"got {test_reconstruction_mse.shape} for {ec.shape}"
         )
-    if train_reconstruction_mse.shape != (len(bec),):
+    if train_reconstruction_mse.shape != (len(ec),):
         raise ValueError(
             "Expected one training reconstruction MSE per subject; "
-            f"got {train_reconstruction_mse.shape} for {bec.shape}"
+            f"got {train_reconstruction_mse.shape} for {ec.shape}"
         )
     np.savez_compressed(
         path,
-        bec=bec,
+        ec=ec,
         npi_train_reconstruction_mse=train_reconstruction_mse,
         npi_test_reconstruction_mse=test_reconstruction_mse,
         labels=np.asarray(dataset["labels"], dtype=np.int64),
@@ -183,7 +183,7 @@ def build_mlp(args, roi_count):
     )
 
 
-def generate_subject_npi_bec(time_series, args, subject_index):
+def generate_subject_npi_ec(time_series, args, subject_index):
     if time_series.ndim != 2:
         raise ValueError(f"Expected [time, roi] time series, got {time_series.shape}")
     if len(time_series) <= args.steps + 1:
@@ -208,47 +208,47 @@ def generate_subject_npi_bec(time_series, args, subject_index):
     ec = np.asarray(ec, dtype=np.float32)
     np.fill_diagonal(ec, 0.0)
     if not np.isfinite(ec).all():
-        raise ValueError(f"Non-finite NPI-BEC for subject index {subject_index}")
+        raise ValueError(f"Non-finite NPI-EC for subject index {subject_index}")
     return ec, float(test_loss[-1]), float(train_loss[-1])
 
 
-def generate_bec_archive(args, dataset, device):
+def generate_ec_archive(args, dataset, device):
     NPI.device = device
     config = npi_config(args, dataset["time_series"][0].shape[1])
-    if args.bec_path.is_file() and not args.regenerate_bec:
-        archive = load_bec_archive(args.bec_path)
+    if args.ec_path.is_file() and not args.regenerate_ec:
+        archive = load_ec_archive(args.ec_path)
         existing = json.loads(str(archive["npi_config"].item())) if "npi_config" in archive else None
         if existing != config:
             raise ValueError(
                 "Existing NPI archive uses a different configuration; "
-                "use --regenerate-bec or a different --bec-path"
+                "use --regenerate-ec or a different --ec-path"
             )
-        if len(archive["bec"]) == len(dataset["time_series"]):
-            print(f"using existing NPI-BEC archive: {args.bec_path}")
+        if len(archive["ec"]) == len(dataset["time_series"]):
+            print(f"using existing NPI-EC archive: {args.ec_path}")
             return archive
-        raise ValueError("Existing NPI archive is incomplete; use --regenerate-bec")
+        raise ValueError("Existing NPI archive is incomplete; use --regenerate-ec")
 
-    bec, test_losses, train_losses = [], [], []
+    ec, test_losses, train_losses = [], [], []
     total = len(dataset["time_series"])
     for index, series in enumerate(dataset["time_series"]):
-        subject_bec, test_loss, train_loss = generate_subject_npi_bec(series, args, index)
-        bec.append(subject_bec)
+        subject_ec, test_loss, train_loss = generate_subject_npi_ec(series, args, index)
+        ec.append(subject_ec)
         test_losses.append(test_loss)
         train_losses.append(train_loss)
         if (index + 1) % 10 == 0 or index + 1 == total:
-            print(f"Individual NPI-MLP BEC [{index + 1}/{total}]")
-    save_bec_archive(
-        args.bec_path,
-        bec,
+            print(f"Individual NPI-MLP EC [{index + 1}/{total}]")
+    save_ec_archive(
+        args.ec_path,
+        ec,
         test_losses,
         train_losses,
         dataset,
         config,
     )
-    return load_bec_archive(args.bec_path)
+    return load_ec_archive(args.ec_path)
 
 
-def classify_bec(args, archive, device):
+def classify_ec(args, archive, device):
     labels = np.asarray(archive["labels"], dtype=np.int64)
     if np.unique(labels).size != 2:
         raise ValueError("The dataset must contain exactly two patient/control labels")
@@ -256,18 +256,18 @@ def classify_bec(args, archive, device):
     for fold, train_index, val_index, test_index in make_stratified_splits(
         labels, args.n_splits, args.seed, args.validation_size
     ):
-        train_mean, train_std = fit_bec_scaler(archive["bec"][train_index])
-        train_bec = transform_bec(archive["bec"][train_index], train_mean, train_std)
-        val_bec = transform_bec(archive["bec"][val_index], train_mean, train_std)
-        test_bec = transform_bec(archive["bec"][test_index], train_mean, train_std)
+        train_mean, train_std = fit_ec_scaler(archive["ec"][train_index])
+        train_ec = transform_ec(archive["ec"][train_index], train_mean, train_std)
+        val_ec = transform_ec(archive["ec"][val_index], train_mean, train_std)
+        test_ec = transform_ec(archive["ec"][test_index], train_mean, train_std)
         print(f"fold {fold}: train={len(train_index)}, val={len(val_index)}, test={len(test_index)}")
         for repeat in range(args.classifier_repeats):
             metrics, _ = train_classifier(
-                train_bec,
+                train_ec,
                 labels[train_index],
-                val_bec,
+                val_ec,
                 labels[val_index],
-                test_bec,
+                test_ec,
                 labels[test_index],
                 device=device,
                 seed=args.seed + fold * 1000 + repeat + 1,
@@ -325,7 +325,7 @@ def main():
     device = select_device(args.gpu_id)
     print(f"dataset: {args.dataset}; device: {device}; EC axes: {NPI_EC_AXIS}")
     if args.classification_only:
-        archive = load_bec_archive(args.bec_path)
+        archive = load_ec_archive(args.ec_path)
     else:
         dataset = load_subject_dataset(
             args.data_root,
@@ -338,16 +338,16 @@ def main():
             patient_label=args.patient_label,
             control_label=args.control_label,
         )
-        archive = generate_bec_archive(args, dataset, device)
-    if archive["bec"].ndim != 3 or archive["bec"].shape[1:] != (profile.roi_count, profile.roi_count):
+        archive = generate_ec_archive(args, dataset, device)
+    if archive["ec"].ndim != 3 or archive["ec"].shape[1:] != (profile.roi_count, profile.roi_count):
         raise ValueError(
-            f"Expected NPI-BEC shape [subjects, {profile.roi_count}, {profile.roi_count}], "
-            f"got {archive['bec'].shape}"
+            f"Expected NPI-EC shape [subjects, {profile.roi_count}, {profile.roi_count}], "
+            f"got {archive['ec'].shape}"
         )
-    print(f"NPI-BEC archive: {args.bec_path}; shape={archive['bec'].shape}")
+    print(f"NPI-EC archive: {args.ec_path}; shape={archive['ec'].shape}")
     if args.generation_only:
         return
-    rows = classify_bec(args, archive, device)
+    rows = classify_ec(args, archive, device)
     save_results(args, rows)
 
 

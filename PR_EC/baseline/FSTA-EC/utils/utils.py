@@ -1,4 +1,4 @@
-"""Original FSTA-EC loss and subject-level BEC extraction utilities."""
+"""Original FSTA-EC loss and subject-level EC extraction utilities."""
 
 import copy
 
@@ -42,9 +42,9 @@ def change01(adj, threshold):
 
 
 @torch.no_grad()
-def extract_subject_bec(model, records, time_series, window_length, stride, device):
+def extract_subject_ec(model, records, time_series, window_length, stride, device):
     model.eval()
-    all_bec, all_mse = [], []
+    all_ec, all_mse = [], []
     for index, (record, series) in enumerate(zip(records, time_series), 1):
         windows = sliding_window_cutting(
             torch.from_numpy(np.asarray(series, dtype=np.float32))[None, ...],
@@ -52,13 +52,13 @@ def extract_subject_bec(model, records, time_series, window_length, stride, devi
             window_length - stride,
         ).to(device)
         reconstruction, attention = model(windows)
-        bec = attention.cpu().numpy().T.astype(np.float32)
-        np.fill_diagonal(bec, 0.0)
-        all_bec.append(bec)
+        ec = attention.cpu().numpy().T.astype(np.float32)
+        np.fill_diagonal(ec, 0.0)
+        all_ec.append(ec)
         all_mse.append(float((reconstruction - windows).pow(2).mean().item()))
         if index == 1 or index == len(records) or index % 100 == 0:
-            print(f"BEC [{index}/{len(records)}] subject={record.subject_id} mse={all_mse[-1]:.6f}")
+            print(f"EC [{index}/{len(records)}] subject={record.subject_id} mse={all_mse[-1]:.6f}")
     return {
-        "bec": np.stack(all_bec),
+        "ec": np.stack(all_ec),
         "reconstruction_mse": np.asarray(all_mse, dtype=np.float32),
     }
