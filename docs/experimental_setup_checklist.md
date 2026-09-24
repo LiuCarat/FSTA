@@ -229,7 +229,7 @@ ROI 时间序列
 
 ## 8. Baseline 复现登记表
 
-当前仓库已有 baseline 参数汇总于 `Graph_BEC/baseline/parameter_settings.tex`。正式论文中建议为每个 baseline 增加以下信息：
+当前仓库已有 baseline 参数汇总于 `PR_EC/baseline/parameter_settings.tex`。正式论文中建议为每个 baseline 增加以下信息：
 
 | 记录项 | 必填内容 |
 |---|---|
@@ -249,23 +249,23 @@ ROI 时间序列
 ### 9.1 使用已有 BEC
 
 ```bash
-python Graph_BEC/main_abide_i.py --input-mode bec
-python Graph_BEC/main_abide_ii.py --input-mode bec
-python Graph_BEC/main_adhd200.py --input-mode bec
+python PR_EC/main_abide_i.py --input-mode bec
+python PR_EC/main_abide_ii.py --input-mode bec
+python PR_EC/main_adhd200.py --input-mode bec
 ```
 
 ### 9.2 从原始 ROI 时间序列重新生成 BEC
 
 ```bash
-python Graph_BEC/main_abide_i.py --input-mode raw
-python Graph_BEC/main_abide_ii.py --input-mode raw
-python Graph_BEC/main_adhd200.py --input-mode raw
+python PR_EC/main_abide_i.py --input-mode raw
+python PR_EC/main_abide_ii.py --input-mode raw
+python PR_EC/main_adhd200.py --input-mode raw
 ```
 
 ### 9.3 指定表示和图模式
 
 ```bash
-python Graph_BEC/main_abide_i.py \
+python PR_EC/main_abide_i.py \
   --graph-mode fusion \
   --representations original refined qc_refined \
   --seed 42 \
@@ -275,9 +275,9 @@ python Graph_BEC/main_abide_i.py \
 只运行 phenotype 图或只评估某个表示时：
 
 ```bash
-python Graph_BEC/main_abide_i.py --graph-mode phenotype
-python Graph_BEC/main_abide_i.py --representations original
-python Graph_BEC/main_adhd200.py --gpu-id cpu
+python PR_EC/main_abide_i.py --graph-mode phenotype
+python PR_EC/main_abide_i.py --representations original
+python PR_EC/main_adhd200.py --gpu-id cpu
 ```
 
 ## 10. 结果表与图的最低要求
@@ -305,12 +305,12 @@ python Graph_BEC/main_adhd200.py --gpu-id cpu
 
 ## 12. 最终提交前核对文件
 
-- [ ] `Graph_BEC/main_abide_i.py`
-- [ ] `Graph_BEC/main_abide_ii.py`
-- [ ] `Graph_BEC/main_adhd200.py`
-- [ ] `Graph_BEC/workflow.py`
-- [ ] `Graph_BEC/downstream/classifier.py`
-- [ ] `Graph_BEC/baseline/parameter_settings.tex`
+- [ ] `PR_EC/main_abide_i.py`
+- [ ] `PR_EC/main_abide_ii.py`
+- [ ] `PR_EC/main_adhd200.py`
+- [ ] `PR_EC/workflow.py`
+- [ ] `PR_EC/downstream/classifier.py`
+- [ ] `PR_EC/baseline/parameter_settings.tex`
 - [ ] 每个数据集的 `summary.json`、fold metrics 和运行日志
 - [ ] 参考论文原文中的数据集、划分、指标和超参数
 

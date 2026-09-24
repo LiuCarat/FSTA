@@ -17,11 +17,12 @@ venv/
 
 # Generated experiment outputs and model checkpoints
 out/
-Graph_BEC/outputs/
+PR_EC/outputs/
 *.pt
 *.pth
 *.ckpt
 *.npy
+*.npz
 *.part
 
 # IDE
