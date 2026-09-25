@@ -10,10 +10,10 @@ class FourierAtt(nn.Module):
 
         self.apply(self.init_weights)
 
-    # same as SASRec
+
     def forward(self, input_ids):
         item_encoded_layers = self.item_encoder(input_ids,
-                                                # extended_attention_mask,
+
                                                 output_all_encoded_layers=True,
                                                 )
         sequence_output = item_encoded_layers[-1]

@@ -36,8 +36,8 @@ DATASET_CONFIG = ExperimentProfile(
 
 def add_individual_ec_arguments(parser):
     group = parser.add_argument_group("Individual-EC encoder")
-    group.add_argument("--window-length", type=int, default=80) #80
-    group.add_argument("--stride", type=int, default=40) #40
+    group.add_argument("--window-length", type=int, default=80)
+    group.add_argument("--stride", type=int, default=40)
     group.add_argument("--epochs", type=int, default=81)
     group.add_argument("--loss-alpha", type=float, default=0.01)
     group.add_argument("--batch-size", type=int, default=32)

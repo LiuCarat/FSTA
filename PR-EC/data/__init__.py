@@ -67,7 +67,7 @@ def load_subject_dataset(
             )
             time_series.append(series)
         roi_count = profile.roi_count
-        # ADHD200 uses exactly one selected run per subject, like ABIDE.
+
         window_ranges = None
     else:
         records = load_abide_records(data_root, pipeline, strategy, derivative, profile=profile)
