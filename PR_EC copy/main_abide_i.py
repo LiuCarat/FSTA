@@ -1,23 +1,25 @@
-"""Run the ABIDE-I Graph-EC experiment."""
+"""Run the ABIDE-I PR-EC experiment."""
 import argparse
 import sys
+import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+PACKAGE = types.ModuleType("PR_EC")
+PACKAGE.__path__ = [str(Path(__file__).resolve().parent)]
+sys.modules["PR_EC"] = PACKAGE
 
 from PR_EC.dataset_configs import ExperimentProfile
 from PR_EC.downstream import add_classifier_arguments
 
 DATASET_CONFIG = ExperimentProfile(
-    name="abide",
+    name="abide_i",
     data_root=ROOT / "dataset/ABIDE-I",
     phenotype_path=ROOT / "dataset/ABIDE-I/Phenotypic_Processing_filled.csv",
     output_dir=ROOT / "PR_EC/outputs/abide-i",
-    ec_path=ROOT / "PR_EC/outputs/abide-i/abide_subject_ec.npz",
-    refined_ec_path=ROOT / "PR_EC/outputs/abide-i/abide_refined_subject_ec.npz",
-    qsr_refined_ec_path=ROOT / "PR_EC/outputs/abide-i/abide_qsr_refined_subject_ec.npz",
+    PR_EC_PATH=ROOT / "PR_EC/outputs/abide-i/abide_pr_ec.npz",
     phenotype_format="csv",
     phenotype_id_column="FILE_ID",
     patient_column="DX_GROUP",
@@ -36,12 +38,11 @@ DATASET_CONFIG = ExperimentProfile(
 
 
 
-def add_stf_arguments(parser):
-    group = parser.add_argument_group("STF-EC encoder")
+def add_individual_ec_arguments(parser):
+    group = parser.add_argument_group("Individual-EC encoder")
     group.add_argument("--window-length", type=int, default=78)
     group.add_argument("--stride", type=int, default=39)
     group.add_argument("--epochs", type=int, default=81)
-    group.add_argument("--stf-checkpoint", choices=["final", "best"], default='final')
     group.add_argument("--loss-alpha", type=float, default=0.01)
     group.add_argument("--batch-size", type=int, default=32)
     group.add_argument("--log-every", type=int, default=20)
@@ -62,16 +63,11 @@ def add_stf_arguments(parser):
     group.add_argument("--attention-probs-dropout-prob", type=float, default=0.5)
     group.add_argument("--hidden-dropout-prob", type=float, default=0.5)
     group.add_argument("--initializer-range", type=float, default=0.02)
-    group.add_argument("--no-filters", action="store_true")
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-mode", choices=["ec", "raw"], default="raw")
-    parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=["original", "refined", "qc_refined"])
-    parser.add_argument("--ec-path", type=Path, default=DATASET_CONFIG.ec_path)
-    parser.add_argument("--refined-ec-path", type=Path, default=DATASET_CONFIG.refined_ec_path)
-    parser.add_argument("--qsr-refined-ec-path", type=Path, default=DATASET_CONFIG.qsr_refined_ec_path)
+    parser.add_argument("--pr-ec-path", type=Path, dest="PR_EC_PATH", default=DATASET_CONFIG.PR_EC_PATH)
     parser.add_argument("--data-root", type=Path, default=DATASET_CONFIG.data_root)
     parser.add_argument("--phenotype-csv", type=Path, default=DATASET_CONFIG.phenotype_path)
     parser.add_argument("--output-dir", type=Path, default=DATASET_CONFIG.output_dir)
@@ -82,20 +78,10 @@ def parse_args():
     parser.add_argument("--gpu-id", default='auto')
 
     parser.add_argument("--reference-k", type=int, default=20)
-    parser.add_argument("--graph-mode", choices=["phenotype", "fusion"], default='fusion')
     parser.add_argument("--fusion-beta", type=float, default=0.6)
     parser.add_argument("--reference-bandwidth", type=float, default=2.0)
     parser.add_argument("--categorical-penalty", type=float, default=4.0)
     parser.add_argument("--continuous-weights", type=float, nargs=len(DATASET_CONFIG.continuous_columns), default=[1.0, 0.3])
-    parser.add_argument("--permute-phenotype", action="store_true", default=False)
-
-    parser.add_argument("--refiner-epochs", type=int, default=80)
-    parser.add_argument("--refiner-lr", type=float, default=0.03)
-    parser.add_argument("--gate-max", type=float, default=0.4)
-    parser.add_argument("--gate-l1-weight", type=float, default=0.38)
-    parser.add_argument("--anchor-weight", type=float, default=0.8)
-    parser.add_argument("--variance-weight", type=float, default=1.0)
-    parser.add_argument("--variance-retention", type=float, default=0.85)
 
     parser.add_argument("--qsr-qc-columns", nargs="+", default=list(['func_mean_fd', 'func_dvars', 'func_quality']))
     parser.add_argument("--qsr-epochs", type=int, default=80)
@@ -111,8 +97,12 @@ def parse_args():
     parser.add_argument("--qsr-basis-ridge", type=float, default=0.001)
 
     add_classifier_arguments(parser)
-    add_stf_arguments(parser)
+    add_individual_ec_arguments(parser)
     args = parser.parse_args()
+    args.individual_ec_checkpoint = "final"
+    args.graph_mode = "fusion"
+    args.permute_phenotype = False
+    args.no_filters = False
     args.dataset, args.profile = DATASET_CONFIG.name, DATASET_CONFIG
     if args.patient_label == args.control_label:
         parser.error("--patient-label and --control-label must be different")
