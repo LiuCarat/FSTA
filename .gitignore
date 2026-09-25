@@ -17,7 +17,9 @@ venv/
 
 # Generated experiment outputs and model checkpoints
 out/
+outputs/
 PR_EC/outputs/
+PR-EC/outputs/
 *.pt
 *.pth
 *.ckpt

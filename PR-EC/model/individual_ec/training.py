@@ -1,0 +1,47 @@
+from __future__ import annotations
+import argparse
+import numpy as np
+import torch
+from torch.utils.data import DataLoader
+from .encoder import IndividualECEncoder
+from .optim import ScheduledOptim
+from .utils import IndividualECWindowLoss
+from PR_EC.utils import RandomSubjectWindowDataset, set_seed
+
+
+def build_individual_ec_encoder(args, device):
+    options = argparse.Namespace(**vars(args), nodes_num=90, time_num=args.window_length)
+    return IndividualECEncoder(options, args.window_length, args.d_model, args.d_inner_hid, args.n_head, args.d_k, args.d_v, args.dropout).to(device)
+
+
+def train_individual_ec(args, time_series, device, window_ranges=None):
+    set_seed(args.seed)
+    dataset = RandomSubjectWindowDataset(
+        time_series, args.window_length, args.seed, window_ranges
+    )
+    generator = torch.Generator().manual_seed(args.seed)
+    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, generator=generator, num_workers=0)
+    model = build_individual_ec_encoder(args, device)
+    optimizer = ScheduledOptim(torch.optim.Adam(model.parameters(), betas=(args.adam_beta1, args.adam_beta2), eps=1e-9, weight_decay=args.weight_decay), args.lr_mul, args.d_model, args.n_warmup_steps)
+    criterion = IndividualECWindowLoss("entropy", args.loss_alpha, 90).to(device)
+    print(f"[Individual-EC] Training started | subjects={len(time_series)}")
+    metrics = {}
+    for epoch in range(1, args.epochs + 1):
+        dataset.set_epoch(epoch); model.train(); values = []
+        for windows in loader:
+            windows = windows.to(device); optimizer.zero_grad()
+            reconstruction, attention = model(windows)
+            total, prediction, regularizer = criterion(reconstruction, attention, windows)
+            total.backward(); optimizer.step_and_update_lr()
+            values.append((total.item(), prediction.item(), regularizer.item()))
+        mean_values = np.mean(values, axis=0)
+        metrics = {"epoch": epoch, "loss": float(mean_values[0]), "reconstruction_loss": float(mean_values[1]), "regularizer": float(mean_values[2])}
+        if epoch == 1 or epoch % args.log_every == 0 or epoch == args.epochs:
+            print(
+                f"[Individual-EC] Epoch {epoch}/{args.epochs} | "
+                f"loss={metrics['loss']:.6f} | "
+                f"reconstruction={metrics['reconstruction_loss']:.6f} | "
+                f"regularizer={metrics['regularizer']:.6f}"
+            )
+    print("[Individual-EC] Training completed")
+    return model, metrics
