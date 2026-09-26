@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from PR_EC.downstream.brainnetcnn import DirectedE2E
+from pr_ec.downstream.brainnetcnn import DirectedE2E
 from .qc_target import (
     build_confound_design,
     build_pseudo_target,

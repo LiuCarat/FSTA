@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from PR_EC.utils import fixed_window_starts
+from pr_ec.utils import fixed_window_starts
 
 
 

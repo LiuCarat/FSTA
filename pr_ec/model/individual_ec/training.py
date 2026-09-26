@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from .encoder import IndividualECEncoder
 from .optim import ScheduledOptim
 from .utils import IndividualECWindowLoss
-from PR_EC.utils import RandomSubjectWindowDataset, set_seed
+from pr_ec.utils import RandomSubjectWindowDataset, set_seed
 
 
 def build_individual_ec_encoder(args, device):

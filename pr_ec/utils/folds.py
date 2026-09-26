@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
-from PR_EC.model.mpr.population_reference import apply_continuous_scaler, fit_continuous_scaler
+from pr_ec.model.mpr.population_reference import apply_continuous_scaler, fit_continuous_scaler
 
 
 def fit_ec_scaler(train_ec):

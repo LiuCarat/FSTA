@@ -7,8 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
-from PR_EC.data.common import standardize_time_series, validate_time_series
-from PR_EC.utils.folds import prepare_fold_arrays
+from pr_ec.data.common import standardize_time_series, validate_time_series
+from pr_ec.utils.folds import prepare_fold_arrays
 
 
 def normalize_value(value):
@@ -152,7 +152,7 @@ def load_adhd200_records(data_root, profile, patient_label=1, control_label=0):
             raise ValueError(
                 f"ADHD phenotype column {profile.patient_column!r} is empty in "
                 f"{profile.phenotype_path}; restore the original ADHD200 diagnosis labels "
-                "before running PR_EC"
+                "before running pr_ec"
             )
         raise FileNotFoundError(
             f"No ADHD200 ROI files matched phenotype records in {flat_root}"

@@ -6,8 +6,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from .brainnetcnn import DirectedBrainNetCNN
 from .metrics import classification_metrics, select_youden_threshold
-from PR_EC.utils.runtime import set_seed
-from PR_EC.model.mpr.population_reference import to_directed_channels
+from pr_ec.utils.runtime import set_seed
+from pr_ec.model.mpr.population_reference import to_directed_channels
 
 
 def add_classifier_arguments(parser):

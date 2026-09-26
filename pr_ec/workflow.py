@@ -3,18 +3,18 @@ from __future__ import annotations
 
 import numpy as np
 
-from PR_EC.downstream import train_classifier
-from PR_EC.model.mpr.population_reference import (
+from pr_ec.downstream import train_classifier
+from pr_ec.model.mpr.population_reference import (
     normative_reference,
 )
-from PR_EC.model.mpr import build_reference_graph, fused_graph, topk_graph
-from PR_EC.model.qsr.qsr_refiner import apply_qsr_refiner, train_qsr_refiner
-from PR_EC.data.adhd200 import (
+from pr_ec.model.mpr import build_reference_graph, fused_graph, topk_graph
+from pr_ec.model.qsr.qsr_refiner import apply_qsr_refiner, train_qsr_refiner
+from pr_ec.data.adhd200 import (
     apply_numeric_imputer,
     fit_numeric_imputer,
     prepare_adhd_fold_arrays,
 )
-from PR_EC.utils import make_stratified_splits, prepare_fold_arrays, set_seed
+from pr_ec.utils import make_stratified_splits, prepare_fold_arrays, set_seed
 
 
 def build_fold_reference(args, arrays, fmri_arrays=None):
@@ -63,7 +63,7 @@ def build_fold_reference(args, arrays, fmri_arrays=None):
     reference = {}
     for split in ("train", "val", "test"):
         reference[f"{split}_neighbor"], _ = normative_reference(
-            arrays["train_ec"], weights[split]
+            arrays["train_individual_ec"], weights[split]
         )
         reference[f"{split}_weights"] = weights[split]
     return reference
@@ -114,16 +114,16 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
     set_seed(fold_seed + 1)
     print(f"[Fold {fold}/{args.n_splits}] Training QSR refiner")
     qsr_refiner, train_qsr, sensitive_map, qsr_metrics = train_qsr_refiner(
-        args, arrays["train_ec"], reference["train_neighbor"],
+        args, arrays["train_individual_ec"], reference["train_neighbor"],
         data["qsr_qc"][train_index], qsr_train_confound,
         data["site_ids"][train_index], device, fold_seed + 1,
         fold=fold, total_folds=args.n_splits,
     )
     val_qsr = apply_qsr_refiner(
-        qsr_refiner, arrays["val_ec"], reference["val_neighbor"], sensitive_map, device
+        qsr_refiner, arrays["val_individual_ec"], reference["val_neighbor"], sensitive_map, device
     )
     test_qsr = apply_qsr_refiner(
-        qsr_refiner, arrays["test_ec"], reference["test_neighbor"], sensitive_map, device
+        qsr_refiner, arrays["test_individual_ec"], reference["test_neighbor"], sensitive_map, device
     )
     print(f"[Fold {fold}/{args.n_splits}] QSR refinement completed")
     print(f"[Fold {fold}/{args.n_splits}] Restored held-out QSR EC")

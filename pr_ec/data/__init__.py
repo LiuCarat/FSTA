@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from PR_EC.data.abide import (
+from pr_ec.data.abide import (
     ABIDERecord,
     ASD_LABEL,
     DX_TO_LABEL,
@@ -12,7 +12,7 @@ from PR_EC.data.abide import (
     load_abide_records,
     load_abide_time_series,
 )
-from PR_EC.data.adhd200 import (
+from pr_ec.data.adhd200 import (
     ADHD200Record,
     apply_category_imputer,
     apply_numeric_imputer,
@@ -22,16 +22,16 @@ from PR_EC.data.adhd200 import (
     load_adhd200_time_series,
     prepare_adhd_fold_arrays,
 )
-from PR_EC.data.common import (
+from pr_ec.data.common import (
     ROI_COUNT,
     SOURCE_ROI_COUNT,
 )
-from PR_EC.model.mpr import (
+from pr_ec.model.mpr import (
     load_aligned_phenotypes,
     load_phenotypes,
     subject_fc_features,
 )
-from PR_EC.model.qsr.qc_target import load_aligned_qc
+from pr_ec.model.qsr.qc_target import load_aligned_qc
 
 FIXED_DATA_CONFIG = {
     "pipeline": "cpac",
@@ -97,7 +97,7 @@ def load_subject_dataset(
 
 def load_pipeline_data(args, device):
     
-    from PR_EC.model.individual_ec import generate_subject_ec
+    from pr_ec.model.individual_ec import generate_subject_ec
 
     individual_ec_metrics = None
     subjects = None

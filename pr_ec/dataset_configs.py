@@ -11,7 +11,7 @@ class ExperimentProfile:
     data_root: Path
     phenotype_path: Path
     output_dir: Path
-    PR_EC_PATH: Path
+    pr_ec_path: Path
     phenotype_format: str
     phenotype_id_column: str
     patient_column: str
@@ -29,9 +29,9 @@ class ExperimentProfile:
 
 def get_profile(name):
     modules = {
-        "abide": "PR_EC.main_abide_i",
-        "abide_ii": "PR_EC.main_abide_ii",
-        "adhd200": "PR_EC.main_adhd200",
+        "abide": "pr_ec.main_abide_i",
+        "abide_ii": "pr_ec.main_abide_ii",
+        "adhd200": "pr_ec.main_adhd200",
     }
     try:
         module_name = modules[name]

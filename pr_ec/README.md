@@ -82,7 +82,7 @@ Dataset-specific parameters and default settings are provided in the correspondi
 The output path of the final PR-EC archive can be configured using `--pr-ec-path`. After execution, the path is also printed as:
 
 ```
-PR_EC_PATH=...
+pr_ec_path=...
 ```
 
 The resulting `.npz` archive contains the final `pr_ec` matrices together with the corresponding labels, subject IDs, site IDs, fold IDs, ROI names, and the `PR-EC` representation label.
