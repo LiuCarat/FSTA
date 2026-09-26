@@ -65,7 +65,7 @@ def add_stf_arguments(parser):
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-mode", choices=["ec", "raw"], default='raw')
+    parser.add_argument("--input-mode", choices=["ec", "raw"], default='ec')
     parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=['original', 'refined', "qc_refined"])
     parser.add_argument("--ec-path", type=Path, default=DATASET_CONFIG.ec_path)
     parser.add_argument("--refined-ec-path", type=Path, default=DATASET_CONFIG.refined_ec_path)

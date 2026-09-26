@@ -143,3 +143,68 @@ python PR_EC/analysis/cross_cohort_replication/run_cross_cohort_replication.py
 详细方法和结果见 `PR_EC/analysis/cross_cohort_replication/README.md`。
 其中单队列 Rank 只保留作描述，复现集合按平均绝对 Hedges' g 提供展示排序，
 不参与筛选。
+
+## 6. Multivariate residual QC association
+
+`multivariate_qc_r2.py` measures how much of each directed EC edge is explained by the
+three QC variables jointly:
+
+```text
+A[i, e] = beta0 + beta1*FD[i] + beta2*DVARS[i] + beta3*Quality[i] + epsilon[i]
+```
+
+For each edge, the script fits ordinary least squares and computes its edge-wise
+`R^2`. The reported connectome-level metric is the mean over off-diagonal directed
+edges:
+
+```text
+Q_R2(eta) = mean_e R2_e(eta)
+```
+
+The script expects one NPZ archive per `eta`. Since the current archive writer does
+not store `eta`, pass the mapping explicitly using repeated `--archive ETA=PATH`
+arguments. All archives must contain the same subjects in the same order.
+
+Example for ABIDE-I:
+
+```bash
+python PR_EC/analysis/multivariate_qc_r2.py \
+  --archive 0.00=PR_EC/outputs/abide-i/qsr_eta_0.00.npz \
+  --archive 0.05=PR_EC/outputs/abide-i/qsr_eta_0.05.npz \
+  --archive 0.10=PR_EC/outputs/abide-i/qsr_eta_0.10.npz \
+  --archive 0.15=PR_EC/outputs/abide-i/qsr_eta_0.15.npz \
+  --archive 0.25=PR_EC/outputs/abide-i/qsr_eta_0.25.npz \
+  --archive 0.50=PR_EC/outputs/abide-i/qsr_eta_0.50.npz \
+  --archive 0.75=PR_EC/outputs/abide-i/qsr_eta_0.75.npz \
+  --archive 1.00=PR_EC/outputs/abide-i/qsr_eta_1.00.npz \
+  --phenotype-csv dataset/ABIDE-I/Phenotypic_Processing.csv \
+  --subject-id-column FILE_ID \
+  --ec-key qc_refined_ec \
+  --output-dir PR_EC/analysis/outputs/multivariate_qc_r2/abide_i \
+  --plot
+```
+
+For ADHD-200, use its phenotype identifier and the tabular columns expected by the
+loader:
+
+```bash
+python PR_EC/analysis/multivariate_qc_r2.py \
+  --archive 0.00=PR_EC/outputs/adhd200/qsr_eta_0.00.npz \
+  --archive 0.15=PR_EC/outputs/adhd200/qsr_eta_0.15.npz \
+  --phenotype-csv dataset/ADHD200/Phenotypic_Processing.csv \
+  --subject-id-column "ScanDir ID" \
+  --qc-columns func_mean_fd func_dvars func_quality \
+  --output-dir PR_EC/analysis/outputs/multivariate_qc_r2/adhd200 \
+  --plot
+```
+
+The script writes:
+
+- `multivariate_qc_r2_summary.csv`: one row per `eta`, including `mean_r2`;
+- `multivariate_qc_r2_edges.csv`: one row per eta and directed edge;
+- `multivariate_qc_r2_vs_eta.png`: optional curve with the requested y-axis label.
+
+Self-edges are excluded by default. Missing QC rows are excluded consistently from all
+eta values, and constant edges are omitted from the mean because their `R^2` is
+undefined. This analysis is descriptive; it does not by itself provide uncertainty
+intervals or a significance test for differences between eta values.

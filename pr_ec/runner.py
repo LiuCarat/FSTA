@@ -17,7 +17,7 @@ def run(args):
     print(f"[INFO] Dataset: {args.dataset}")
     print(f"[INFO] Device: {device}")
     print("[INFO] Loading raw fMRI time series...")
-    data, individual_ec_metrics = load_pipeline_data(args, device)
+    data, _ = load_pipeline_data(args, device)
     if np.unique(data["labels"]).size != 2:
         raise ValueError("The dataset must contain exactly two patient/control labels")
     print(f"[INFO] Individual-EC shape: {list(data['ec'].shape)}")

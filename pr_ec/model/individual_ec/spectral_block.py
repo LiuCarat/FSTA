@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 from .spectral_modules import Encoder, LayerNorm
 

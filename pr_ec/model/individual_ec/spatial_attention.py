@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 from .attention_modules import ScaledDotProductAttention
 

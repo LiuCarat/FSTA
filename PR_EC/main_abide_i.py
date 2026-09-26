@@ -13,7 +13,7 @@ from PR_EC.downstream import add_classifier_arguments
 DATASET_CONFIG = ExperimentProfile(
     name="abide",
     data_root=ROOT / "dataset/ABIDE-I",
-    phenotype_path=ROOT / "dataset/ABIDE-I/Phenotypic_Processing_filled.csv",
+    phenotype_path=ROOT / "dataset/ABIDE-I/Phenotypic_Processing.csv",
     output_dir=ROOT / "PR_EC/outputs/abide-i",
     ec_path=ROOT / "PR_EC/outputs/abide-i/abide_subject_ec.npz",
     refined_ec_path=ROOT / "PR_EC/outputs/abide-i/abide_refined_subject_ec.npz",
@@ -67,7 +67,7 @@ def add_stf_arguments(parser):
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-mode", choices=["ec", "raw"], default="raw")
+    parser.add_argument("--input-mode", choices=["ec", "raw"], default="ec")
     parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=["original", "refined", "qc_refined"])
     parser.add_argument("--ec-path", type=Path, default=DATASET_CONFIG.ec_path)
     parser.add_argument("--refined-ec-path", type=Path, default=DATASET_CONFIG.refined_ec_path)
