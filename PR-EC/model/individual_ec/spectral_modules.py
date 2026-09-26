@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 def gelu(x):
+    
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 def swish(x):
@@ -14,6 +15,7 @@ ACT2FN = {"gelu": gelu, "relu": F.relu, "swish": swish}
 
 class LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-12):
+        
         super(LayerNorm, self).__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.bias = nn.Parameter(torch.zeros(hidden_size))
@@ -42,6 +44,7 @@ class SelfAttention(nn.Module):
 
         self.attn_dropout = nn.Dropout(args.attention_probs_dropout_prob)
 
+
         self.dense = nn.Linear(args.hidden_size, args.hidden_size)
         self.LayerNorm = LayerNorm(args.hidden_size, eps=1e-12)
         self.out_dropout = nn.Dropout(args.hidden_dropout_prob)
@@ -59,10 +62,16 @@ class SelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
         key_layer = self.transpose_for_scores(mixed_key_layer)
         value_layer = self.transpose_for_scores(mixed_value_layer)
+
+
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
+
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+
 
         attention_probs = self.attn_dropout(attention_probs)
         context_layer = torch.matmul(attention_probs, value_layer)
@@ -85,15 +94,17 @@ class FilterLayer(nn.Module):
 
 
     def forward(self, input_tensor):
-        # [B, T, N, d_model]
+
         T = input_tensor.shape[1]
         x = torch.fft.rfft(input_tensor, dim=1, norm='ortho')
         weight = torch.view_as_complex(self.complex_weight)
+        x = x * weight
         sequence_emb_fft = torch.fft.irfft(x, n=T, dim=1, norm='ortho')
         hidden_states = self.out_dropout(sequence_emb_fft)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
 
         return hidden_states
+
 
 class Intermediate(nn.Module):
     def __init__(self, args):
@@ -148,6 +159,7 @@ class Encoder(nn.Module):
         all_encoder_layers = []
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
+
             if output_all_encoded_layers:
                 all_encoder_layers.append(hidden_states)
         if not output_all_encoded_layers:

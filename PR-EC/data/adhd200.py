@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import csv
@@ -165,7 +166,8 @@ def load_adhd200_time_series(
     roi_count=90,
     standardize=True,
 ):
-    # Use one selected run per subject.
+
+
     path = record.time_series_path
     time_series = np.loadtxt(
         path,

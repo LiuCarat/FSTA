@@ -21,6 +21,7 @@ class FourierAtt(nn.Module):
         return sequence_output
 
     def init_weights(self, module):
+        
         if isinstance(module, (nn.Linear, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=self.args.initializer_range)
         elif isinstance(module, LayerNorm):

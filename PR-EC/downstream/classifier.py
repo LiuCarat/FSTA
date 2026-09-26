@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 import copy
 import torch
@@ -23,6 +24,7 @@ def train_classifier(train_ec, train_labels, val_ec, val_labels,
                      test_ec, test_labels, device, seed,
                      max_epochs=80, patience=12, batch_size=32,
                      learning_rate=1e-3):
+    
     set_seed(seed)
     model = DirectedBrainNetCNN(nodes_num=train_ec.shape[-1], dropout=0.3).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)

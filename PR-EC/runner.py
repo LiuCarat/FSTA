@@ -1,4 +1,4 @@
-"""Shared execution flow for the dataset-specific PR-EC entry points."""
+
 from __future__ import annotations
 
 import numpy as np

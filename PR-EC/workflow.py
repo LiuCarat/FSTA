@@ -1,4 +1,4 @@
-"""Leakage-safe fold and cross-validation workflow."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -63,14 +63,14 @@ def build_fold_reference(args, arrays, fmri_arrays=None):
     reference = {}
     for split in ("train", "val", "test"):
         reference[f"{split}_neighbor"], _ = normative_reference(
-            arrays["train_individual_ec"], weights[split]
+            arrays["train_ec"], weights[split]
         )
         reference[f"{split}_weights"] = weights[split]
     return reference
 
 
 def run_fold(args, fold, data, train_index, val_index, test_index, device):
-    """Fit QSR and the downstream classifier using one fold-local split."""
+    
     fold_seed = args.seed + fold * 1000
     print(f"[Fold {fold}/{args.n_splits}] Starting")
     print(f"[Fold {fold}/{args.n_splits}] Preparing train/validation/test split")
@@ -81,7 +81,7 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         else prepare_fold_arrays
     )
     arrays = prepare_arrays(
-        data["individual_ec"][train_index], data["individual_ec"][val_index], data["individual_ec"][test_index],
+        data["ec"][train_index], data["ec"][val_index], data["ec"][test_index],
         data["continuous"][train_index], data["continuous"][val_index], data["continuous"][test_index],
         data["categorical_raw"][train_index], data["categorical_raw"][val_index], data["categorical_raw"][test_index],
     )
@@ -110,27 +110,28 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
     else:
         qsr_train_confound = data["qsr_confound_values"][train_index]
 
+    qsr_metrics = {}
     set_seed(fold_seed + 1)
     print(f"[Fold {fold}/{args.n_splits}] Training QSR refiner")
-    qsr_refiner, train_pr_ec, sensitive_map, _ = train_qsr_refiner(
-        args, arrays["train_individual_ec"], reference["train_neighbor"],
+    qsr_refiner, train_qsr, sensitive_map, qsr_metrics = train_qsr_refiner(
+        args, arrays["train_ec"], reference["train_neighbor"],
         data["qsr_qc"][train_index], qsr_train_confound,
         data["site_ids"][train_index], device, fold_seed + 1,
         fold=fold, total_folds=args.n_splits,
     )
     val_qsr = apply_qsr_refiner(
-        qsr_refiner, arrays["val_individual_ec"], reference["val_neighbor"], sensitive_map, device
+        qsr_refiner, arrays["val_ec"], reference["val_neighbor"], sensitive_map, device
     )
-    test_pr_ec = apply_qsr_refiner(
-        qsr_refiner, arrays["test_individual_ec"], reference["test_neighbor"], sensitive_map, device
+    test_qsr = apply_qsr_refiner(
+        qsr_refiner, arrays["test_ec"], reference["test_neighbor"], sensitive_map, device
     )
     print(f"[Fold {fold}/{args.n_splits}] QSR refinement completed")
     print(f"[Fold {fold}/{args.n_splits}] Restored held-out QSR EC")
 
     representation = {
-        "train": train_pr_ec,
+        "train": train_qsr,
         "val": val_qsr,
-        "test": test_pr_ec,
+        "test": test_qsr,
     }
     labels = {
         "train": data["labels"][train_index],
@@ -174,18 +175,19 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
     )
     return {
         "metrics": result,
-        "test_pr_ec": test_pr_ec,
+        "test_qsr": test_qsr,
         "test_index": test_index,
         "ec_mean": arrays["ec_mean"],
         "ec_std": arrays["ec_std"],
+        "refinement_metrics": qsr_metrics,
     }
 
 
 def run_cross_validation(args, data, device):
-    """Run all folds and assemble test-only out-of-fold QSR Refinement results."""
-    oof_pr_ec = np.full_like(data["individual_ec"], np.nan, dtype=np.float32)
-    fold_ids = np.full(len(data["individual_ec"]), -1, dtype=np.int64)
-    results = []
+    
+    oof_qc = np.full_like(data["ec"], np.nan, dtype=np.float32)
+    fold_ids = np.full(len(data["ec"]), -1, dtype=np.int64)
+    results, refinement_metrics = [], []
     for fold, train_index, val_index, test_index in make_stratified_splits(
         data["labels"], args.n_splits, args.seed, args.validation_size
     ):
@@ -193,21 +195,25 @@ def run_cross_validation(args, data, device):
             args, fold, data, train_index, val_index, test_index, device
         )
         heldout = fold_result["test_index"]
-        if fold_result["test_pr_ec"] is not None:
-            restored_pr_ec = (
-                fold_result["test_pr_ec"] * fold_result["ec_std"]
+        if fold_result["test_qsr"] is not None:
+            restored_qc = (
+                fold_result["test_qsr"] * fold_result["ec_std"]
                 + fold_result["ec_mean"]
             ).astype(np.float32)
-            diagonal = np.arange(restored_pr_ec.shape[-1])
-            restored_pr_ec[:, diagonal, diagonal] = 0.0
-            oof_pr_ec[heldout] = restored_pr_ec
+            diagonal = np.arange(restored_qc.shape[-1])
+            restored_qc[:, diagonal, diagonal] = 0.0
+            oof_qc[heldout] = restored_qc
         fold_ids[heldout] = fold
         results.append(fold_result["metrics"])
+        refinement_metrics.append({
+            "fold": fold, **fold_result["refinement_metrics"]
+        })
 
-    if not np.isfinite(oof_pr_ec).all() or np.any(fold_ids < 0):
+    if not np.isfinite(oof_qc).all() or np.any(fold_ids < 0):
         raise RuntimeError("QSR Refinement OOF arrays are incomplete")
     return {
-        "oof_pr_ec": oof_pr_ec,
+        "oof_qc": oof_qc,
         "fold_ids": fold_ids,
         "fold_results": results,
+        "refinement_metrics": refinement_metrics,
     }

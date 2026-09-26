@@ -1,6 +1,9 @@
+
 import numpy as np
 
 class ScheduledOptim():
+    
+
     def __init__(self, optimizer, lr_mul, d_model, n_warmup_steps):
         self._optimizer = optimizer
         self.lr_mul = lr_mul
@@ -9,12 +12,12 @@ class ScheduledOptim():
         self.n_steps = 0
 
     def step_and_update_lr(self):
-        "Step with the inner optimizer"
+        
         self._update_learning_rate()
         self._optimizer.step()
 
     def zero_grad(self):
-        "Zero out the gradients with the inner optimizer"
+        
         self._optimizer.zero_grad()
 
     def _get_lr_scale(self):
@@ -23,6 +26,8 @@ class ScheduledOptim():
         return (d_model ** -0.5) * min(n_steps ** (-0.5), n_steps * n_warmup_steps ** (-1.5))
 
     def _update_learning_rate(self):
+        
+
         self.n_steps += 1
         lr = self.lr_mul * self._get_lr_scale()
 

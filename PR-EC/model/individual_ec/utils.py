@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import numpy as np
@@ -6,13 +7,18 @@ import torch.nn as nn
 
 from PR_EC.utils import fixed_window_starts
 
+
+
+
+
+
 class IndividualECWindowLoss(nn.Module):
     MODES = ("original", "entropy")
 
     def __init__(self, mode="entropy", alpha=0.01, node_count=90, eps=1e-8):
         super().__init__()
         if mode not in self.MODES:
-            raise ValueError(f"Unknown Individual-EC loss mode: {mode}")
+            raise ValueError(f"Unknown FSTA loss mode: {mode}")
         self.mode = mode
         self.alpha = alpha
         self.node_count = node_count
@@ -33,6 +39,11 @@ class IndividualECWindowLoss(nn.Module):
                 )
             )
         return prediction + self.alpha * regularizer, prediction, regularizer
+
+
+
+
+
 
 @torch.no_grad()
 def extract_subject_ec(

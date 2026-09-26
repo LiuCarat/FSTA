@@ -1,5 +1,7 @@
+
 from __future__ import annotations
 import argparse
+import copy
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
@@ -25,7 +27,7 @@ def train_individual_ec(args, time_series, device, window_ranges=None):
     optimizer = ScheduledOptim(torch.optim.Adam(model.parameters(), betas=(args.adam_beta1, args.adam_beta2), eps=1e-9, weight_decay=args.weight_decay), args.lr_mul, args.d_model, args.n_warmup_steps)
     criterion = IndividualECWindowLoss("entropy", args.loss_alpha, 90).to(device)
     print(f"[Individual-EC] Training started | subjects={len(time_series)}")
-    metrics = {}
+    best_state, best_loss, metrics = None, float("inf"), {}
     for epoch in range(1, args.epochs + 1):
         dataset.set_epoch(epoch); model.train(); values = []
         for windows in loader:
@@ -36,6 +38,8 @@ def train_individual_ec(args, time_series, device, window_ranges=None):
             values.append((total.item(), prediction.item(), regularizer.item()))
         mean_values = np.mean(values, axis=0)
         metrics = {"epoch": epoch, "loss": float(mean_values[0]), "reconstruction_loss": float(mean_values[1]), "regularizer": float(mean_values[2])}
+        if metrics["loss"] < best_loss:
+            best_loss, best_state = metrics["loss"], copy.deepcopy(model.state_dict())
         if epoch == 1 or epoch % args.log_every == 0 or epoch == args.epochs:
             print(
                 f"[Individual-EC] Epoch {epoch}/{args.epochs} | "
@@ -43,5 +47,9 @@ def train_individual_ec(args, time_series, device, window_ranges=None):
                 f"reconstruction={metrics['reconstruction_loss']:.6f} | "
                 f"regularizer={metrics['regularizer']:.6f}"
             )
+
+
+    if getattr(args, "individual_ec_checkpoint", "final") == "best" and best_state is not None:
+        model.load_state_dict(best_state)
     print("[Individual-EC] Training completed")
     return model, metrics

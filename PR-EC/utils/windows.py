@@ -1,3 +1,5 @@
+
+
 from __future__ import annotations
 
 import numpy as np
@@ -6,6 +8,8 @@ from torch.utils.data import Dataset
 
 
 class RandomSubjectWindowDataset(Dataset):
+    
+
     def __init__(self, time_series, window_length, seed, window_ranges=None):
         self.time_series = time_series
         self.window_length = window_length

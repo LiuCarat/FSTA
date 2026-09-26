@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class ScaledDotProductAttention(nn.Module):
+    
+
     def __init__(self, temperature, attn_dropout=0.1):
         super().__init__()
         self.temperature = temperature

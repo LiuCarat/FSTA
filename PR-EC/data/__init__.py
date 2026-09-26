@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import numpy as np
@@ -95,9 +96,10 @@ def load_subject_dataset(
 
 
 def load_pipeline_data(args, device):
-    """Generate Individual-EC matrices and attach graph/QC covariates."""
+    
     from PR_EC.model.individual_ec import generate_subject_ec
 
+    individual_ec_metrics = None
     subjects = None
     subjects = load_subject_dataset(
         args.data_root,
@@ -113,7 +115,7 @@ def load_pipeline_data(args, device):
     print("[STAGE 1/4] Training Individual-EC encoder")
     print(f"[INFO] Subjects loaded: {len(subjects['records'])}")
     print(f"[INFO] ROI shape: [T, {subjects['time_series'][0].shape[1]}]")
-    data = generate_subject_ec(args, subjects, device)
+    data, individual_ec_metrics = generate_subject_ec(args, subjects, device)
 
     if args.profile.name == "abide_i":
         data["labels"] = _labels_from_abide_phenotype(
@@ -140,16 +142,13 @@ def load_pipeline_data(args, device):
         args.profile.confound_columns,
         args.profile,
     ).astype(np.float32)
-    data["individual_ec"] = np.asarray(data["individual_ec"], dtype=np.float32)
+    data["ec"] = np.asarray(data["ec"], dtype=np.float32)
     data["labels"] = np.asarray(data["labels"], dtype=np.int64)
-    return data
+    return data, individual_ec_metrics
 
 
 def _labels_from_abide_phenotype(phenotype_csv, subject_ids, profile):
-    """Build canonical TC=0/ASD=1 labels from the phenotype source.
-
-    The phenotype source is used to align canonical binary labels by subject ID.
-    """
+    
     diagnosis = load_aligned_phenotypes(
         phenotype_csv,
         subject_ids,
@@ -164,7 +163,7 @@ def _labels_from_abide_phenotype(phenotype_csv, subject_ids, profile):
     if np.any(labels < 0):
         unknown = np.unique(diagnosis[labels < 0]).tolist()
         raise ValueError(
-            f"Unknown ABIDE diagnosis values in phenotype: {unknown}"
+            f"Unknown ABIDE diagnosis values in phenotype for archive subjects: {unknown}"
         )
     return labels
 

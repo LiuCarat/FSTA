@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import copy
@@ -22,6 +23,8 @@ from .qc_target import (
 
 
 class QSRECRefiner(nn.Module):
+    
+
     def __init__(self, nodes_num=90, hidden_channels=8, gate_max=0.5):
         super().__init__()
         self.nodes_num = int(nodes_num)
@@ -71,6 +74,7 @@ def qsr_refinement_loss(
     gate_weight=0.1,
     variance_weight=0.1,
 ):
+    
     pseudo = F.smooth_l1_loss(original_refined, pseudo_target)
     restore = F.smooth_l1_loss(perturbed_refined, pseudo_target)
     gate = 0.5 * (original_gate.abs().mean() + perturbed_gate.abs().mean())
@@ -90,6 +94,7 @@ def train_qsr_refiner(
     args, ec, neighbor, train_qc, confound_values, site_ids, device, seed,
     fold=1, total_folds=1,
 ):
+    
     qc_scaler = fit_qc_scaler(train_qc)
     qc_sensitivity = transform_qc_sensitivity(train_qc, qc_scaler)
     confounds = build_confound_design(site_ids, confound_values)
@@ -173,6 +178,7 @@ def train_qsr_refiner(
 
 
 def apply_qsr_refiner(model, ec, neighbor, qc_sensitive_map, device):
+    
     with torch.no_grad():
         return model(
             torch.from_numpy(ec).float().to(device),

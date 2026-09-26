@@ -1,4 +1,4 @@
-"""Run the ABIDE-I PR-EC experiment."""
+
 import argparse
 import sys
 import types
@@ -10,14 +10,16 @@ if str(ROOT) not in sys.path:
 PACKAGE = types.ModuleType("PR_EC")
 PACKAGE.__path__ = [str(Path(__file__).resolve().parent)]
 sys.modules["PR_EC"] = PACKAGE
+
 from PR_EC.dataset_configs import ExperimentProfile
 from PR_EC.downstream import add_classifier_arguments
 
 DATASET_CONFIG = ExperimentProfile(
     name="abide_i",
     data_root=ROOT / "dataset/ABIDE-I",
-    phenotype_path=ROOT / "dataset/ABIDE-I/Phenotypic_Processing_filled.csv",
-    PR_EC_PATH=ROOT / "outputs/abide-i/abide_pr_ec.npz",
+    phenotype_path=ROOT / "dataset/ABIDE-I/Phenotypic_Processing.csv",
+    output_dir=ROOT / "PR-EC/outputs/abide-i",
+    PR_EC_PATH=ROOT / "PR-EC/outputs/abide-i/abide_pr_ec.npz",
     phenotype_format="csv",
     phenotype_id_column="FILE_ID",
     patient_column="DX_GROUP",
@@ -68,6 +70,7 @@ def parse_args():
     parser.add_argument("--pr-ec-path", type=Path, dest="PR_EC_PATH", default=DATASET_CONFIG.PR_EC_PATH)
     parser.add_argument("--data-root", type=Path, default=DATASET_CONFIG.data_root)
     parser.add_argument("--phenotype-csv", type=Path, default=DATASET_CONFIG.phenotype_path)
+    parser.add_argument("--output-dir", type=Path, default=DATASET_CONFIG.output_dir)
     parser.add_argument("--n-splits", type=int, default=10)
     parser.add_argument("--validation-size", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=42)
@@ -96,6 +99,7 @@ def parse_args():
     add_classifier_arguments(parser)
     add_individual_ec_arguments(parser)
     args = parser.parse_args()
+    args.individual_ec_checkpoint = "final"
     args.graph_mode = "fusion"
     args.permute_phenotype = False
     args.no_filters = False

@@ -1,3 +1,5 @@
+
+
 from __future__ import annotations
 
 from .training import train_individual_ec
@@ -5,7 +7,8 @@ from .utils import extract_subject_ec
 
 
 def generate_subject_ec(args, subjects, device):
-    model, _ = train_individual_ec(
+    
+    model, training_metrics = train_individual_ec(
         args,
         subjects["time_series"],
         device,
@@ -21,9 +24,9 @@ def generate_subject_ec(args, subjects, device):
         subjects.get("window_ranges"),
     )
     return {
-        "individual_ec": extracted["ec"],
+        "ec": extracted["ec"],
         "labels": subjects["labels"],
         "subject_ids": subjects["subject_ids"],
         "site_ids": subjects["site_ids"],
         "reconstruction_mse": extracted["reconstruction_mse"],
-    }
+    }, training_metrics

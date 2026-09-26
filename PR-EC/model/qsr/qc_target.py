@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import csv
@@ -10,6 +11,7 @@ DEFAULT_QC_COLUMNS = ("func_mean_fd", "func_dvars", "func_quality")
 
 
 def _subject_row(rows, subject_id):
+    
     subject_id = str(subject_id).strip()
     row = rows.get(subject_id)
     if row is not None:
@@ -27,6 +29,7 @@ def _parse_numeric(value):
 
 
 def load_aligned_qc(csv_path, subject_ids, columns=DEFAULT_QC_COLUMNS, profile=None):
+    
     columns = tuple(columns)
     identifier = profile.phenotype_id_column if profile else "FILE_ID"
     delimiter = "\t" if profile and profile.phenotype_format == "tsv" else ","
@@ -54,6 +57,7 @@ def load_aligned_qc(csv_path, subject_ids, columns=DEFAULT_QC_COLUMNS, profile=N
 
 
 def fit_qc_scaler(train_qc):
+    
     values = np.asarray(train_qc, dtype=np.float64)
     if values.ndim != 2 or not len(values):
         raise ValueError("train_qc must be a non-empty [subjects, features] array")
@@ -73,6 +77,7 @@ def fit_qc_scaler(train_qc):
 
 
 def transform_qc_sensitivity(qc, scaler):
+    
     values = np.asarray(qc, dtype=np.float64)
     fill = np.asarray(scaler["fill"], dtype=np.float64)
     values = np.where(np.isfinite(values), values, fill)
@@ -83,6 +88,7 @@ def transform_qc_sensitivity(qc, scaler):
 
 
 def build_confound_design(site_ids, phenotype_values):
+    
     sites = np.asarray(site_ids).astype(str)
     values = np.asarray(phenotype_values, dtype=np.float64)
     if values.ndim != 2 or values.shape[0] != len(sites):
@@ -106,6 +112,7 @@ def build_confound_design(site_ids, phenotype_values):
 
 
 def fit_qc_sensitivity_basis(train_ec, train_qc_sensitivity, train_confounds, ridge=1e-3):
+    
     ec = np.asarray(train_ec, dtype=np.float64)
     qc_sensitivity = np.asarray(train_qc_sensitivity, dtype=np.float64)
     confounds = np.asarray(train_confounds, dtype=np.float64)
@@ -131,6 +138,7 @@ def fit_qc_sensitivity_basis(train_ec, train_qc_sensitivity, train_confounds, ri
 
 
 def build_qc_sensitive_map(qc_basis):
+    
     basis = np.asarray(qc_basis, dtype=np.float32)
     if basis.ndim != 3:
         raise ValueError("qc_basis must have shape [qc_features, nodes, nodes]")
@@ -144,6 +152,7 @@ def build_qc_sensitive_map(qc_basis):
 
 
 def _limit_relative_change(base, proposal, maximum_ratio):
+    
     if maximum_ratio <= 0.0:
         return np.asarray(base, dtype=np.float32).copy()
     base = np.asarray(base, dtype=np.float32)
@@ -158,6 +167,7 @@ def _limit_relative_change(base, proposal, maximum_ratio):
 
 
 def build_pseudo_target(ec, qc_sensitivity, qc_basis, eta, maximum_ratio):
+    
     if eta < 0.0:
         raise ValueError("eta must be non-negative")
     component = np.tensordot(
@@ -170,6 +180,7 @@ def build_pseudo_target(ec, qc_sensitivity, qc_basis, eta, maximum_ratio):
 
 
 def sample_joint_qc_delta(train_qc_sensitivity, rng):
+    
     values = np.asarray(train_qc_sensitivity, dtype=np.float32)
     if len(values) < 2:
         return np.zeros_like(values)
@@ -179,6 +190,7 @@ def sample_joint_qc_delta(train_qc_sensitivity, rng):
 
 
 def apply_qc_perturbation(pseudo_ec, qc_basis, qc_delta, scale, maximum_ratio):
+    
     if scale < 0.0:
         raise ValueError("scale must be non-negative")
     component = np.tensordot(
@@ -191,6 +203,7 @@ def apply_qc_perturbation(pseudo_ec, qc_basis, qc_delta, scale, maximum_ratio):
 
 
 def relative_change(reference, updated):
+    
     reference = np.asarray(reference, dtype=np.float32)
     updated = np.asarray(updated, dtype=np.float32)
     numerator = np.linalg.norm((updated - reference).reshape(len(reference), -1), axis=1)

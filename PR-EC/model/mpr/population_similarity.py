@@ -1,3 +1,5 @@
+
+
 from __future__ import annotations
 
 import csv
@@ -13,6 +15,7 @@ MISSING_SENTINEL = -9000.0
 
 
 def _subject_row(rows, subject_id):
+    
     subject_id = str(subject_id).strip()
     row = rows.get(subject_id)
     if row is not None:
@@ -70,6 +73,7 @@ def load_aligned_phenotypes(csv_path, subject_ids, columns, profile=None):
 
 
 def load_phenotypes(phenotype_csv, subject_ids, site_ids, profile=None):
+    
     if profile is None or profile.name != "adhd200":
         values = load_aligned_phenotypes(
             phenotype_csv, subject_ids, ["SEX", "FIQ", "PIQ"]
@@ -126,6 +130,7 @@ def _load_aligned_categories(csv_path, subject_ids, columns, profile=None):
 def build_reference_graph(train_cont, train_cat, query_cont, query_cat,
                            k=20, bandwidth=1.0, categorical_penalty=4.0,
                            continuous_weights=(1.0, 0.3), permute=False, seed=2026):
+    
     train_cont = np.asarray(train_cont).copy()
     train_cat = np.asarray(train_cat).copy()
     if permute:
@@ -146,7 +151,13 @@ def build_reference_graph(train_cont, train_cat, query_cont, query_cat,
     query_weights = reference_weights(query_cont, query_cat, **common)
     return train_weights, query_weights
 
+
+
+
+
+
 def subject_fc_features(time_series):
+    
     features = []
     upper = np.triu_indices(90, k=1)
     for index, series in enumerate(time_series, 1):
@@ -167,6 +178,7 @@ def subject_fc_features(time_series):
 
 
 def topk_graph(reference, query, neighbors, exclude_self=False):
+    
     reference = np.asarray(reference, dtype=np.float32)
     query = np.asarray(query, dtype=np.float32)
     reference = reference / np.maximum(
@@ -182,6 +194,7 @@ def topk_graph(reference, query, neighbors, exclude_self=False):
 
 
 def topk_row_normalize(scores, neighbors, exclude_self=False):
+    
     scores = np.asarray(scores, dtype=np.float32).copy()
     if scores.ndim != 2:
         raise ValueError(f"scores must be [queries, references], got {scores.shape}")
@@ -204,6 +217,7 @@ def fused_graph(
     beta,
     neighbors,
 ):
+    
     if not 0.0 <= float(beta) <= 1.0:
         raise ValueError(f"fusion beta must be in [0, 1], got {beta}")
     fmri_graph = np.asarray(fmri_graph, dtype=np.float32)

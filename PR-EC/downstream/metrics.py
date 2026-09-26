@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import numpy as np
@@ -27,6 +28,7 @@ def select_youden_threshold(labels, probabilities, fallback=0.5):
 
 
 def classification_metrics(labels, probabilities, threshold=0.5):
+    
     labels = np.asarray(labels, dtype=np.int64)
     probabilities = np.asarray(probabilities, dtype=np.float64)
     predictions = (probabilities >= threshold).astype(np.int64)
