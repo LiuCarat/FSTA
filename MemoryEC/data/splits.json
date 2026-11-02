@@ -1,0 +1,47 @@
+{
+  "train": {
+    "base_networks": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "scenes": [
+      "Network1_amp",
+      "Network2_amp",
+      "Network3_amp",
+      "Network4_amp",
+      "Network5_amp",
+      "Network5_cont",
+      "Network5_cont_p3n7",
+      "Network5_cont_p7n3",
+      "Network6_amp",
+      "Network6_cont"
+    ]
+  },
+  "val": {
+    "base_networks": [
+      7
+    ],
+    "scenes": [
+      "Network7_amp",
+      "Network7_cont"
+    ]
+  },
+  "test": {
+    "base_networks": [
+      8,
+      9
+    ],
+    "scenes": [
+      "Network8_amp_amp",
+      "Network8_amp_cont",
+      "Network8_cont_amp",
+      "Network9_amp_amp",
+      "Network9_amp_cont",
+      "Network9_cont_amp"
+    ]
+  }
+}

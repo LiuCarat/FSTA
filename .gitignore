@@ -47,6 +47,8 @@ dataset/ABIDE-II/*
 dataset/ADHD200/*
 !dataset/ADHD200/*.py
 !dataset/ADHD200/Phenotypic_Processing.csv
+dataset/SanchezRomero2019_SimpleNetworks
+dataset/atlas
 # Download and pipeline temporary files
 *.download
 *.tmp
