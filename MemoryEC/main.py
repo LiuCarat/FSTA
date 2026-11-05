@@ -1,286 +1,471 @@
-"""Configurable MemoryEC training/evaluation entry point."""
+"""Single entry point for Pair Memory, ablations and sparsity experiments."""
 
 from __future__ import annotations
 
 import argparse
 import csv
 import json
+import math
 from pathlib import Path
 
 import numpy as np
 import torch
 
-from data.loader import load_splits, make_dataloader
+from data.loader import PROCESSED_DIR, base_network, load_scene, make_dataloader
 from model.memory_ec import MemoryEC
-from test import evaluate
-from train import train as train_model
-from utils import MODEL_TYPES, adaptive_threshold, directed_metrics, save_json
+from train import resolve_device, train
+from utils import MODEL_TYPES, adaptive_threshold, directed_metrics, save_json, zero_diagonal
 
 
 ROOT = Path(__file__).resolve().parent
-OUT = ROOT / "outputs"
-METRICS = ("precision", "recall", "directed_f1", "accuracy", "shd", "auprc", "auroc")
-ABLATION_METRICS = (
-    ("Precision", "precision"),
-    ("Recall", "recall"),
-    ("F1", "directed_f1"),
-    ("Accuracy", "accuracy"),
-    ("SHD", "shd"),
+OUTPUTS = ROOT / "outputs"
+LAMBDAS = (0.0, 0.005, 0.02)
+METHODS = ("validation_selected", "fixed_0.5", "fsta_adaptive")
+METRICS = (
+    "precision", "recall", "directed_f1", "accuracy", "shd", "auprc", "auroc",
+    "fp", "fn", "predicted_edges", "true_edges",
 )
+CONSOLE_METRICS = {
+    "precision": "Precision (higher is better)",
+    "recall": "Recall (higher is better)",
+    "directed_f1": "F1 (higher is better)",
+    "accuracy": "Accuracy (higher is better)",
+    "shd": "SHD (lower is better)",
+}
+TRAIN_KEYS = (
+    "hidden_dim", "memory_slots", "attention_heads", "dropout", "learning_rate",
+    "weight_decay", "batch_size", "epochs", "patience", "min_delta", "roi_permutation",
+)
+LABELS = {
+    "st_no_memory": "No Memory", "st_global_memory": "Global Memory",
+    "st_pair_memory": "Pair Memory",
+}
 
 
-def checkpoint_label(path: Path) -> str:
-    return "best_val_auprc" if "best_val_auprc" in path.name else "best_val_loss"
-
-
-def evaluate_checkpoints(args: argparse.Namespace) -> None:
-    splits = load_splits()
-    checkpoint_paths = [
-        (model, OUT / f"{model}_best.pt") for model in MODEL_TYPES
-    ] + [
-        (model, OUT / f"{model}_best_val_auprc.pt") for model in MODEL_TYPES
-    ]
-    records = []
-    for model_type, checkpoint_path in checkpoint_paths:
-        if not checkpoint_path.is_file():
-            raise FileNotFoundError(checkpoint_path)
-        device = torch.device(
-            "cuda" if args.device == "auto" and torch.cuda.is_available()
-            else "cpu" if args.device == "auto" else args.device
-        )
-        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-        if checkpoint["model_config"]["model_type"] != model_type:
-            raise ValueError(f"{checkpoint_path}: model type mismatch")
-        model = MemoryEC(**checkpoint["model_config"]).to(device)
-        model.load_state_dict(checkpoint["model_state"], strict=True)
-        print(f"checkpoint={checkpoint_path.name} epoch={checkpoint['epoch']} loaded=true")
-        tag = checkpoint_label(checkpoint_path)
-        for split in ("val", "test"):
-            evaluate(argparse.Namespace(
-                seed=args.seed, threads=args.threads, device=args.device,
-                checkpoint=str(checkpoint_path), split=split,
-                batch_size=args.batch_size, time_shuffle=False,
-                threshold=0.5, predictions_only=True, checkpoint_tag=tag,
-            ))
-
-        def scene_predictions(split: str) -> dict:
-            result = {}
-            for scene in splits[split]["scenes"]:
-                file_path = OUT / f"{model_type}_{scene}_{tag}_predictions.npz"
-                with np.load(file_path, allow_pickle=False) as data:
-                    probs = data["probabilities"]
-                    result[scene] = (probs.mean(axis=0), data["adj"])
-            return result
-
-        validation = scene_predictions("val")
-        grid = np.round(np.arange(0.05, 0.951, 0.01), 2)
-        threshold_scores = []
-        for threshold in grid:
-            threshold_scores.append(np.mean([
-                directed_metrics(adj, prob, float(threshold))["directed_f1"]
-                for prob, adj in validation.values()
-            ]))
-        selected = float(grid[int(np.argmax(threshold_scores))])
-        test_data = scene_predictions("test")
-        per_method = {"fixed_0.5": [], "validation_selected": [], "fsta_adaptive": []}
-        for scene, (probability, target) in test_data.items():
-            thrs = {"fixed_0.5": 0.5, "validation_selected": selected,
-                    "fsta_adaptive": adaptive_threshold(probability, 0.5)}
-            for method, threshold in thrs.items():
-                values = directed_metrics(target, probability, threshold)
-                predicted = (probability >= threshold).astype(np.uint8)
-                np.fill_diagonal(predicted, 0)
-                mask = ~np.eye(target.shape[0], dtype=bool)
-                labels = target[mask].astype(bool)
-                pred_edges = predicted[mask].astype(bool)
-                per_method[method].append({
-                    "model": model_type, "checkpoint": tag,
-                    "network": f"Network{int(scene.split('_')[0][7:])}",
-                    "scene": scene, "method": method, "threshold": threshold,
-                    "predicted_edges": int(pred_edges.sum()),
-                    "tp": int((pred_edges & labels).sum()),
-                    "fp": int((pred_edges & ~labels).sum()),
-                    "fn": int((~pred_edges & labels).sum()),
-                    **{key: values[key] for key in METRICS},
-                })
-        records.extend(row for rows in per_method.values() for row in rows)
-        save_json({"model": model_type, "checkpoint": str(checkpoint_path),
-                   "checkpoint_epoch": checkpoint["epoch"], "selection_split": "Network7",
-                   "selected_threshold": selected,
-                   "validation_mean_directed_f1": float(max(threshold_scores)),
-                   "test_scenes": per_method},
-                  OUT / f"{model_type}_{tag}_evaluation.json")
-
-    # Scene-level values are macro-averaged within each network and overall.
-    output_rows = []
-    for model, checkpoint, method in sorted({(r["model"], r["checkpoint"], r["method"]) for r in records}):
-        group = [r for r in records if (r["model"], r["checkpoint"], r["method"]) == (model, checkpoint, method)]
-        for network in ("Network8", "Network9", "Overall"):
-            part = group if network == "Overall" else [r for r in group if r["network"] == network]
-            row = {"model": model, "checkpoint": checkpoint, "method": method, "network": network}
-            for metric in METRICS:
-                row[metric] = float(np.mean([r[metric] for r in part]))
-            output_rows.append(row)
-    out_csv = OUT / "checkpoint_threshold_comparison.csv"
-    with out_csv.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(output_rows[0]))
+def write_csv(rows: list[dict], path: Path) -> None:
+    if not rows:
+        return
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()
-        writer.writerows(output_rows)
-    save_json({"rows": output_rows, "scene_diagnostics": records}, OUT / "checkpoint_threshold_comparison.json")
-    table_fields = ["checkpoint", "network", "method", "metric"] + list(MODEL_TYPES)
-    table_rows = []
-    for row in output_rows:
-        for metric in METRICS:
-            match = next((entry for entry in table_rows if entry["checkpoint"] == row["checkpoint"] and entry["network"] == row["network"] and entry["method"] == row["method"] and entry["metric"] == metric), None)
-            if match is None:
-                match = {"checkpoint": row["checkpoint"], "network": row["network"], "method": row["method"], "metric": metric}
-                table_rows.append(match)
-            match[row["model"]] = row[metric]
-    with (OUT / "checkpoint_threshold_comparison_wide.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=table_fields)
-        writer.writeheader()
-        writer.writerows(table_rows)
-    print(f"saved={out_csv}")
+        writer.writerows(rows)
 
 
-def print_ablation_metrics(model_types: tuple[str, ...], args: argparse.Namespace) -> None:
-    splits = load_splits()
-    scene_records = []
-    selected_thresholds = {}
-    for model_type in model_types:
-        checkpoint = OUT / f"{model_type}_best.pt"
-        for split in ("val", "test"):
-            evaluate(argparse.Namespace(
-                seed=args.seed, threads=args.threads, device=args.device,
-                checkpoint=str(checkpoint), split=split, batch_size=args.batch_size,
-                time_shuffle=False, threshold=0.5, predictions_only=True,
-                checkpoint_tag="ablation",
-            ))
+def read_json(path: Path):
+    return json.loads(path.read_text(encoding="utf-8"))
 
-        def load_scenes(split: str) -> dict:
-            scenes = {}
-            for scene in splits[split]["scenes"]:
-                path = OUT / f"{model_type}_{scene}_ablation_predictions.npz"
-                with np.load(path, allow_pickle=False) as data:
-                    scenes[scene] = (data["probabilities"].mean(axis=0), data["adj"])
-            return scenes
 
-        validation = load_scenes("val")
-        thresholds = np.round(np.arange(0.05, 0.951, 0.01), 2)
-        val_f1 = [np.mean([
-            directed_metrics(adj, probability, float(threshold))["directed_f1"]
-            for probability, adj in validation.values()
-        ]) for threshold in thresholds]
-        selected = float(thresholds[int(np.argmax(val_f1))])
-        selected_thresholds[model_type] = {
-            "threshold": selected,
-            "network7_mean_scene_f1": float(max(val_f1)),
-        }
-        methods = {"fixed_0.5": [], "validation_selected": [], "fsta_adaptive": []}
-        for scene, (probability, target) in load_scenes("test").items():
-            scene_thresholds = {
-                "fixed_0.5": 0.5,
-                "validation_selected": selected,
-                "fsta_adaptive": adaptive_threshold(probability, 0.5),
-            }
-            for method, threshold in scene_thresholds.items():
-                metrics = directed_metrics(target, probability, threshold)
-                record = {
-                    "model": model_type,
-                    "scene": scene,
-                    "network": f"Network{int(scene.split('_')[0][7:])}",
-                    "method": method,
-                    "threshold": float(threshold),
-                    **{key: metrics[key] for _, key in ABLATION_METRICS},
-                }
-                methods[method].append(record)
-                scene_records.append(record)
-        print(f"\n{model_type}: Network7 validation-selected threshold = {selected:.2f}")
-        print("FSTA adaptive thresholds by test scene: " + ", ".join(
-            f"{record['scene']}={record['threshold']:.2f}"
-            for record in methods["fsta_adaptive"]
-        ))
-        save_json({"model": model_type, "validation_threshold": selected,
-                   "validation_mean_scene_f1": float(max(val_f1)), "test_scenes": methods},
-                  OUT / f"{model_type}_ablation_threshold_metrics.json")
+def family_scenes() -> dict[int, list[str]]:
+    families = {family: [] for family in range(1, 10)}
+    for path in sorted(PROCESSED_DIR.glob("Network*.npz")):
+        family = base_network(path.stem)
+        if family not in families:
+            raise ValueError(f"Unexpected family: {path}")
+        families[family].append(path.stem)
+    if any(not scenes for scenes in families.values()):
+        raise ValueError("Processed data must contain every family Network1..9")
+    return families
 
-    labels = {
-        "st_no_memory": "No Memory",
-        "st_global_memory": "Global Memory",
-        "st_pair_memory": "Pair Memory",
+
+def fold_split(fold: int, families: dict[int, list[str]]) -> dict[str, list[str]]:
+    validation = {fold % 9 + 1, (fold + 1) % 9 + 1}
+    train_families = set(families) - validation - {fold}
+    return {
+        "train": [scene for family in sorted(train_families) for scene in families[family]],
+        "val": [scene for family in sorted(validation) for scene in families[family]],
+        "test": families[fold],
     }
-    print("\nAblation test metrics: values are scene-level macro means; higher is better except SHD.")
-    print("Overall = unweighted mean across all six Network8/9 test scenes (3 scenes per network).")
-    print("AUPRC/AUROC omitted here as requested; these tables report the five threshold-based metrics.")
-    for method, title in (("fixed_0.5", "Fixed threshold = 0.50"),
-                          ("validation_selected", "Network7 validation-selected threshold"),
-                          ("fsta_adaptive", "FSTA adaptive per-scene threshold (ratio = 0.50)")):
-        print(f"\n=== {title} ===")
-        for network in ("Network8", "Network9", "Overall"):
-            print(f"\n{network}")
-            print(f"{'Metric':<12}" + "".join(f"{labels[model]:>16}" for model in model_types))
-            for display, key in ABLATION_METRICS:
+
+
+def aggregate_predictions(model: MemoryEC, scenes: list[str], args: argparse.Namespace) -> dict:
+    loader = make_dataloader("test", batch_size=args.batch_size, seed=args.seed,
+                             balanced=False, scenes=scenes)
+    probabilities = {}
+    targets = {}
+    model.eval()
+    with torch.no_grad():
+        for batch in loader:
+            scores = model(batch["bold"].to(args.device)).sigmoid().cpu().numpy()
+            for index, scene in enumerate(batch["scene"]):
+                probabilities.setdefault(scene, []).append(scores[index])
+                targets[scene] = batch["adj"][index].numpy()
+    return {
+        scene: (zero_diagonal(np.mean(probabilities[scene], axis=0)), targets[scene])
+        for scene in scenes
+    }
+
+
+def threshold_from_validation(data: dict) -> tuple[float, float]:
+    grid = np.round(np.arange(0.05, 0.951, 0.01), 2)
+    families = sorted({base_network(scene) for scene in data})
+    scores = []
+    for threshold in grid:
+        family_f1 = [np.mean([
+            directed_metrics(target, probability, float(threshold))["directed_f1"]
+            for scene, (probability, target) in data.items()
+            if base_network(scene) == family
+        ]) for family in families]
+        scores.append(float(np.mean(family_f1)))
+    best = int(np.argmax(scores))
+    return float(grid[best]), scores[best]
+
+
+def evaluate_method(data: dict, method: str, selected: float) -> list[dict]:
+    rows = []
+    for scene, (probability, target) in sorted(data.items()):
+        threshold = {
+            "validation_selected": selected, "fixed_0.5": 0.5,
+            "fsta_adaptive": adaptive_threshold(probability, 0.5),
+        }[method]
+        mask = ~np.eye(target.shape[0], dtype=bool)
+        labels = target[mask].astype(bool)
+        prediction = probability[mask] >= threshold
+        rows.append({
+            "scene": scene, "network": base_network(scene), "method": method,
+            "threshold": threshold, **directed_metrics(target, probability, threshold),
+            "tp": int((prediction & labels).sum()),
+            "fp": int((prediction & ~labels).sum()),
+            "fn": int((~prediction & labels).sum()),
+            "predicted_edges": int(prediction.sum()), "true_edges": int(labels.sum()),
+        })
+    return rows
+
+
+def load_model(path: Path, device: str) -> tuple[MemoryEC, dict]:
+    checkpoint = torch.load(path, map_location=device, weights_only=False)
+    model = MemoryEC(**checkpoint["model_config"]).to(device)
+    model.load_state_dict(checkpoint["model_state"], strict=True)
+    return model, checkpoint
+
+
+def candidate_validation(args: argparse.Namespace, split: dict, directory: Path,
+                         sparse_lambda: float) -> dict:
+    options = vars(args).copy()
+    options.update(output_dir=directory, split_scenes=split, sparse_lambda=sparse_lambda)
+    summary = directory / f"{args.model_type}_train_summary.json"
+    if not summary.is_file():
+        if directory.exists() and any(directory.iterdir()):
+            raise RuntimeError(f"Incomplete training at {directory}; use a new --run-name to preserve files")
+        train(argparse.Namespace(**options))
+    checkpoint_path = directory / f"{args.model_type}_best.pt"
+    model, checkpoint = load_model(checkpoint_path, args.device)
+    validation = aggregate_predictions(model, split["val"], args)
+    threshold, score = threshold_from_validation(validation)
+    return {
+        "sparse_lambda": sparse_lambda, "checkpoint": str(checkpoint_path),
+        "checkpoint_epoch": checkpoint["epoch"], "checkpoint_selection": "val_loss",
+        "threshold": threshold, "validation_family_macro_f1": score,
+        "validation_metrics": evaluate_method(validation, "validation_selected", threshold),
+    }
+
+
+def run_model(args: argparse.Namespace, split: dict, directory: Path,
+              sparse_search: bool) -> list[dict]:
+    result_path = directory / "results.json"
+    if result_path.is_file():
+        print(f"Reusing {directory}", flush=True)
+        return read_json(result_path)
+    candidates = []
+    for coefficient in LAMBDAS if sparse_search else (args.sparse_lambda,):
+        candidate_dir = directory / f"lambda_{coefficient:g}" if sparse_search else directory
+        candidates.append(candidate_validation(args, split, candidate_dir, coefficient))
+        candidate = candidates[-1]
+        print(f"  lambda={coefficient:g}, best_epoch={candidate['checkpoint_epoch']}, "
+              f"validation_threshold={candidate['threshold']:.2f}, "
+              f"validation_family_F1={candidate['validation_family_macro_f1']:.4f}", flush=True)
+    winner = max(candidates, key=lambda item: (
+        item["validation_family_macro_f1"], -item["sparse_lambda"]
+    ))
+    save_json({
+        "candidates": candidates, "selected_lambda": winner["sparse_lambda"],
+        "selection_criterion": "validation family-macro F1; ties choose smaller lambda",
+        "threshold_tie_rule": "lowest threshold in 0.05..0.95 step 0.01",
+        "test_used_for_selection": False,
+    }, directory / "validation_selection.json")
+    if sparse_search:
+        print(f"  Validation-locked lambda={winner['sparse_lambda']:g}; test not used for selection.", flush=True)
+    rows = []
+    for candidate in candidates:
+        model, _ = load_model(Path(candidate["checkpoint"]), args.device)
+        test_data = aggregate_predictions(model, split["test"], args)
+        variant = f"lambda={candidate['sparse_lambda']:g}" if sparse_search else args.model_type
+        for method in METHODS:
+            for metrics in evaluate_method(test_data, method, candidate["threshold"]):
+                row = {
+                    "repeat": args.repeat, "seed": args.seed, "fold": args.fold,
+                    "model": args.model_type, "variant": variant,
+                    "sparse_lambda": candidate["sparse_lambda"],
+                    "checkpoint_epoch": candidate["checkpoint_epoch"],
+                    "checkpoint_selection": candidate["checkpoint_selection"],
+                    "validation_threshold": candidate["threshold"],
+                    "validation_family_macro_f1": candidate["validation_family_macro_f1"],
+                    **metrics,
+                }
+                rows.append(row)
+                if sparse_search and candidate is winner:
+                    rows.append({**row, "variant": "validation_selected_lambda"})
+    save_json(rows, result_path)
+    return rows
+
+
+def protocol(args: argparse.Namespace, families: dict) -> dict:
+    return {
+        "protocol": "unified_cv_v1", "mode": args.mode,
+        "models": list(MODEL_TYPES) if args.mode == "ablation" else [args.model_type],
+        "repeats": args.repeats, "seeds": [args.seed + repeat for repeat in range(args.repeats)],
+        "training": {key: getattr(args, key) for key in TRAIN_KEYS},
+        "sparse_lambdas": list(LAMBDAS) if args.mode == "sparse" else [args.sparse_lambda],
+        "splits": {str(fold): fold_split(fold, families) for fold in range(1, 10)},
+        "checkpoint_selection": "minimum unpenalized validation BCE; early stopping on the same metric",
+        "threshold_selection": "validation family-macro F1; grid 0.05..0.95 step 0.01; lowest threshold wins ties",
+        "primary_method": "validation_selected", "fsta_ratio": 0.5,
+    }
+
+
+def print_summary(family_rows: list[dict]) -> None:
+    variants = list(dict.fromkeys(row["variant"] for row in family_rows))
+    networks = sorted({row["network"] for row in family_rows})
+    repeats = sorted({row["repeat"] for row in family_rows})
+    width = max(22, *(len(LABELS.get(variant, variant)) + 2 for variant in variants))
+    print("\n=== Cross-network results (two decimals) ===")
+    print(f"Completed test families: {networks}; repetitions: {len(repeats)}")
+    print("Network rows: scene-variant means, then repeat mean +/- repeat SD (ddof=0).")
+    print("MacroMean: equal-family mean. FamilyStd: SD across family means, NOT seed variation.")
+    print("MacroRepeatStd: SD across repeats of each repeat's equal-family macro mean.")
+    print("Console: Precision, Recall, F1, Accuracy, SHD only; full metrics remain in CSV/JSON.")
+    print("Scores remain on a 0..1 scale; SHD is the scene-mean edge error count.")
+    for method in METHODS:
+        titles = {
+            "validation_selected": "Validation-selected threshold [PRIMARY]",
+            "fixed_0.5": "Fixed threshold=0.50 [comparison]",
+            "fsta_adaptive": "FSTA per-scene threshold, ratio=0.50 [comparison]",
+        }
+        print(f"\n--- {titles[method]} ---")
+        for metric, title in CONSOLE_METRICS.items():
+            print(f"\n{title}")
+            print(f"{'Network':<16}" + "".join(f"{LABELS.get(variant, variant):>{width}}" for variant in variants))
+            stats = {}
+            for variant in variants:
+                group = [row for row in family_rows if row["variant"] == variant and row["method"] == method]
+                per_family = [[row[metric] for row in group if row["network"] == network] for network in networks]
+                macro_by_repeat = [np.mean([row[metric] for row in group if row["repeat"] == repeat]) for repeat in repeats]
+                stats[variant] = (per_family, macro_by_repeat)
+            for index, network in enumerate(networks):
+                cells = []
+                for variant in variants:
+                    values = stats[variant][0][index]
+                    cell = f"{np.mean(values):.2f}"
+                    if len(repeats) > 1:
+                        cell += f" +/- {np.std(values):.2f}"
+                    cells.append(cell)
+                print(f"{'Network' + str(network):<16}" + "".join(f"{cell:>{width}}" for cell in cells))
+            for label in ("MacroMean", "FamilyStd", "MacroRepeatStd"):
                 values = []
-                for model in model_types:
-                    rows = [r for r in scene_records if r["model"] == model and r["method"] == method]
-                    if network != "Overall":
-                        rows = [r for r in rows if r["network"] == network]
-                    values.append(f"{np.mean([r[key] for r in rows]):.2f}")
-                print(f"{display:<12}" + "".join(f"{value:>16}" for value in values))
-    save_json({"overall_definition": "unweighted arithmetic mean of the six test scene-level metrics",
-               "validation_thresholds": selected_thresholds, "scenes": scene_records},
-              OUT / "ablation_threshold_comparison.json")
+                for variant in variants:
+                    families, repeat_macros = stats[variant]
+                    means = [np.mean(entries) for entries in families]
+                    value = np.mean(means) if label == "MacroMean" else np.std(means) if label == "FamilyStd" else np.std(repeat_macros)
+                    cell = f"{value:.2f}"
+                    if label == "MacroMean" and len(repeats) > 1:
+                        cell += f" +/- {np.std(repeat_macros):.2f}"
+                    values.append(cell)
+                print(f"{label:<16}" + "".join(f"{value:>{width}}" for value in values))
 
 
-def parse_args() -> argparse.Namespace:
+def summarize(directory: Path, config: dict) -> None:
+    rows = []
+    expected = {
+        (repeat + 1, fold, model)
+        for repeat in range(config["repeats"]) for fold in range(1, 10)
+        for model in config["models"]
+    }
+    present = {}
+    for repeat, fold, model in sorted(expected):
+        path = directory / f"repeat_{repeat:02d}" / f"fold_{fold:02d}" / model / "results.json"
+        if path.is_file():
+            present[(repeat, fold, model)] = read_json(path)
+    complete_folds = [fold for fold in range(1, 10) if all(
+        (repeat + 1, fold, model) in present
+        for repeat in range(config["repeats"]) for model in config["models"]
+    )]
+    for key, records in sorted(present.items()):
+        if key[1] in complete_folds:
+            rows.extend(records)
+    if not rows:
+        print("No fully completed fold (all selected models and repeats) to summarize.")
+        return
+    keys = list(dict.fromkeys((row["repeat"], row["network"], row["variant"], row["method"]) for row in rows))
+    family_rows = []
+    for repeat, network, variant, method in keys:
+        group = [row for row in rows if (row["repeat"], row["network"], row["variant"], row["method"]) == (repeat, network, variant, method)]
+        family_rows.append({
+            "repeat": repeat, "seed": group[0]["seed"], "network": network,
+            "variant": variant, "method": method,
+            "sparse_lambda": group[0]["sparse_lambda"],
+            **{metric: float(np.mean([row[metric] for row in group])) for metric in METRICS},
+        })
+    write_csv(rows, directory / "scene_results.csv")
+    write_csv(family_rows, directory / "family_results.csv")
+    variants = list(dict.fromkeys(row["variant"] for row in family_rows))
+    network_rows = []
+    summary = []
+    for variant in variants:
+        for method in METHODS:
+            group = [row for row in family_rows if row["variant"] == variant and row["method"] == method]
+            for network in complete_folds:
+                entries = [row for row in group if row["network"] == network]
+                network_rows.append({
+                    "network": network, "variant": variant, "method": method,
+                    **{f"{metric}_mean": float(np.mean([row[metric] for row in entries])) for metric in METRICS},
+                    **{f"{metric}_repeat_std": float(np.std([row[metric] for row in entries])) for metric in METRICS},
+                })
+            scores = {}
+            for metric in METRICS:
+                family_means = [np.mean([row[metric] for row in group if row["network"] == network]) for network in complete_folds]
+                repeat_macros = [np.mean([row[metric] for row in group if row["repeat"] == repeat + 1]) for repeat in range(config["repeats"])]
+                scores[metric] = {"macro_mean": float(np.mean(family_means)),
+                                  "family_std": float(np.std(family_means)),
+                                  "macro_repeat_std": float(np.std(repeat_macros))}
+            summary.append({"variant": variant, "method": method, "metrics": scores})
+    write_csv(network_rows, directory / "network_results.csv")
+    wide_rows = []
+    for network in complete_folds:
+        wide = {"Network": f"Network{network}"}
+        for row in network_rows:
+            if row["network"] != network:
+                continue
+            for metric in METRICS:
+                for statistic in ("mean", "repeat_std"):
+                    wide[f"{row['variant']}_{row['method']}_{metric}_{statistic}"] = row[f"{metric}_{statistic}"]
+        wide_rows.append(wide)
+    write_csv(wide_rows, directory / "network_table.csv")
+    save_json({"complete_test_families": complete_folds, "complete_nine_fold": len(complete_folds) == 9,
+               "repeats": config["repeats"], "std_ddof": 0, "summary": summary,
+               "primary": "validation_selected; in sparse mode use validation_selected_lambda",
+               "warning": "Per-lambda test comparisons are exploratory, never use test metrics to choose lambda."},
+              directory / "summary.json")
+    print_summary(family_rows)
+    print(f"\nSaved summaries: {directory}")
+
+
+def diagnose_existing(source: Path) -> None:
+    rows = []
+    for fold in range(1, 10):
+        for record in read_json(source / f"fold_{fold:02d}" / "results.json"):
+            _, target = load_scene(record["scene"])
+            count = int(target[~np.eye(target.shape[0], dtype=bool)].sum())
+            tp = int(round(record["recall"] * count))
+            fn = count - tp
+            fp = int(round(record["shd"])) - fn
+            prediction = tp + fp
+            precision = tp / prediction if prediction else 0.0
+            f1 = 2 * tp / (2 * tp + fp + fn) if tp + fp + fn else 0.0
+            accuracy = 1 - (fp + fn) / (target.size - target.shape[0])
+            if fp < 0 or not np.allclose([precision, f1, accuracy],
+                    [record["precision"], record["directed_f1"], record["accuracy"]], atol=1e-8):
+                raise ValueError(f"Inconsistent saved metrics for {record['scene']}")
+            rows.append({**record, "tp": tp, "fp": fp, "fn": fn,
+                         "predicted_edges": prediction, "true_edges": count})
+    write_csv(rows, source / "edge_diagnostics_scenes.csv")
+    print(f"BCE pos_weight=None (effective positive-class weight=1). Saved: {source / 'edge_diagnostics_scenes.csv'}")
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("train", "ablation", "evaluate"), default="ablation")
+    parser.add_argument("--mode", choices=("train", "ablation", "sparse", "evaluate", "diagnose"), default="train")
     parser.add_argument("--model-type", choices=MODEL_TYPES, default="st_pair_memory")
+    parser.add_argument("--fold", type=int, choices=range(1, 10), help="Test family; omit for all nine folds")
+    parser.add_argument("--repeats", type=int, choices=(1, 20), default=1)
+    parser.add_argument("--run-name", help="Unique output name; changed settings require a new name")
+    parser.add_argument("--dry-run", action="store_true", help="Print plan only; no training, GPU use or writes")
+    parser.add_argument("--diagnostics-dir", type=Path, default=OUTPUTS / "cross_network_cv")
     parser.add_argument("--hidden-dim", type=int, default=32)
     parser.add_argument("--memory-slots", type=int, default=8)
     parser.add_argument("--attention-heads", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.2)
-    parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--learning-rate", type=float, default=0.03)
     parser.add_argument("--weight-decay", type=float, default=1e-3)
-    parser.add_argument("--min-delta", type=float, default=1e-5)
+    parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--patience", type=int, default=15)
-    parser.add_argument("--threads", type=int, default=4)
-    parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--device", default="auto")
+    parser.add_argument("--min-delta", type=float, default=1e-5)
+    parser.add_argument("--sparse_lambda", "--sparse-lambda", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--device", default="auto")
+    parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--no-roi-permutation", action="store_false", dest="roi_permutation")
     parser.set_defaults(roi_permutation=True)
-    return parser.parse_args()
+    args = parser.parse_args(argv)
+    for key in ("hidden_dim", "memory_slots", "attention_heads", "batch_size", "epochs", "patience", "threads"):
+        if getattr(args, key) <= 0:
+            parser.error(f"{key} must be positive")
+    if args.hidden_dim % args.attention_heads:
+        parser.error("hidden-dim must be divisible by attention-heads")
+    for key in ("sparse_lambda", "learning_rate", "weight_decay", "min_delta", "dropout"):
+        if not math.isfinite(getattr(args, key)) or getattr(args, key) < 0:
+            parser.error(f"{key} must be finite and non-negative")
+    if args.dropout >= 1 or args.seed < 0 or args.seed + args.repeats - 1 >= 2**32:
+        parser.error("dropout must be < 1; seeds must fit numpy's unsigned 32-bit range")
+    if args.mode == "sparse" and (args.model_type != "st_pair_memory" or args.sparse_lambda != 0):
+        parser.error("sparse mode uses Pair Memory and the fixed lambda grid (0, 0.005, 0.02)")
+    if args.mode == "evaluate" and not args.run_name:
+        parser.error("--run-name is required to summarize an existing experiment")
+    return args
 
 
 def main(args: argparse.Namespace | None = None) -> None:
     args = args or parse_args()
-    if args.mode == "evaluate":
-        evaluate_checkpoints(args)
+    if args.mode == "diagnose":
+        if args.dry_run:
+            print(f"Would diagnose historical results at {args.diagnostics_dir}; no files changed.")
+            return
+        diagnose_existing(args.diagnostics_dir)
         return
-    model_types = MODEL_TYPES if args.mode == "ablation" else (args.model_type,)
-    for model_type in model_types:
-        print(f"\nTraining {model_type} with configurable main.py settings")
-        train_model(argparse.Namespace(
-            model_type=model_type,
-            hidden_dim=args.hidden_dim,
-            memory_slots=args.memory_slots,
-            attention_heads=args.attention_heads,
-            dropout=args.dropout,
-            learning_rate=args.learning_rate,
-            weight_decay=args.weight_decay,
-            batch_size=args.batch_size,
-            epochs=args.epochs,
-            patience=args.patience,
-            min_delta=args.min_delta,
-            seed=args.seed,
-            device=args.device,
-            threads=args.threads,
-            roi_permutation=args.roi_permutation,
+    name = args.run_name or f"cv_{args.mode}_{args.model_type}_r{args.repeats}_lambda{args.sparse_lambda:g}"
+    if Path(name).name != name or name in (".", "..", "cross_network_cv"):
+        raise ValueError("Use a new simple --run-name under outputs/; existing legacy directories are not overwritten")
+    directory = OUTPUTS / name
+    config_path = directory / "config.json"
+    if args.mode == "evaluate":
+        if args.dry_run:
+            print(f"Would summarize saved results at {directory}; no files changed.")
+            return
+        summarize(directory, read_json(config_path))
+        return
+    families = family_scenes()
+    config = protocol(args, families)
+    folds = [args.fold] if args.fold else list(range(1, 10))
+    print(f"Mode={args.mode}, models={config['models']}, repeats={args.repeats}, seeds={config['seeds']}")
+    print(f"Sparse lambdas={config['sparse_lambdas']}; output={directory}")
+    print("Checkpoint: minimum validation BCE; primary threshold: validation family-macro F1.")
+    for fold in folds:
+        print(f"Fold {fold}: " + "; ".join(
+            f"{part}={sorted({base_network(scene) for scene in scenes})}"
+            for part, scenes in config["splits"][str(fold)].items()
         ))
-    if args.mode == "ablation":
-        print_ablation_metrics(model_types, args)
+    if args.dry_run:
+        return
+    if config_path.is_file():
+        if read_json(config_path) != config:
+            raise ValueError(f"Configuration mismatch: use a new --run-name instead of overwriting {directory}")
+    elif directory.exists() and any(directory.iterdir()):
+        raise ValueError(f"Refusing to overwrite non-experiment directory {directory}")
+    device = str(resolve_device(args.device))
+    torch.set_num_threads(args.threads)
+    save_json(config, config_path)
+    for repeat, seed in enumerate(config["seeds"], 1):
+        for fold in folds:
+            split = config["splits"][str(fold)]
+            fold_dir = directory / f"repeat_{repeat:02d}" / f"fold_{fold:02d}"
+            save_json({"repeat": repeat, "seed": seed, "scenes": split,
+                       "families": {part: sorted({base_network(scene) for scene in scenes})
+                                    for part, scenes in split.items()}}, fold_dir / "split.json")
+            for model_type in config["models"]:
+                options = vars(args).copy()
+                options.update(repeat=repeat, seed=seed, fold=fold, model_type=model_type, device=device)
+                print(f"\nRepeat {repeat}/{args.repeats}, fold={fold}, model={model_type}, seed={seed}", flush=True)
+                run_model(argparse.Namespace(**options), split, fold_dir / model_type, args.mode == "sparse")
+    summarize(directory, config)
 
 
 if __name__ == "__main__":

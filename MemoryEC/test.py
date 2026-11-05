@@ -307,6 +307,8 @@ def summarize_existing_results(output_dir: Path = OUTPUT_DIR) -> list[dict]:
 
 
 def evaluate(arguments: argparse.Namespace) -> None:
+    output_dir = Path(getattr(arguments, "output_dir", OUTPUT_DIR))
+    output_dir.mkdir(parents=True, exist_ok=True)
     set_seed(arguments.seed)
     torch.set_num_threads(arguments.threads)
     device = torch.device(
@@ -398,7 +400,7 @@ def evaluate(arguments: argparse.Namespace) -> None:
         tag = getattr(arguments, "checkpoint_tag", "")
         tag_suffix = f"_{tag}" if tag else ""
         np.savez_compressed(
-            OUTPUT_DIR / f"{model_type}_{scene}{tag_suffix}{suffix}_predictions.npz",
+            output_dir / f"{model_type}_{scene}{tag_suffix}{suffix}_predictions.npz",
             probabilities=subject_probability,
             mean_probability=mean_probability,
             adj=targets[scene],
@@ -440,7 +442,7 @@ def evaluate(arguments: argparse.Namespace) -> None:
             f"scenes={len(scene_results)}"
         )
         return
-    output_path = OUTPUT_DIR / f"{model_type}_{arguments.split}{suffix}_metrics.json"
+    output_path = output_dir / f"{model_type}_{arguments.split}{suffix}_metrics.json"
     save_json(results, output_path)
     print(f"saved={output_path}")
     print(f"overall={overall}")

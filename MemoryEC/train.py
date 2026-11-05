@@ -1,8 +1,9 @@
-"""Train one MemoryEC ablation using Network1-6 and validate on Network7."""
+"""Training implementation used by main.py; supports explicit family-local splits."""
 
 from __future__ import annotations
 
 import argparse
+import math
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -13,7 +14,6 @@ import torch
 from data.loader import make_dataloader
 from model.memory_ec import MemoryEC
 from utils import (
-    MODEL_TYPES,
     count_parameters,
     directed_metrics,
     masked_bce_loss,
@@ -40,6 +40,7 @@ def run_epoch(
     loader,
     device: torch.device,
     optimizer: torch.optim.Optimizer | None = None,
+    sparse_lambda: float = 0.0,
 ) -> tuple[float, dict[str, float]]:
     training = optimizer is not None
     model.train(training)
@@ -55,6 +56,9 @@ def run_epoch(
             adj = batch["adj"].to(device)
             logits = model(bold)
             loss = masked_bce_loss(logits, adj)
+            if training and sparse_lambda != 0:
+                mask = ~torch.eye(logits.shape[-1], dtype=torch.bool, device=logits.device)
+                loss = loss + sparse_lambda * logits[:, mask].sigmoid().mean()
 
             if training:
                 optimizer.zero_grad(set_to_none=True)
@@ -104,10 +108,16 @@ def save_loss_curve(history: list[dict], path: Path) -> bool:
 
 
 def train(arguments: argparse.Namespace) -> None:
+    sparse_lambda = getattr(arguments, "sparse_lambda", 0.0)
+    if not math.isfinite(sparse_lambda) or sparse_lambda < 0:
+        raise ValueError("sparse_lambda must be finite and non-negative")
     set_seed(arguments.seed)
     torch.set_num_threads(arguments.threads)
     device = resolve_device(arguments.device)
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    default_output = OUTPUT_DIR if sparse_lambda == 0 else OUTPUT_DIR / f"sparse_{sparse_lambda:g}"
+    output_dir = Path(getattr(arguments, "output_dir", default_output))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    split_scenes = getattr(arguments, "split_scenes", None)
 
     train_loader = make_dataloader(
         "train",
@@ -115,6 +125,7 @@ def train(arguments: argparse.Namespace) -> None:
         seed=arguments.seed,
         permute_rois=arguments.roi_permutation,
         balanced=True,
+        scenes=None if split_scenes is None else split_scenes["train"],
     )
     val_loader = make_dataloader(
         "val",
@@ -122,6 +133,7 @@ def train(arguments: argparse.Namespace) -> None:
         seed=arguments.seed,
         permute_rois=False,
         balanced=False,
+        scenes=None if split_scenes is None else split_scenes["val"],
     )
     model = MemoryEC(
         model_type=arguments.model_type,
@@ -137,10 +149,10 @@ def train(arguments: argparse.Namespace) -> None:
         weight_decay=arguments.weight_decay,
     )
 
-    checkpoint_path = OUTPUT_DIR / f"{arguments.model_type}_best.pt"
-    auprc_checkpoint_path = OUTPUT_DIR / f"{arguments.model_type}_best_val_auprc.pt"
-    history_path = OUTPUT_DIR / f"{arguments.model_type}_history.json"
-    curve_path = OUTPUT_DIR / f"{arguments.model_type}_loss_curve.png"
+    checkpoint_path = output_dir / f"{arguments.model_type}_best.pt"
+    auprc_checkpoint_path = output_dir / f"{arguments.model_type}_best_val_auprc.pt"
+    history_path = output_dir / f"{arguments.model_type}_history.json"
+    curve_path = output_dir / f"{arguments.model_type}_loss_curve.png"
     best_loss = float("inf")
     best_auprc = float("-inf")
     best_loss_epoch = None
@@ -156,7 +168,7 @@ def train(arguments: argparse.Namespace) -> None:
     for epoch in range(1, arguments.epochs + 1):
         if hasattr(train_loader.batch_sampler, "set_epoch"):
             train_loader.batch_sampler.set_epoch(epoch)
-        train_loss, _ = run_epoch(model, train_loader, device, optimizer)
+        train_loss, _ = run_epoch(model, train_loader, device, optimizer, sparse_lambda)
         val_loss, val_metrics = run_epoch(model, val_loader, device)
         record = {
             "epoch": epoch,
@@ -166,11 +178,12 @@ def train(arguments: argparse.Namespace) -> None:
         }
         history.append(record)
         save_json(history, history_path)
-        print(
-            f"epoch={epoch:03d} train_loss={train_loss:.6f} "
-            f"val_loss={val_loss:.6f} val_auprc={val_metrics['auprc']:.6f} "
-            f"val_f1={val_metrics['directed_f1']:.6f}"
-        )
+        if epoch % 10 == 0:
+            print(
+                f"epoch={epoch:03d} train_loss={train_loss:.4f} "
+                f"val_loss={val_loss:.4f} val_f1={val_metrics['directed_f1']:.4f}",
+                flush=True,
+            )
 
         if val_metrics["auprc"] > best_auprc + arguments.min_delta:
             best_auprc = val_metrics["auprc"]
@@ -209,12 +222,14 @@ def train(arguments: argparse.Namespace) -> None:
         else:
             stale_epochs += 1
             if stale_epochs >= arguments.patience:
-                print(f"early_stopping epoch={epoch} best_val_loss={best_loss:.6f}")
+                print(f"early_stop epoch={epoch}", flush=True)
                 break
 
     curve_saved = save_loss_curve(history, curve_path)
     summary = {
         "model_type": arguments.model_type,
+        "sparse_lambda": sparse_lambda,
+        "validation_checkpoint_criterion": "unpenalized validation BCE",
         "parameter_count": parameter_count,
         "best_val_loss": best_loss,
         "best_val_loss_epoch": best_loss_epoch,
@@ -227,34 +242,9 @@ def train(arguments: argparse.Namespace) -> None:
         "history": str(history_path),
         "loss_curve": str(curve_path) if curve_saved else None,
     }
-    save_json(summary, OUTPUT_DIR / f"{arguments.model_type}_train_summary.json")
-    print(summary)
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model-type", choices=MODEL_TYPES, required=True)
-    parser.add_argument("--hidden-dim", type=int, default=32)
-    parser.add_argument("--memory-slots", type=int, default=8)
-    parser.add_argument("--attention-heads", type=int, default=2)
-    parser.add_argument("--dropout", type=float, default=0.2)
-    parser.add_argument("--learning-rate", type=float, default=3e-4)
-    parser.add_argument("--weight-decay", type=float, default=1e-3)
-    parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--epochs", type=int, default=150)
-    parser.add_argument("--patience", type=int, default=15)
-    parser.add_argument("--min-delta", type=float, default=1e-5)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", default="auto")
-    parser.add_argument("--threads", type=int, default=4)
-    parser.add_argument(
-        "--no-roi-permutation",
-        action="store_false",
-        dest="roi_permutation",
+    save_json(summary, output_dir / f"{arguments.model_type}_train_summary.json")
+    print(
+        f"done epochs={len(history)} best_epoch={best_loss_epoch} "
+        f"val_loss={best_loss:.4f} time={summary['elapsed_seconds']:.1f}s",
+        flush=True,
     )
-    parser.set_defaults(roi_permutation=True)
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    train(parse_args())

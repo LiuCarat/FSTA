@@ -222,6 +222,7 @@ def make_dataloader(
     balanced: bool | None = None,
     processed_dir: str | Path = PROCESSED_DIR,
     splits_path: str | Path = SPLITS_PATH,
+    scenes: list[str] | None = None,
 ):
     """Build a DataLoader without padding different ROI counts."""
     from functools import partial
@@ -231,7 +232,9 @@ def make_dataloader(
     splits = load_splits(splits_path)
     if split not in splits:
         raise ValueError(f"Unknown split: {split}")
-    dataset = SanchezRomeroDataset(splits[split]["scenes"], processed_dir)
+    dataset = SanchezRomeroDataset(
+        splits[split]["scenes"] if scenes is None else scenes, processed_dir
+    )
     use_balanced = split == "train" if balanced is None else balanced
     if use_balanced:
         batch_sampler = BalancedNetworkBatchSampler(dataset, batch_size, seed)
