@@ -15,7 +15,6 @@ from data.loader import load_splits, make_dataloader
 from model.memory_ec import MemoryEC
 from utils import (
     MODEL_TYPES,
-    adaptive_threshold,
     base_network,
     directed_metrics,
     edge_diagnostics,

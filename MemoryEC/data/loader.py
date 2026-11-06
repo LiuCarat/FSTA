@@ -229,11 +229,13 @@ def make_dataloader(
 
     from torch.utils.data import DataLoader
 
-    splits = load_splits(splits_path)
-    if split not in splits:
-        raise ValueError(f"Unknown split: {split}")
+    if scenes is None:
+        splits = load_splits(splits_path)
+        if split not in splits:
+            raise ValueError(f"Unknown split: {split}")
+        scenes = splits[split]["scenes"]
     dataset = SanchezRomeroDataset(
-        splits[split]["scenes"] if scenes is None else scenes, processed_dir
+        scenes, processed_dir
     )
     use_balanced = split == "train" if balanced is None else balanced
     if use_balanced:

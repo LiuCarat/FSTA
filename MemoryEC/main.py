@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from data.loader import PROCESSED_DIR, base_network, load_scene, make_dataloader
+from data.loader import PROCESSED_DIR, base_network, make_dataloader
 from model.memory_ec import MemoryEC
 from train import resolve_device, train
 from utils import MODEL_TYPES, adaptive_threshold, configure_determinism, directed_metrics, save_json, zero_diagonal
@@ -54,6 +54,25 @@ def write_csv(rows: list[dict], path: Path) -> None:
 
 def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def experiment_name(mode: str, args: argparse.Namespace) -> str:
+    return f"cv_{mode}_{args.model_type}_r{args.repeats}_lambda{args.sparse_lambda:g}"
+
+
+def find_experiment_directory(mode: str, args: argparse.Namespace) -> Path:
+    directory = OUTPUTS / experiment_name(mode, args)
+    if directory.is_dir():
+        return directory
+    legacy = sorted(
+        OUTPUTS.glob(f"{directory.name}_fsta*"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    if legacy:
+        print(f"Using legacy experiment directory: {legacy[0]}", flush=True)
+        return legacy[0]
+    raise FileNotFoundError(f"No trained experiment found: {directory}")
 
 
 def family_scenes() -> dict[int, list[str]]:
@@ -144,6 +163,8 @@ def load_model(path: Path, device: str) -> tuple[MemoryEC, dict]:
 def candidate_validation(args: argparse.Namespace, split: dict, directory: Path,
                          sparse_lambda: float) -> dict:
     options = vars(args).copy()
+    options.pop("source_mode", None)
+    options.pop("fsta_ratio", None)
     options.update(output_dir=directory, split_scenes=split, sparse_lambda=sparse_lambda)
     train(argparse.Namespace(**options))
     checkpoint_path = directory / f"{args.model_type}_best.pt"
@@ -160,7 +181,6 @@ def candidate_validation(args: argparse.Namespace, split: dict, directory: Path,
 
 def run_model(args: argparse.Namespace, split: dict, directory: Path,
               sparse_search: bool) -> list[dict]:
-    result_path = directory / "results.json"
     candidates = []
     for coefficient in LAMBDAS if sparse_search else (args.sparse_lambda,):
         candidate_dir = directory / f"lambda_{coefficient:g}" if sparse_search else directory
@@ -180,6 +200,14 @@ def run_model(args: argparse.Namespace, split: dict, directory: Path,
     }, directory / "validation_selection.json")
     if sparse_search:
         print(f"  Validation-locked lambda={winner['sparse_lambda']:g}; test not used for selection.", flush=True)
+    return evaluate_candidates(args, split, directory, candidates, sparse_search)
+
+
+def evaluate_candidates(args: argparse.Namespace, split: dict, directory: Path,
+                        candidates: list[dict], sparse_search: bool) -> list[dict]:
+    winner = max(candidates, key=lambda item: (
+        item["validation_family_macro_f1"], -item["sparse_lambda"]
+    ))
     rows = []
     for candidate in candidates:
         model, _ = load_model(Path(candidate["checkpoint"]), args.device)
@@ -201,7 +229,7 @@ def run_model(args: argparse.Namespace, split: dict, directory: Path,
                 rows.append(row)
                 if sparse_search and candidate is winner:
                     rows.append({**row, "variant": "validation_selected_lambda"})
-    save_json(rows, result_path)
+    save_json(rows, directory / "results.json")
     return rows
 
 
@@ -216,7 +244,7 @@ def protocol(args: argparse.Namespace, families: dict) -> dict:
         "splits": {str(fold): fold_split(fold, families) for fold in range(1, 10)},
         "checkpoint_selection": "minimum unpenalized validation BCE; early stopping on the same metric",
         "threshold_selection": "validation family-macro F1; grid 0.05..0.95 step 0.01; lowest threshold wins ties",
-        "primary_method": "validation_selected", "fsta_ratio": args.fsta_ratio,
+        "primary_method": "validation_selected",
     }
 
 
@@ -255,7 +283,7 @@ def print_summary(family_rows: list[dict], fsta_ratio: float = 0.5) -> None:
                     cells.append(cell)
                 print(f"{'Network' + str(network):<16}" + "".join(f"{cell:>{width}}" for cell in cells))
 
-def summarize(directory: Path, config: dict) -> None:
+def summarize(directory: Path, config: dict, fsta_ratio: float) -> None:
     rows = []
     expected = {
         (repeat + 1, fold, model)
@@ -314,34 +342,48 @@ def summarize(directory: Path, config: dict) -> None:
         wide_rows.append(wide)
     write_csv(wide_rows, directory / "network_table.csv")
     save_json({"complete_test_families": complete_folds, "complete_nine_fold": len(complete_folds) == 9,
-               "repeats": config["repeats"],
+               "repeats": config["repeats"], "fsta_ratio": fsta_ratio,
                "primary": "validation_selected; in sparse mode use validation_selected_lambda",
                "warning": "Per-lambda test comparisons are exploratory, never use test metrics to choose lambda."},
               directory / "summary.json")
-    print_summary(family_rows, config.get("fsta_ratio", 0.5))
+    print_summary(family_rows, fsta_ratio)
     print(f"\nSaved summaries: {directory}")
 
 
-def diagnose_existing(source: Path) -> None:
-    rows = []
-    for fold in range(1, 10):
-        for record in read_json(source / f"fold_{fold:02d}" / "results.json"):
-            _, target = load_scene(record["scene"])
-            count = int(target[~np.eye(target.shape[0], dtype=bool)].sum())
-            tp = int(round(record["recall"] * count))
-            fn = count - tp
-            fp = int(round(record["shd"])) - fn
-            prediction = tp + fp
-            precision = tp / prediction if prediction else 0.0
-            f1 = 2 * tp / (2 * tp + fp + fn) if tp + fp + fn else 0.0
-            accuracy = 1 - (fp + fn) / (target.size - target.shape[0])
-            if fp < 0 or not np.allclose([precision, f1, accuracy],
-                    [record["precision"], record["directed_f1"], record["accuracy"]], atol=1e-8):
-                raise ValueError(f"Inconsistent saved metrics for {record['scene']}")
-            rows.append({**record, "tp": tp, "fp": fp, "fn": fn,
-                         "predicted_edges": prediction, "true_edges": count})
-    write_csv(rows, source / "edge_diagnostics_scenes.csv")
-    print(f"BCE pos_weight=None (effective positive-class weight=1). Saved: {source / 'edge_diagnostics_scenes.csv'}")
+def reevaluate(directory: Path, config: dict, args: argparse.Namespace,
+               device: str) -> None:
+    folds = [args.fold] if args.fold else list(range(1, 10))
+    completed = 0
+    for repeat, seed in enumerate(config["seeds"], 1):
+        for fold in folds:
+            split = config["splits"][str(fold)]
+            fold_dir = directory / f"repeat_{repeat:02d}" / f"fold_{fold:02d}"
+            for model_type in config["models"]:
+                model_dir = fold_dir / model_type
+                selection_path = model_dir / "validation_selection.json"
+                if not selection_path.is_file():
+                    continue
+                selection = read_json(selection_path)
+                evaluation_args = argparse.Namespace(
+                    batch_size=config["training"]["batch_size"],
+                    device=device,
+                    fold=fold,
+                    fsta_ratio=args.fsta_ratio,
+                    model_type=model_type,
+                    repeat=repeat,
+                    seed=seed,
+                )
+                evaluate_candidates(
+                    evaluation_args,
+                    split,
+                    model_dir,
+                    selection["candidates"],
+                    config["mode"] == "sparse",
+                )
+                completed += 1
+    if completed == 0:
+        raise FileNotFoundError(f"No completed checkpoints found under {directory}")
+    summarize(directory, config, args.fsta_ratio)
 
 
 def prepare_training_output(directory: Path, config: dict, folds: list[int]) -> None:
@@ -361,7 +403,9 @@ def prepare_training_output(directory: Path, config: dict, folds: list[int]) -> 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("train", "ablation", "sparse", "evaluate", "diagnose"), default="train")
+    parser.add_argument("--mode", choices=("train", "ablation", "sparse", "evaluate"), default="train")
+    parser.add_argument("--source-mode", choices=("train", "ablation", "sparse"), default="train",
+                        help="Existing experiment type used by --mode evaluate")
     parser.add_argument("--model-type", choices=("st_no_memory", "st_global_memory", "st_pair_memory"), default="st_pair_memory")
     parser.add_argument("--fold", type=int, choices=range(1, 10), help="Test family; omit for all nine folds")
     parser.add_argument("--repeats", type=int, choices=(1, 5, 20), default=5)
@@ -373,10 +417,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=0.0001)
     parser.add_argument("--weight-decay", type=float, default=1e-3) #优化器权重衰减
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--epochs", type=int, default=150)
+    parser.add_argument("--epochs", type=int, default=250)
     parser.add_argument("--patience", type=int, default=15)
     parser.add_argument("--min-delta", type=float, default=1e-5) #早停判断中，验证损失需要降低的最小幅度
-    parser.add_argument("--sparse-lambda", type=float, default=0.0)
+    parser.add_argument("--sparse-lambda", "--sparse_lambda", type=float, default=0.0)
     parser.add_argument("--fsta-ratio", "--fsta_ratio", type=float, default=0.4)
     
     parser.add_argument("--seed", type=int, default=42)
@@ -401,18 +445,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(args: argparse.Namespace | None = None) -> None:
     args = args or parse_args()
     args.device = "cuda"
-    if args.mode == "diagnose":
-        diagnose_existing(OUTPUTS / "cross_network_cv")
-        return
-    name = f"cv_{args.mode}_{args.model_type}_r{args.repeats}_lambda{args.sparse_lambda:g}"
-    if args.fsta_ratio != 0.5:
-        name += f"_fsta{args.fsta_ratio!r}"
-    if Path(name).name != name or name in (".", "..", "cross_network_cv"):
-        raise ValueError("Invalid automatically generated output directory")
-    directory = OUTPUTS / name
+    source_mode = args.source_mode if args.mode == "evaluate" else args.mode
+    name = experiment_name(source_mode, args)
+    directory = find_experiment_directory(source_mode, args) if args.mode == "evaluate" else OUTPUTS / name
     config_path = directory / "config.json"
+    configure_determinism()
+    device_object = resolve_device("cuda")
+    device = str(device_object)
+    gpu_index = torch.cuda.current_device()
+    gpu_name = torch.cuda.get_device_name(gpu_index)
+    gpu_properties = torch.cuda.get_device_properties(gpu_index)
+    print(
+        f"GPU: cuda:{gpu_index} | {gpu_name} | "
+        f"VRAM={gpu_properties.total_memory / (1024 ** 3):.2f} GB",
+        flush=True,
+    )
     if args.mode == "evaluate":
-        summarize(directory, read_json(config_path))
+        print(f"Evaluation only: source={directory}, FSTA ratio={args.fsta_ratio:.2f}", flush=True)
+        reevaluate(directory, read_json(config_path), args, device)
         return
     families = family_scenes()
     config = protocol(args, families)
@@ -426,17 +476,6 @@ def main(args: argparse.Namespace | None = None) -> None:
             f"{part}={sorted({base_network(scene) for scene in scenes})}"
             for part, scenes in config["splits"][str(fold)].items()
         ))
-    configure_determinism()
-    device_object = resolve_device("cuda")
-    device = str(device_object)
-    gpu_index = torch.cuda.current_device()
-    gpu_name = torch.cuda.get_device_name(gpu_index)
-    gpu_properties = torch.cuda.get_device_properties(gpu_index)
-    print(
-        f"GPU: cuda:{gpu_index} | {gpu_name} | "
-        f"VRAM={gpu_properties.total_memory / (1024 ** 3):.2f} GB",
-        flush=True,
-    )
     print("Training from scratch; overwriting selected folds (no backup).", flush=True)
     prepare_training_output(directory, config, folds)
     for repeat, seed in enumerate(config["seeds"], 1):
@@ -451,7 +490,7 @@ def main(args: argparse.Namespace | None = None) -> None:
                 options.update(repeat=repeat, seed=seed, fold=fold, model_type=model_type, device=device)
                 print(f"\nRepeat {repeat}/{args.repeats}, fold={fold}, model={model_type}, seed={seed}", flush=True)
                 run_model(argparse.Namespace(**options), split, fold_dir / model_type, args.mode == "sparse")
-    summarize(directory, config)
+    summarize(directory, config, args.fsta_ratio)
 
 
 if __name__ == "__main__":
