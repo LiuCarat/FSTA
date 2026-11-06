@@ -6,6 +6,7 @@ import argparse
 import csv
 import json
 import math
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -14,7 +15,7 @@ import torch
 from data.loader import PROCESSED_DIR, base_network, load_scene, make_dataloader
 from model.memory_ec import MemoryEC
 from train import resolve_device, train
-from utils import MODEL_TYPES, adaptive_threshold, directed_metrics, save_json, zero_diagonal
+from utils import MODEL_TYPES, adaptive_threshold, configure_determinism, directed_metrics, save_json, zero_diagonal
 
 
 ROOT = Path(__file__).resolve().parent
@@ -34,7 +35,7 @@ CONSOLE_METRICS = {
 }
 TRAIN_KEYS = (
     "hidden_dim", "memory_slots", "attention_heads", "dropout", "learning_rate",
-    "weight_decay", "batch_size", "epochs", "patience", "min_delta", "roi_permutation",
+    "weight_decay", "batch_size", "epochs", "patience", "min_delta",
 )
 LABELS = {
     "st_no_memory": "No Memory", "st_global_memory": "Global Memory",
@@ -110,12 +111,13 @@ def threshold_from_validation(data: dict) -> tuple[float, float]:
     return float(grid[best]), scores[best]
 
 
-def evaluate_method(data: dict, method: str, selected: float) -> list[dict]:
+def evaluate_method(data: dict, method: str, selected: float,
+                    fsta_ratio: float = 0.5) -> list[dict]:
     rows = []
     for scene, (probability, target) in sorted(data.items()):
         threshold = {
             "validation_selected": selected, "fixed_0.5": 0.5,
-            "fsta_adaptive": adaptive_threshold(probability, 0.5),
+            "fsta_adaptive": adaptive_threshold(probability, fsta_ratio),
         }[method]
         mask = ~np.eye(target.shape[0], dtype=bool)
         labels = target[mask].astype(bool)
@@ -132,6 +134,7 @@ def evaluate_method(data: dict, method: str, selected: float) -> list[dict]:
 
 
 def load_model(path: Path, device: str) -> tuple[MemoryEC, dict]:
+    configure_determinism()
     checkpoint = torch.load(path, map_location=device, weights_only=False)
     model = MemoryEC(**checkpoint["model_config"]).to(device)
     model.load_state_dict(checkpoint["model_state"], strict=True)
@@ -142,11 +145,7 @@ def candidate_validation(args: argparse.Namespace, split: dict, directory: Path,
                          sparse_lambda: float) -> dict:
     options = vars(args).copy()
     options.update(output_dir=directory, split_scenes=split, sparse_lambda=sparse_lambda)
-    summary = directory / f"{args.model_type}_train_summary.json"
-    if not summary.is_file():
-        if directory.exists() and any(directory.iterdir()):
-            raise RuntimeError(f"Incomplete training at {directory}; use a new --run-name to preserve files")
-        train(argparse.Namespace(**options))
+    train(argparse.Namespace(**options))
     checkpoint_path = directory / f"{args.model_type}_best.pt"
     model, checkpoint = load_model(checkpoint_path, args.device)
     validation = aggregate_predictions(model, split["val"], args)
@@ -162,9 +161,6 @@ def candidate_validation(args: argparse.Namespace, split: dict, directory: Path,
 def run_model(args: argparse.Namespace, split: dict, directory: Path,
               sparse_search: bool) -> list[dict]:
     result_path = directory / "results.json"
-    if result_path.is_file():
-        print(f"Reusing {directory}", flush=True)
-        return read_json(result_path)
     candidates = []
     for coefficient in LAMBDAS if sparse_search else (args.sparse_lambda,):
         candidate_dir = directory / f"lambda_{coefficient:g}" if sparse_search else directory
@@ -190,11 +186,12 @@ def run_model(args: argparse.Namespace, split: dict, directory: Path,
         test_data = aggregate_predictions(model, split["test"], args)
         variant = f"lambda={candidate['sparse_lambda']:g}" if sparse_search else args.model_type
         for method in METHODS:
-            for metrics in evaluate_method(test_data, method, candidate["threshold"]):
+            for metrics in evaluate_method(test_data, method, candidate["threshold"], args.fsta_ratio):
                 row = {
                     "repeat": args.repeat, "seed": args.seed, "fold": args.fold,
                     "model": args.model_type, "variant": variant,
                     "sparse_lambda": candidate["sparse_lambda"],
+                    "fsta_ratio": args.fsta_ratio,
                     "checkpoint_epoch": candidate["checkpoint_epoch"],
                     "checkpoint_selection": candidate["checkpoint_selection"],
                     "validation_threshold": candidate["threshold"],
@@ -211,6 +208,7 @@ def run_model(args: argparse.Namespace, split: dict, directory: Path,
 def protocol(args: argparse.Namespace, families: dict) -> dict:
     return {
         "protocol": "unified_cv_v1", "mode": args.mode,
+        "runtime": "strict_deterministic_math_sdp_v1",
         "models": list(MODEL_TYPES) if args.mode == "ablation" else [args.model_type],
         "repeats": args.repeats, "seeds": [args.seed + repeat for repeat in range(args.repeats)],
         "training": {key: getattr(args, key) for key in TRAIN_KEYS},
@@ -218,11 +216,11 @@ def protocol(args: argparse.Namespace, families: dict) -> dict:
         "splits": {str(fold): fold_split(fold, families) for fold in range(1, 10)},
         "checkpoint_selection": "minimum unpenalized validation BCE; early stopping on the same metric",
         "threshold_selection": "validation family-macro F1; grid 0.05..0.95 step 0.01; lowest threshold wins ties",
-        "primary_method": "validation_selected", "fsta_ratio": 0.5,
+        "primary_method": "validation_selected", "fsta_ratio": args.fsta_ratio,
     }
 
 
-def print_summary(family_rows: list[dict]) -> None:
+def print_summary(family_rows: list[dict], fsta_ratio: float = 0.5) -> None:
     variants = list(dict.fromkeys(row["variant"] for row in family_rows))
     networks = sorted({row["network"] for row in family_rows})
     repeats = sorted({row["repeat"] for row in family_rows})
@@ -230,15 +228,13 @@ def print_summary(family_rows: list[dict]) -> None:
     print("\n=== Cross-network results (two decimals) ===")
     print(f"Completed test families: {networks}; repetitions: {len(repeats)}")
     print("Network rows: scene-variant means, then repeat mean +/- repeat SD (ddof=0).")
-    print("MacroMean: equal-family mean. FamilyStd: SD across family means, NOT seed variation.")
-    print("MacroRepeatStd: SD across repeats of each repeat's equal-family macro mean.")
     print("Console: Precision, Recall, F1, Accuracy, SHD only; full metrics remain in CSV/JSON.")
     print("Scores remain on a 0..1 scale; SHD is the scene-mean edge error count.")
     for method in METHODS:
         titles = {
             "validation_selected": "Validation-selected threshold [PRIMARY]",
             "fixed_0.5": "Fixed threshold=0.50 [comparison]",
-            "fsta_adaptive": "FSTA per-scene threshold, ratio=0.50 [comparison]",
+            "fsta_adaptive": f"FSTA per-scene threshold, ratio={fsta_ratio:.2f} [comparison]",
         }
         print(f"\n--- {titles[method]} ---")
         for metric, title in CONSOLE_METRICS.items():
@@ -248,29 +244,16 @@ def print_summary(family_rows: list[dict]) -> None:
             for variant in variants:
                 group = [row for row in family_rows if row["variant"] == variant and row["method"] == method]
                 per_family = [[row[metric] for row in group if row["network"] == network] for network in networks]
-                macro_by_repeat = [np.mean([row[metric] for row in group if row["repeat"] == repeat]) for repeat in repeats]
-                stats[variant] = (per_family, macro_by_repeat)
+                stats[variant] = per_family
             for index, network in enumerate(networks):
                 cells = []
                 for variant in variants:
-                    values = stats[variant][0][index]
+                    values = stats[variant][index]
                     cell = f"{np.mean(values):.2f}"
                     if len(repeats) > 1:
                         cell += f" +/- {np.std(values):.2f}"
                     cells.append(cell)
                 print(f"{'Network' + str(network):<16}" + "".join(f"{cell:>{width}}" for cell in cells))
-            for label in ("MacroMean", "FamilyStd", "MacroRepeatStd"):
-                values = []
-                for variant in variants:
-                    families, repeat_macros = stats[variant]
-                    means = [np.mean(entries) for entries in families]
-                    value = np.mean(means) if label == "MacroMean" else np.std(means) if label == "FamilyStd" else np.std(repeat_macros)
-                    cell = f"{value:.2f}"
-                    if label == "MacroMean" and len(repeats) > 1:
-                        cell += f" +/- {np.std(repeat_macros):.2f}"
-                    values.append(cell)
-                print(f"{label:<16}" + "".join(f"{value:>{width}}" for value in values))
-
 
 def summarize(directory: Path, config: dict) -> None:
     rows = []
@@ -308,7 +291,6 @@ def summarize(directory: Path, config: dict) -> None:
     write_csv(family_rows, directory / "family_results.csv")
     variants = list(dict.fromkeys(row["variant"] for row in family_rows))
     network_rows = []
-    summary = []
     for variant in variants:
         for method in METHODS:
             group = [row for row in family_rows if row["variant"] == variant and row["method"] == method]
@@ -319,14 +301,6 @@ def summarize(directory: Path, config: dict) -> None:
                     **{f"{metric}_mean": float(np.mean([row[metric] for row in entries])) for metric in METRICS},
                     **{f"{metric}_repeat_std": float(np.std([row[metric] for row in entries])) for metric in METRICS},
                 })
-            scores = {}
-            for metric in METRICS:
-                family_means = [np.mean([row[metric] for row in group if row["network"] == network]) for network in complete_folds]
-                repeat_macros = [np.mean([row[metric] for row in group if row["repeat"] == repeat + 1]) for repeat in range(config["repeats"])]
-                scores[metric] = {"macro_mean": float(np.mean(family_means)),
-                                  "family_std": float(np.std(family_means)),
-                                  "macro_repeat_std": float(np.std(repeat_macros))}
-            summary.append({"variant": variant, "method": method, "metrics": scores})
     write_csv(network_rows, directory / "network_results.csv")
     wide_rows = []
     for network in complete_folds:
@@ -340,11 +314,11 @@ def summarize(directory: Path, config: dict) -> None:
         wide_rows.append(wide)
     write_csv(wide_rows, directory / "network_table.csv")
     save_json({"complete_test_families": complete_folds, "complete_nine_fold": len(complete_folds) == 9,
-               "repeats": config["repeats"], "std_ddof": 0, "summary": summary,
+               "repeats": config["repeats"],
                "primary": "validation_selected; in sparse mode use validation_selected_lambda",
                "warning": "Per-lambda test comparisons are exploratory, never use test metrics to choose lambda."},
               directory / "summary.json")
-    print_summary(family_rows)
+    print_summary(family_rows, config.get("fsta_ratio", 0.5))
     print(f"\nSaved summaries: {directory}")
 
 
@@ -370,37 +344,50 @@ def diagnose_existing(source: Path) -> None:
     print(f"BCE pos_weight=None (effective positive-class weight=1). Saved: {source / 'edge_diagnostics_scenes.csv'}")
 
 
+def prepare_training_output(directory: Path, config: dict, folds: list[int]) -> None:
+    config_path = directory / "config.json"
+    if directory.exists() and (not config_path.is_file() or read_json(config_path) != config):
+        shutil.rmtree(directory)
+    for repeat in range(1, config["repeats"] + 1):
+        for fold in folds:
+            fold_dir = directory / f"repeat_{repeat:02d}" / f"fold_{fold:02d}"
+            if fold_dir.exists():
+                shutil.rmtree(fold_dir)
+    for filename in ("scene_results.csv", "family_results.csv", "network_results.csv",
+                     "network_table.csv", "summary.json"):
+        (directory / filename).unlink(missing_ok=True)
+    save_json(config, config_path)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("train", "ablation", "sparse", "evaluate", "diagnose"), default="train")
-    parser.add_argument("--model-type", choices=MODEL_TYPES, default="st_pair_memory")
+    parser.add_argument("--model-type", choices=("st_no_memory", "st_global_memory", "st_pair_memory"), default="st_pair_memory")
     parser.add_argument("--fold", type=int, choices=range(1, 10), help="Test family; omit for all nine folds")
-    parser.add_argument("--repeats", type=int, choices=(1, 20), default=1)
-    parser.add_argument("--run-name", help="Unique output name; changed settings require a new name")
-    parser.add_argument("--dry-run", action="store_true", help="Print plan only; no training, GPU use or writes")
-    parser.add_argument("--diagnostics-dir", type=Path, default=OUTPUTS / "cross_network_cv")
+    parser.add_argument("--repeats", type=int, choices=(1, 5, 20), default=5)
+
     parser.add_argument("--hidden-dim", type=int, default=32)
-    parser.add_argument("--memory-slots", type=int, default=8)
+    parser.add_argument("--memory-slots", type=int, default=16)
     parser.add_argument("--attention-heads", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.2)
-    parser.add_argument("--learning-rate", type=float, default=0.03)
-    parser.add_argument("--weight-decay", type=float, default=1e-3)
-    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--learning-rate", type=float, default=0.001)
+    parser.add_argument("--weight-decay", type=float, default=1e-3) #优化器权重衰减
+    parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--patience", type=int, default=15)
-    parser.add_argument("--min-delta", type=float, default=1e-5)
-    parser.add_argument("--sparse_lambda", "--sparse-lambda", type=float, default=0.0)
+    parser.add_argument("--min-delta", type=float, default=1e-5) #早停判断中，验证损失需要降低的最小幅度
+    parser.add_argument("--sparse-lambda", type=float, default=0.0)
+    parser.add_argument("--fsta-ratio", "--fsta_ratio", type=float, default=0.4)
+    
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", default="auto")
-    parser.add_argument("--threads", type=int, default=4)
-    parser.add_argument("--no-roi-permutation", action="store_false", dest="roi_permutation")
-    parser.set_defaults(roi_permutation=True)
     args = parser.parse_args(argv)
-    for key in ("hidden_dim", "memory_slots", "attention_heads", "batch_size", "epochs", "patience", "threads"):
+    for key in ("hidden_dim", "memory_slots", "attention_heads", "batch_size", "epochs", "patience"):
         if getattr(args, key) <= 0:
             parser.error(f"{key} must be positive")
     if args.hidden_dim % args.attention_heads:
         parser.error("hidden-dim must be divisible by attention-heads")
+    if not math.isfinite(args.fsta_ratio) or not 0 <= args.fsta_ratio <= 1:
+        parser.error("fsta-ratio must be finite and in [0,1]")
     for key in ("sparse_lambda", "learning_rate", "weight_decay", "min_delta", "dropout"):
         if not math.isfinite(getattr(args, key)) or getattr(args, key) < 0:
             parser.error(f"{key} must be finite and non-negative")
@@ -408,28 +395,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("dropout must be < 1; seeds must fit numpy's unsigned 32-bit range")
     if args.mode == "sparse" and (args.model_type != "st_pair_memory" or args.sparse_lambda != 0):
         parser.error("sparse mode uses Pair Memory and the fixed lambda grid (0, 0.005, 0.02)")
-    if args.mode == "evaluate" and not args.run_name:
-        parser.error("--run-name is required to summarize an existing experiment")
     return args
 
 
 def main(args: argparse.Namespace | None = None) -> None:
     args = args or parse_args()
+    args.device = "cuda"
     if args.mode == "diagnose":
-        if args.dry_run:
-            print(f"Would diagnose historical results at {args.diagnostics_dir}; no files changed.")
-            return
-        diagnose_existing(args.diagnostics_dir)
+        diagnose_existing(OUTPUTS / "cross_network_cv")
         return
-    name = args.run_name or f"cv_{args.mode}_{args.model_type}_r{args.repeats}_lambda{args.sparse_lambda:g}"
+    name = f"cv_{args.mode}_{args.model_type}_r{args.repeats}_lambda{args.sparse_lambda:g}"
+    if args.fsta_ratio != 0.5:
+        name += f"_fsta{args.fsta_ratio!r}"
     if Path(name).name != name or name in (".", "..", "cross_network_cv"):
-        raise ValueError("Use a new simple --run-name under outputs/; existing legacy directories are not overwritten")
+        raise ValueError("Invalid automatically generated output directory")
     directory = OUTPUTS / name
     config_path = directory / "config.json"
     if args.mode == "evaluate":
-        if args.dry_run:
-            print(f"Would summarize saved results at {directory}; no files changed.")
-            return
         summarize(directory, read_json(config_path))
         return
     families = family_scenes()
@@ -437,22 +419,26 @@ def main(args: argparse.Namespace | None = None) -> None:
     folds = [args.fold] if args.fold else list(range(1, 10))
     print(f"Mode={args.mode}, models={config['models']}, repeats={args.repeats}, seeds={config['seeds']}")
     print(f"Sparse lambdas={config['sparse_lambdas']}; output={directory}")
+    print(f"FSTA ratio={args.fsta_ratio:.2f} [comparison]", flush=True)
     print("Checkpoint: minimum validation BCE; primary threshold: validation family-macro F1.")
     for fold in folds:
         print(f"Fold {fold}: " + "; ".join(
             f"{part}={sorted({base_network(scene) for scene in scenes})}"
             for part, scenes in config["splits"][str(fold)].items()
         ))
-    if args.dry_run:
-        return
-    if config_path.is_file():
-        if read_json(config_path) != config:
-            raise ValueError(f"Configuration mismatch: use a new --run-name instead of overwriting {directory}")
-    elif directory.exists() and any(directory.iterdir()):
-        raise ValueError(f"Refusing to overwrite non-experiment directory {directory}")
-    device = str(resolve_device(args.device))
-    torch.set_num_threads(args.threads)
-    save_json(config, config_path)
+    configure_determinism()
+    device_object = resolve_device("cuda")
+    device = str(device_object)
+    gpu_index = torch.cuda.current_device()
+    gpu_name = torch.cuda.get_device_name(gpu_index)
+    gpu_properties = torch.cuda.get_device_properties(gpu_index)
+    print(
+        f"GPU: cuda:{gpu_index} | {gpu_name} | "
+        f"VRAM={gpu_properties.total_memory / (1024 ** 3):.2f} GB",
+        flush=True,
+    )
+    print("Training from scratch; overwriting selected folds (no backup).", flush=True)
+    prepare_training_output(directory, config, folds)
     for repeat, seed in enumerate(config["seeds"], 1):
         for fold in folds:
             split = config["splits"][str(fold)]

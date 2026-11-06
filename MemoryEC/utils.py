@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 from pathlib import Path
 
@@ -13,13 +14,29 @@ import torch
 MODEL_TYPES = ("st_no_memory", "st_global_memory", "st_pair_memory")
 
 
+def configure_determinism() -> None:
+    """Configure deterministic kernels before initializing a CUDA context."""
+    workspace = os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    if workspace not in (":4096:8", ":16:8"):
+        raise RuntimeError("CUBLAS_WORKSPACE_CONFIG must be :4096:8 or :16:8 for deterministic CUDA")
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True, warn_only=False)
+    torch.backends.cuda.enable_math_sdp(True)
+    torch.backends.cuda.enable_flash_sdp(False)
+    torch.backends.cuda.enable_mem_efficient_sdp(False)
+    torch.backends.cuda.enable_cudnn_sdp(False)
+    torch.backends.mha.set_fastpath_enabled(False)
+
+
 def set_seed(seed: int) -> None:
+    configure_determinism()
+    os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-    torch.use_deterministic_algorithms(True, warn_only=True)
 
 
 def normalize_per_roi(x: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import torch
 from torch import nn
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 
 class SpatialAttention(nn.Module):
@@ -32,13 +33,14 @@ class SpatialAttention(nn.Module):
             raise ValueError(f"Expected x [B,T,N,H], got {tuple(x.shape)}")
         batch, time, nodes, hidden = x.shape
         flat = x.reshape(batch * time, nodes, hidden)
-        attended, weights = self.attention(
-            flat,
-            flat,
-            flat,
-            need_weights=return_attention,
-            average_attn_weights=False,
-        )
+        with sdpa_kernel(SDPBackend.MATH):
+            attended, weights = self.attention(
+                flat,
+                flat,
+                flat,
+                need_weights=return_attention,
+                average_attn_weights=False,
+            )
         output = self.norm(flat + self.dropout(attended)).reshape(
             batch, time, nodes, hidden
         )

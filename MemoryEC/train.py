@@ -112,8 +112,7 @@ def train(arguments: argparse.Namespace) -> None:
     if not math.isfinite(sparse_lambda) or sparse_lambda < 0:
         raise ValueError("sparse_lambda must be finite and non-negative")
     set_seed(arguments.seed)
-    torch.set_num_threads(arguments.threads)
-    device = resolve_device(arguments.device)
+    device = resolve_device("cuda")
     default_output = OUTPUT_DIR if sparse_lambda == 0 else OUTPUT_DIR / f"sparse_{sparse_lambda:g}"
     output_dir = Path(getattr(arguments, "output_dir", default_output))
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -123,7 +122,7 @@ def train(arguments: argparse.Namespace) -> None:
         "train",
         batch_size=arguments.batch_size,
         seed=arguments.seed,
-        permute_rois=arguments.roi_permutation,
+        permute_rois=True,
         balanced=True,
         scenes=None if split_scenes is None else split_scenes["train"],
     )
@@ -161,10 +160,6 @@ def train(arguments: argparse.Namespace) -> None:
     history: list[dict] = []
     started = time.time()
 
-    print(
-        f"model={arguments.model_type} parameters={parameter_count:,} "
-        f"device={device} seed={arguments.seed}"
-    )
     for epoch in range(1, arguments.epochs + 1):
         if hasattr(train_loader.batch_sampler, "set_epoch"):
             train_loader.batch_sampler.set_epoch(epoch)
@@ -178,7 +173,7 @@ def train(arguments: argparse.Namespace) -> None:
         }
         history.append(record)
         save_json(history, history_path)
-        if epoch % 10 == 0:
+        if epoch == 1 or epoch % 10 == 0:
             print(
                 f"epoch={epoch:03d} train_loss={train_loss:.4f} "
                 f"val_loss={val_loss:.4f} val_f1={val_metrics['directed_f1']:.4f}",
