@@ -1,4 +1,4 @@
-"""Single entry point for Pair Memory, ablations and sparsity experiments."""
+"""Single entry point for Pair Memory training, ablation and evaluation."""
 
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ from utils import MODEL_TYPES, adaptive_threshold, configure_determinism, direct
 
 ROOT = Path(__file__).resolve().parent
 OUTPUTS = ROOT / "outputs"
-LAMBDAS = (0.0, 0.005, 0.02)
 METHODS = ("validation_selected", "fixed_0.5", "fsta_adaptive")
 METRICS = (
     "precision", "recall", "directed_f1", "accuracy", "shd", "auprc", "auroc",
@@ -56,8 +55,15 @@ def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def read_validation_selection(path: Path) -> dict:
+    selection = read_json(path)
+    if "candidates" in selection:
+        selection = selection["candidates"][0]
+    return selection
+
+
 def experiment_name(mode: str, args: argparse.Namespace) -> str:
-    return f"cv_{mode}_{args.model_type}_r{args.repeats}_lambda{args.sparse_lambda:g}"
+    return f"cv_{mode}_{args.model_type}_r{args.repeats}"
 
 
 def find_experiment_directory(mode: str, args: argparse.Namespace) -> Path:
@@ -65,7 +71,7 @@ def find_experiment_directory(mode: str, args: argparse.Namespace) -> Path:
     if directory.is_dir():
         return directory
     legacy = sorted(
-        OUTPUTS.glob(f"{directory.name}_fsta*"),
+        OUTPUTS.glob(f"{directory.name}_*"),
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )
@@ -160,75 +166,54 @@ def load_model(path: Path, device: str) -> tuple[MemoryEC, dict]:
     return model, checkpoint
 
 
-def candidate_validation(args: argparse.Namespace, split: dict, directory: Path,
-                         sparse_lambda: float) -> dict:
+def train_and_validate(args: argparse.Namespace, split: dict, directory: Path) -> dict:
     options = vars(args).copy()
-    options.pop("source_mode", None)
     options.pop("fsta_ratio", None)
-    options.update(output_dir=directory, split_scenes=split, sparse_lambda=sparse_lambda)
+    options.update(output_dir=directory, split_scenes=split)
     train(argparse.Namespace(**options))
     checkpoint_path = directory / f"{args.model_type}_best.pt"
     model, checkpoint = load_model(checkpoint_path, args.device)
     validation = aggregate_predictions(model, split["val"], args)
     threshold, score = threshold_from_validation(validation)
     return {
-        "sparse_lambda": sparse_lambda, "checkpoint": str(checkpoint_path),
+        "checkpoint": str(checkpoint_path),
         "checkpoint_epoch": checkpoint["epoch"], "checkpoint_selection": "val_loss",
         "threshold": threshold, "validation_family_macro_f1": score,
         "validation_metrics": evaluate_method(validation, "validation_selected", threshold),
     }
 
 
-def run_model(args: argparse.Namespace, split: dict, directory: Path,
-              sparse_search: bool) -> list[dict]:
-    candidates = []
-    for coefficient in LAMBDAS if sparse_search else (args.sparse_lambda,):
-        candidate_dir = directory / f"lambda_{coefficient:g}" if sparse_search else directory
-        candidates.append(candidate_validation(args, split, candidate_dir, coefficient))
-        candidate = candidates[-1]
-        print(f"  lambda={coefficient:g}, best_epoch={candidate['checkpoint_epoch']}, "
-              f"validation_threshold={candidate['threshold']:.2f}, "
-              f"validation_family_F1={candidate['validation_family_macro_f1']:.4f}", flush=True)
-    winner = max(candidates, key=lambda item: (
-        item["validation_family_macro_f1"], -item["sparse_lambda"]
-    ))
+def run_model(args: argparse.Namespace, split: dict, directory: Path) -> list[dict]:
+    selection = train_and_validate(args, split, directory)
+    print(f"  best_epoch={selection['checkpoint_epoch']}, "
+          f"validation_threshold={selection['threshold']:.2f}, "
+          f"validation_family_F1={selection['validation_family_macro_f1']:.4f}", flush=True)
     save_json({
-        "candidates": candidates, "selected_lambda": winner["sparse_lambda"],
-        "selection_criterion": "validation family-macro F1; ties choose smaller lambda",
+        **selection,
+        "selection_criterion": "validation family-macro F1",
         "threshold_tie_rule": "lowest threshold in 0.05..0.95 step 0.01",
         "test_used_for_selection": False,
     }, directory / "validation_selection.json")
-    if sparse_search:
-        print(f"  Validation-locked lambda={winner['sparse_lambda']:g}; test not used for selection.", flush=True)
-    return evaluate_candidates(args, split, directory, candidates, sparse_search)
+    return evaluate_selection(args, split, directory, selection)
 
 
-def evaluate_candidates(args: argparse.Namespace, split: dict, directory: Path,
-                        candidates: list[dict], sparse_search: bool) -> list[dict]:
-    winner = max(candidates, key=lambda item: (
-        item["validation_family_macro_f1"], -item["sparse_lambda"]
-    ))
+def evaluate_selection(args: argparse.Namespace, split: dict, directory: Path,
+                       selection: dict) -> list[dict]:
     rows = []
-    for candidate in candidates:
-        model, _ = load_model(Path(candidate["checkpoint"]), args.device)
-        test_data = aggregate_predictions(model, split["test"], args)
-        variant = f"lambda={candidate['sparse_lambda']:g}" if sparse_search else args.model_type
-        for method in METHODS:
-            for metrics in evaluate_method(test_data, method, candidate["threshold"], args.fsta_ratio):
-                row = {
-                    "repeat": args.repeat, "seed": args.seed, "fold": args.fold,
-                    "model": args.model_type, "variant": variant,
-                    "sparse_lambda": candidate["sparse_lambda"],
-                    "fsta_ratio": args.fsta_ratio,
-                    "checkpoint_epoch": candidate["checkpoint_epoch"],
-                    "checkpoint_selection": candidate["checkpoint_selection"],
-                    "validation_threshold": candidate["threshold"],
-                    "validation_family_macro_f1": candidate["validation_family_macro_f1"],
-                    **metrics,
-                }
-                rows.append(row)
-                if sparse_search and candidate is winner:
-                    rows.append({**row, "variant": "validation_selected_lambda"})
+    model, _ = load_model(Path(selection["checkpoint"]), args.device)
+    test_data = aggregate_predictions(model, split["test"], args)
+    for method in METHODS:
+        for metrics in evaluate_method(test_data, method, selection["threshold"], args.fsta_ratio):
+            rows.append({
+                "repeat": args.repeat, "seed": args.seed, "fold": args.fold,
+                "model": args.model_type, "variant": args.model_type,
+                "fsta_ratio": args.fsta_ratio,
+                "checkpoint_epoch": selection["checkpoint_epoch"],
+                "checkpoint_selection": selection["checkpoint_selection"],
+                "validation_threshold": selection["threshold"],
+                "validation_family_macro_f1": selection["validation_family_macro_f1"],
+                **metrics,
+            })
     save_json(rows, directory / "results.json")
     return rows
 
@@ -240,9 +225,8 @@ def protocol(args: argparse.Namespace, families: dict) -> dict:
         "models": list(MODEL_TYPES) if args.mode == "ablation" else [args.model_type],
         "repeats": args.repeats, "seeds": [args.seed + repeat for repeat in range(args.repeats)],
         "training": {key: getattr(args, key) for key in TRAIN_KEYS},
-        "sparse_lambdas": list(LAMBDAS) if args.mode == "sparse" else [args.sparse_lambda],
         "splits": {str(fold): fold_split(fold, families) for fold in range(1, 10)},
-        "checkpoint_selection": "minimum unpenalized validation BCE; early stopping on the same metric",
+        "checkpoint_selection": "minimum validation BCE; early stopping on the same metric",
         "threshold_selection": "validation family-macro F1; grid 0.05..0.95 step 0.01; lowest threshold wins ties",
         "primary_method": "validation_selected",
     }
@@ -312,7 +296,6 @@ def summarize(directory: Path, config: dict, fsta_ratio: float) -> None:
         family_rows.append({
             "repeat": repeat, "seed": group[0]["seed"], "network": network,
             "variant": variant, "method": method,
-            "sparse_lambda": group[0]["sparse_lambda"],
             **{metric: float(np.mean([row[metric] for row in group])) for metric in METRICS},
         })
     write_csv(rows, directory / "scene_results.csv")
@@ -343,8 +326,7 @@ def summarize(directory: Path, config: dict, fsta_ratio: float) -> None:
     write_csv(wide_rows, directory / "network_table.csv")
     save_json({"complete_test_families": complete_folds, "complete_nine_fold": len(complete_folds) == 9,
                "repeats": config["repeats"], "fsta_ratio": fsta_ratio,
-               "primary": "validation_selected; in sparse mode use validation_selected_lambda",
-               "warning": "Per-lambda test comparisons are exploratory, never use test metrics to choose lambda."},
+               "primary": "validation_selected"},
               directory / "summary.json")
     print_summary(family_rows, fsta_ratio)
     print(f"\nSaved summaries: {directory}")
@@ -363,7 +345,7 @@ def reevaluate(directory: Path, config: dict, args: argparse.Namespace,
                 selection_path = model_dir / "validation_selection.json"
                 if not selection_path.is_file():
                     continue
-                selection = read_json(selection_path)
+                selection = read_validation_selection(selection_path)
                 evaluation_args = argparse.Namespace(
                     batch_size=config["training"]["batch_size"],
                     device=device,
@@ -373,12 +355,11 @@ def reevaluate(directory: Path, config: dict, args: argparse.Namespace,
                     repeat=repeat,
                     seed=seed,
                 )
-                evaluate_candidates(
+                evaluate_selection(
                     evaluation_args,
                     split,
                     model_dir,
-                    selection["candidates"],
-                    config["mode"] == "sparse",
+                    selection,
                 )
                 completed += 1
     if completed == 0:
@@ -403,12 +384,15 @@ def prepare_training_output(directory: Path, config: dict, folds: list[int]) -> 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("train", "ablation", "sparse", "evaluate"), default="train")
-    parser.add_argument("--source-mode", choices=("train", "ablation", "sparse"), default="train",
-                        help="Existing experiment type used by --mode evaluate")
+    parser.add_argument(
+        "--mode",
+        choices=("train", "ablation", "evaluate_train", "evaluate_ablation"),
+        default="train",
+    )
     parser.add_argument("--model-type", choices=("st_no_memory", "st_global_memory", "st_pair_memory"), default="st_pair_memory")
     parser.add_argument("--fold", type=int, choices=range(1, 10), help="Test family; omit for all nine folds")
     parser.add_argument("--repeats", type=int, choices=(1, 5, 20), default=5)
+    parser.add_argument("--seed", type=int, default=42)
 
     parser.add_argument("--hidden-dim", type=int, default=32)
     parser.add_argument("--memory-slots", type=int, default=16)
@@ -420,10 +404,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=250)
     parser.add_argument("--patience", type=int, default=15)
     parser.add_argument("--min-delta", type=float, default=1e-5) #早停判断中，验证损失需要降低的最小幅度
-    parser.add_argument("--sparse-lambda", "--sparse_lambda", type=float, default=0.0)
-    parser.add_argument("--fsta-ratio", "--fsta_ratio", type=float, default=0.4)
+    parser.add_argument("--fsta-ratio", type=float, default=0.4)
     
-    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args(argv)
     for key in ("hidden_dim", "memory_slots", "attention_heads", "batch_size", "epochs", "patience"):
         if getattr(args, key) <= 0:
@@ -432,22 +414,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("hidden-dim must be divisible by attention-heads")
     if not math.isfinite(args.fsta_ratio) or not 0 <= args.fsta_ratio <= 1:
         parser.error("fsta-ratio must be finite and in [0,1]")
-    for key in ("sparse_lambda", "learning_rate", "weight_decay", "min_delta", "dropout"):
+    for key in ("learning_rate", "weight_decay", "min_delta", "dropout"):
         if not math.isfinite(getattr(args, key)) or getattr(args, key) < 0:
             parser.error(f"{key} must be finite and non-negative")
     if args.dropout >= 1 or args.seed < 0 or args.seed + args.repeats - 1 >= 2**32:
         parser.error("dropout must be < 1; seeds must fit numpy's unsigned 32-bit range")
-    if args.mode == "sparse" and (args.model_type != "st_pair_memory" or args.sparse_lambda != 0):
-        parser.error("sparse mode uses Pair Memory and the fixed lambda grid (0, 0.005, 0.02)")
     return args
 
 
 def main(args: argparse.Namespace | None = None) -> None:
     args = args or parse_args()
     args.device = "cuda"
-    source_mode = args.source_mode if args.mode == "evaluate" else args.mode
+    evaluation_only = args.mode.startswith("evaluate_")
+    source_mode = args.mode.removeprefix("evaluate_") if evaluation_only else args.mode
     name = experiment_name(source_mode, args)
-    directory = find_experiment_directory(source_mode, args) if args.mode == "evaluate" else OUTPUTS / name
+    directory = find_experiment_directory(source_mode, args) if evaluation_only else OUTPUTS / name
     config_path = directory / "config.json"
     configure_determinism()
     device_object = resolve_device("cuda")
@@ -460,7 +441,7 @@ def main(args: argparse.Namespace | None = None) -> None:
         f"VRAM={gpu_properties.total_memory / (1024 ** 3):.2f} GB",
         flush=True,
     )
-    if args.mode == "evaluate":
+    if evaluation_only:
         print(f"Evaluation only: source={directory}, FSTA ratio={args.fsta_ratio:.2f}", flush=True)
         reevaluate(directory, read_json(config_path), args, device)
         return
@@ -468,7 +449,7 @@ def main(args: argparse.Namespace | None = None) -> None:
     config = protocol(args, families)
     folds = [args.fold] if args.fold else list(range(1, 10))
     print(f"Mode={args.mode}, models={config['models']}, repeats={args.repeats}, seeds={config['seeds']}")
-    print(f"Sparse lambdas={config['sparse_lambdas']}; output={directory}")
+    print(f"Output={directory}")
     print(f"FSTA ratio={args.fsta_ratio:.2f} [comparison]", flush=True)
     print("Checkpoint: minimum validation BCE; primary threshold: validation family-macro F1.")
     for fold in folds:
@@ -489,7 +470,7 @@ def main(args: argparse.Namespace | None = None) -> None:
                 options = vars(args).copy()
                 options.update(repeat=repeat, seed=seed, fold=fold, model_type=model_type, device=device)
                 print(f"\nRepeat {repeat}/{args.repeats}, fold={fold}, model={model_type}, seed={seed}", flush=True)
-                run_model(argparse.Namespace(**options), split, fold_dir / model_type, args.mode == "sparse")
+                run_model(argparse.Namespace(**options), split, fold_dir / model_type)
     summarize(directory, config, args.fsta_ratio)
 
 

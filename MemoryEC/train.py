@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import math
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -40,7 +39,6 @@ def run_epoch(
     loader,
     device: torch.device,
     optimizer: torch.optim.Optimizer | None = None,
-    sparse_lambda: float = 0.0,
 ) -> tuple[float, dict[str, float]]:
     training = optimizer is not None
     model.train(training)
@@ -56,9 +54,6 @@ def run_epoch(
             adj = batch["adj"].to(device)
             logits = model(bold)
             loss = masked_bce_loss(logits, adj)
-            if training and sparse_lambda != 0:
-                mask = ~torch.eye(logits.shape[-1], dtype=torch.bool, device=logits.device)
-                loss = loss + sparse_lambda * logits[:, mask].sigmoid().mean()
 
             if training:
                 optimizer.zero_grad(set_to_none=True)
@@ -108,13 +103,9 @@ def save_loss_curve(history: list[dict], path: Path) -> bool:
 
 
 def train(arguments: argparse.Namespace) -> None:
-    sparse_lambda = getattr(arguments, "sparse_lambda", 0.0)
-    if not math.isfinite(sparse_lambda) or sparse_lambda < 0:
-        raise ValueError("sparse_lambda must be finite and non-negative")
     set_seed(arguments.seed)
     device = resolve_device("cuda")
-    default_output = OUTPUT_DIR if sparse_lambda == 0 else OUTPUT_DIR / f"sparse_{sparse_lambda:g}"
-    output_dir = Path(getattr(arguments, "output_dir", default_output))
+    output_dir = Path(getattr(arguments, "output_dir", OUTPUT_DIR))
     output_dir.mkdir(parents=True, exist_ok=True)
     split_scenes = getattr(arguments, "split_scenes", None)
 
@@ -163,7 +154,7 @@ def train(arguments: argparse.Namespace) -> None:
     for epoch in range(1, arguments.epochs + 1):
         if hasattr(train_loader.batch_sampler, "set_epoch"):
             train_loader.batch_sampler.set_epoch(epoch)
-        train_loss, _ = run_epoch(model, train_loader, device, optimizer, sparse_lambda)
+        train_loss, _ = run_epoch(model, train_loader, device, optimizer)
         val_loss, val_metrics = run_epoch(model, val_loader, device)
         record = {
             "epoch": epoch,
@@ -223,8 +214,7 @@ def train(arguments: argparse.Namespace) -> None:
     curve_saved = save_loss_curve(history, curve_path)
     summary = {
         "model_type": arguments.model_type,
-        "sparse_lambda": sparse_lambda,
-        "validation_checkpoint_criterion": "unpenalized validation BCE",
+        "validation_checkpoint_criterion": "validation BCE",
         "parameter_count": parameter_count,
         "best_val_loss": best_loss,
         "best_val_loss_epoch": best_loss_epoch,
