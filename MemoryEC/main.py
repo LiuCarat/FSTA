@@ -33,7 +33,7 @@ CONSOLE_METRICS = {
     "shd": "SHD (lower is better)",
 }
 TRAIN_KEYS = (
-    "hidden_dim", "memory_slots", "attention_heads", "dropout", "learning_rate",
+    "hidden_dim", "memory_slots", "memory_temperature", "attention_heads", "dropout", "learning_rate",
     "weight_decay", "batch_size", "epochs", "patience", "min_delta",
 )
 LABELS = {
@@ -63,7 +63,10 @@ def read_validation_selection(path: Path) -> dict:
 
 
 def experiment_name(mode: str, args: argparse.Namespace) -> str:
-    return f"cv_{mode}_{args.model_type}_r{args.repeats}"
+    name = f"cv_{mode}_{args.model_type}_r{args.repeats}"
+    if args.memory_temperature != 1.0:
+        name += f"_tau{args.memory_temperature:g}"
+    return name
 
 
 def find_experiment_directory(mode: str, args: argparse.Namespace) -> Path:
@@ -237,11 +240,7 @@ def print_summary(family_rows: list[dict], fsta_ratio: float = 0.5) -> None:
     networks = sorted({row["network"] for row in family_rows})
     repeats = sorted({row["repeat"] for row in family_rows})
     width = max(22, *(len(LABELS.get(variant, variant)) + 2 for variant in variants))
-    print("\n=== Cross-network results (two decimals) ===")
     print(f"Completed test families: {networks}; repetitions: {len(repeats)}")
-    print("Network rows: scene-variant means, then repeat mean +/- repeat SD (ddof=0).")
-    print("Console: Precision, Recall, F1, Accuracy, SHD only; full metrics remain in CSV/JSON.")
-    print("Scores remain on a 0..1 scale; SHD is the scene-mean edge error count.")
     for method in METHODS:
         titles = {
             "validation_selected": "Validation-selected threshold [PRIMARY]",
@@ -396,6 +395,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     parser.add_argument("--hidden-dim", type=int, default=32)
     parser.add_argument("--memory-slots", type=int, default=16)
+    parser.add_argument("--memory-temperature", type=float, default=1.0)
     parser.add_argument("--attention-heads", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.2)
     parser.add_argument("--learning-rate", type=float, default=0.0001)
@@ -414,6 +414,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("hidden-dim must be divisible by attention-heads")
     if not math.isfinite(args.fsta_ratio) or not 0 <= args.fsta_ratio <= 1:
         parser.error("fsta-ratio must be finite and in [0,1]")
+    if not math.isfinite(args.memory_temperature) or args.memory_temperature <= 0:
+        parser.error("memory-temperature must be finite and positive")
     for key in ("learning_rate", "weight_decay", "min_delta", "dropout"):
         if not math.isfinite(getattr(args, key)) or getattr(args, key) < 0:
             parser.error(f"{key} must be finite and non-negative")
@@ -450,6 +452,7 @@ def main(args: argparse.Namespace | None = None) -> None:
     folds = [args.fold] if args.fold else list(range(1, 10))
     print(f"Mode={args.mode}, models={config['models']}, repeats={args.repeats}, seeds={config['seeds']}")
     print(f"Output={directory}")
+    print(f"Memory temperature={args.memory_temperature:.2f}", flush=True)
     print(f"FSTA ratio={args.fsta_ratio:.2f} [comparison]", flush=True)
     print("Checkpoint: minimum validation BCE; primary threshold: validation family-macro F1.")
     for fold in folds:

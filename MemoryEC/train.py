@@ -129,6 +129,7 @@ def train(arguments: argparse.Namespace) -> None:
         model_type=arguments.model_type,
         hidden_dim=arguments.hidden_dim,
         memory_slots=arguments.memory_slots,
+        memory_temperature=arguments.memory_temperature,
         attention_heads=arguments.attention_heads,
         dropout=arguments.dropout,
     ).to(device)

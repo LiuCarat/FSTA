@@ -1,8 +1,7 @@
 # MemoryEC
 
-唯一实验入口为 `main.py`。`train.py` 保留为底层训练实现，`test.py` 保留旧
-checkpoint/预测文件的兼容评价工具。原多入口实验脚本已删除。模型文件、
-处理后数据与既有输出不变。
+唯一实验入口为 `main.py`，`train.py` 保留为底层训练实现。旧评价入口和原多入口
+实验脚本均已删除。模型文件、处理后数据与既有输出不变。
 
 ## 快速运行
 
@@ -43,7 +42,7 @@ python -u MemoryEC/main.py --mode evaluate_ablation --fsta-ratio 0.6
 ```bash
 python -u MemoryEC/main.py --mode train --model-type st_pair_memory \
   --fold 1 --repeats 1 --hidden-dim 32 --memory-slots 8 \
-  --attention-heads 2 --dropout 0.2 --learning-rate 0.0003 \
+  --memory-temperature 1.0 --attention-heads 2 --dropout 0.2 --learning-rate 0.0003 \
   --weight-decay 0.001 --batch-size 8 --epochs 150 --patience 15 \
   --seed 42
 ```
@@ -56,6 +55,16 @@ Test=k，Validation=k+1/k+2（超过9循环），其余六家族 Train。同家�
 20次对应42..61。每次都重新构造模型和优化器，从头训练；不会接着上一次权重
 继续，也不会只对同一权重重复测试。同一重复下的不同模型使用同一个 seed
 便于配对比较。九折划分不随 seed 改变。
+
+`--memory-temperature`（也可写`--memory_temperature`）控制Memory检索softmax：
+`scores = sqrt(hidden_dim) / temperature * cosine_similarity`。默认1.0与原实现一致；
+小于1使检索权重更集中，大于1使权重更平滑。该参数只影响Global/Pair Memory，
+No Memory不执行检索。不同于1.0的值会加入输出目录名，便于保留调参结果。
+
+```bash
+python -u MemoryEC/main.py --model-type st_pair_memory --memory-temperature 0.7
+python -u MemoryEC/main.py --model-type st_pair_memory --memory-temperature 1.5
+```
 
 FSTA官方参考代码 `train_FSTA_sanch_multi.py` 在20次循环内重建模型与优化器。
 本实现借用这一独立重训练原则，但显式记录seed序列，且维持本项目的跨家族

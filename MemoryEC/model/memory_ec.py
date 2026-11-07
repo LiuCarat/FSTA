@@ -53,6 +53,7 @@ class MemoryEC(nn.Module):
         model_type: str = "st_pair_memory",
         hidden_dim: int = 32,
         memory_slots: int = 8,
+        memory_temperature: float = 1.0,
         attention_heads: int = 2,
         dropout: float = 0.2,
     ) -> None:
@@ -63,6 +64,7 @@ class MemoryEC(nn.Module):
         self.memory_mode = MEMORY_MODES[model_type]
         self.hidden_dim = hidden_dim
         self.memory_slots = memory_slots
+        self.memory_temperature = memory_temperature
         self.attention_heads = attention_heads
         self.dropout_rate = dropout
 
@@ -70,7 +72,7 @@ class MemoryEC(nn.Module):
         self.spatial = SpatialAttention(hidden_dim, attention_heads, dropout)
         self.pair_query = DirectedPairQuery(hidden_dim, max_lag=3)
         if self.memory_mode != "none":
-            self.memory = KeyValueMemory(hidden_dim, memory_slots)
+            self.memory = KeyValueMemory(hidden_dim, memory_slots, memory_temperature)
             self.gate = nn.Linear(2 * hidden_dim, hidden_dim)
         else:
             self.memory = None
@@ -87,6 +89,7 @@ class MemoryEC(nn.Module):
             "model_type": self.model_type,
             "hidden_dim": self.hidden_dim,
             "memory_slots": self.memory_slots,
+            "memory_temperature": self.memory_temperature,
             "attention_heads": self.attention_heads,
             "dropout": self.dropout_rate,
         }

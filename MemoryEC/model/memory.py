@@ -10,10 +10,18 @@ from torch.nn import functional as F
 
 
 class KeyValueMemory(nn.Module):
-    def __init__(self, hidden_dim: int = 32, slots: int = 8) -> None:
+    def __init__(
+        self,
+        hidden_dim: int = 32,
+        slots: int = 8,
+        temperature: float = 1.0,
+    ) -> None:
         super().__init__()
+        if not math.isfinite(temperature) or temperature <= 0:
+            raise ValueError("Memory temperature must be finite and positive")
         self.hidden_dim = hidden_dim
         self.slots = slots
+        self.temperature = temperature
         self.keys = nn.Parameter(torch.empty(slots, hidden_dim))
         self.values = nn.Parameter(torch.empty(slots, hidden_dim))
         nn.init.xavier_uniform_(self.keys)
@@ -23,7 +31,7 @@ class KeyValueMemory(nn.Module):
         normalized_query = F.normalize(query, dim=-1)
         normalized_keys = F.normalize(self.keys, dim=-1)
         scores = torch.matmul(normalized_query, normalized_keys.transpose(0, 1))
-        scores = scores * math.sqrt(self.hidden_dim)
+        scores = scores * (math.sqrt(self.hidden_dim) / self.temperature)
         weights = scores.softmax(dim=-1)
         return torch.matmul(weights, self.values), weights
 
