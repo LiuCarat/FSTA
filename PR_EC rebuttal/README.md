@@ -1,5 +1,141 @@
 # Graph-QSR-EC
 
+## Sim21 最终恢复对照：Initial、参考 R、实际 MPR 输出
+
+`main_sim21_recovery.py` 不是从原始 MAT 开始的一键训练入口。默认要求已经存在
+`outputs/sim21/summary.json`、`oof_predictions.npz`、每折参考与 Encoder 缓存。
+缺少这些文件时会退出并给出路径提示，不会自动训练；已有结果在其他目录时请传
+`--source-dir`，缓存分开放置时再传 `--cache-dir`。如果只有完整 Encoder 缓存，
+可用 `main_sim21.py --reuse-cache --cache-dir ...` 并保持原训练参数重新导出结果；
+如果缓存和 OOF 都没有，则必须先单独运行 `main_sim21.py`（会训练 Encoder）。
+Sanchez 输出、原始 `sim21.mat` 和 `/tmp` 中的单 epoch 冒烟结果不能冒充正式结果。
+
+```bash
+# 只读已有 Sim21 结果与折内缓存；绝不训练 Encoder 或修正器
+python "PR_EC rebuttal/main_sim21_recovery.py" --source-dir "PR_EC rebuttal/outputs/sim21"
+
+# 若确实有五折 Sim21 MPR 模型及来源记录，加载模型进行推理
+python "PR_EC rebuttal/main_sim21_recovery.py" --mpr-dir /path/to/sim21_mpr
+
+# 已有 Sim21 Encoder 缓存时，明确启用“只训练 MPR”，不重训 Encoder
+python "PR_EC rebuttal/main_sim21_recovery.py" --train-mpr
+
+# 之后只加载刚才的五折 MPR 模型，不重复训练
+python "PR_EC rebuttal/main_sim21_recovery.py" --mpr-dir "PR_EC rebuttal/outputs/sim21_mpr"
+```
+
+控制台和 `outputs/sim21_recovery/table_R2_recovery.md` 显示三行：
+Initial EC、MPR Group Reference、Initial EC + MPR，列为 Directed AUPRC、F1、SHD、
+真实强度相关性、配对强弱判断准确率、相对 Initial 的矩阵平均绝对改变量。
+普通数值保留两位小数，改变量使用科学计数法，避免非零变化被显示成 0.00。
+CSV/NPZ/JSON 保留完整精度，逐人拓扑指标和变化另存 CSV。
+
+每名被试使用自己的 `net`，非对角 `net != 0` 为真实边（不是按权重正负判断）；
+拓扑评分完全复用 R1 的个体级 AP/F1/SHD 与固定 FSTA-style 0.5 相对阈值。
+真实强度相关性保持原 R2 的定义：目标边在 A、B 组内分别计算 Pearson r，
+再取 Fisher-z 平均，不悄悄改成跨所有人/所有边的相关性。
+
+**现有 `main_sim21.py` 只训练 Encoder、构建参考，不训练/保存 MPR 模型。**
+因此仅有该入口的输出，不能计算实际精炼 EC。未指定 `--mpr-dir` 或 `--train-mpr` 时，最后一行
+明确为 Pending（待验证），不将 R 或 A 冒充 MPR 输出；提供的模型不完整或来源
+不匹配则报错，不会补训、调参或使用 Sanchez 模型替代。
+
+`--train-mpr` 是显式授权的新增分支：复用每折 40 人训练 EC，在训练折重建排除
+自身的 FC 邻居参考，仅训练现有 `PGRECStatic` 无 QC 修正器。不会加载或训练
+Encoder，更不会将测试邻居混入 Initial EC。默认 MPR 缓存写到 `outputs/sim21_mpr/`；
+可用 `--mpr-dir` 指定另一处新目录，已有 checkpoint 则拒绝覆盖。
+固定复用既有设置：80 epochs、lr=0.03、gate_max=0.4、anchor=0.8、gate L1=0.38、
+variance weight=1.0、retention=0.85；不根据 GT 调参或挑选结果。
+原损失可能仍收缩到零门控；即使最终指标不变，也会打印真实结果和恒等输出警告。
+
+**Initial EC 基线永远不参考邻居**：它逐元素取自冻结 Encoder 的原始测试 EC，
+已核对每折缓存并记录 SHA256，MPR 前后检查基线未被修改。只有 Reference 和
+Initial + MPR 两行使用群体信息。Initial + MPR 是实际修正器输出，不是固定混合。
+
+可选的 MPR 文件协议为每个 `fold_01/` 至 `fold_05/` 包含 `mpr.pt`（现有
+`PGRECStatic` 的 state_dict）和 `metadata.json`。JSON 必须记录：
+
+- `dataset: "NetSim Sim21"`、`prediction_orientation: "paper_initial_ec_attention_transpose"`。
+- `train_indices`、`test_indices`：与配对五折完全一致的原始被试索引。
+- `encoder_identity`：对应 Encoder 缓存 `metadata.json` 的完整 `identity` 对象。
+- `fc_weights_sha256`：当时测试 FC 权重数组 `np.ascontiguousarray(fc_weights).tobytes()`
+  的 SHA256；用于拒绝把不同 K 的参考套到已有模型上。
+- `gate_max`、`hidden_channels`：模型实际结构参数，不能猜测。
+
+这些记录应在真正的折内 MPR 训练时保存，不能事后给不明来源的模型补写假来源。
+评估器校验数据指纹、配对划分、缓存测试 EC、参考重建和 checkpoint 来源，然后
+仅执行 CPU 推理。会打印每折门控强度、平均/最大改变量；若最终 50 张矩阵与
+Initial 完全相同，会明确警告恒等输出，不能宣称最终 MPR 提升。
+
+## NetSim Sim21：真实个体与组间连接强度差异保留（Table R2）
+
+```bash
+# 正式实验：独立读取 NetSim 数据，不使用 Sanchez 的 OOF EC
+python "PR_EC rebuttal/main_sim21.py" --gpu-id 0
+
+# 单 epoch 冒烟验证，不作为正式实验结果
+python "PR_EC rebuttal/main_sim21.py" --epochs 1 --gpu-id cpu \
+  --output-dir /tmp/sim21_smoke
+
+# 复用同参数的已存 Sim21 折内 EC，离线重算参考与指标，不再训练 Encoder
+python "PR_EC rebuttal/main_sim21.py" --gpu-id cpu --reuse-cache
+
+# 自行指定邻居数；更换 K 可复用同一批 Encoder 缓存，不必重训
+python "PR_EC rebuttal/main_sim21.py" --gpu-id cpu --reuse-cache --reference-k 10
+```
+
+默认输入 `dataset/NetSim/sim21.mat`，输出 `PR_EC rebuttal/outputs/sim21/`；
+支持 `--mat-path`、`--output-dir`、`--cache-dir`。训练参数复用当前
+`main_simulation.py` 的默认值，可在命令行预先指定。复用缓存时必须传回相同的
+epochs 等编码器参数，数据指纹/参数/划分/方向不匹配或缺少缓存会报错，绝不补训。
+缓存已存在但不传 `--reuse-cache` 也会拒绝覆盖。此入口没有 MPR gate 或 QSR 训练。
+
+数据验证：50 人、200 时间点、5 节点；`ts.reshape(50,200,5)`，保留真实
+加权图 `net` 而非二值化。配对为 `(0,25),...,(24,49)`，检查每对仅
+`net[:,1,2]` 不同且 A 组更大。真实目标均值从文件计算，不硬编码 0.408/0.204。
+按 25 对做 `KFold(5, shuffle=True, random_state=42)`，每折 40 人训练、10 人测试，
+每对必须同进同出。BOLD 按被试/ROI 时间维 z-score；编码器结构、重建和熵损失不变。
+训练中不传 GT 或组别，直接使用 `extract_subject_ec()` 的 `attention.T` 输出，
+不根据 GT 选择转置。目标索引遵循附件约定 `net[:,1,2]`；源—目标解释沿用论文定义。
+
+四种比较：
+
+- Initial EC：该折编码器提取的测试 EC。
+- FC-neighbor Reference：Pearson FC 上三角，训练折拟合均值/标准差，
+  邻居数通过 `--reference-k` 设置，默认 5，允许 1–40；随机参考同步匹配
+  调整后的非零邻居数和权重集合。K 不属于 Encoder 参数，改变 K 不影响缓存复用。
+  不应根据测试 GT 得分挑选最有利的 K 用于正式报告。
+  cosine Top-K 并裁剪负相似度，行归一化后加权训练 EC；复用现有 FC 构图规则。
+  非正相似度权重为零，全零行等权回退，实际非零邻居可能少于 K。
+- Random-neighbor Reference：固定 seeds 0–19，从当前训练折不放回随机选邻居，
+  匹配每个测试被试 FC 参考的非零邻居数及权重集合，仅随机替换身份和权重分配。
+  20 次分别生成 OOF、计算指标，再汇总跨种子均值/样本标准差；不选最佳种子。
+- Global Reference：当前折全部 40 人训练 EC 的平均，每个测试被试共享，不跨折聚合。
+
+Table R2 不报告 AUPRC/F1/SHD，专门评价强度异质性：
+
+- **Group Hedges' g**：目标边 A-B 的带符号组间效应，pooled sample SD，
+  使用自由度 48 的精确 gamma 小样本修正；不是配对标准化效应。
+- **Paired Sign Accuracy**：25 对中预测 A 边权严格大于 B 的比例，平分算错。
+  这是真实强度效应的正负，不是 A→B 神经连接方向准确率。
+- **Within-group r**：分别在 A、B 组内算预测与 GT 的 Pearson r，
+  表格报告两组 r 的 Fisher-z 平均；两组原始 r 另存 CSV。常数预测的相关性记 N/A。
+- **Spurious Group Difference**：其余 19 条非对角有向边预测 A-B 均值差的
+  绝对值再平均，同时导出总和及各边明细。这是预测尺度的组效应，不是原始因果参数 MAE。
+
+控制台和 Markdown 表格保留两位小数，CSV、JSON、NPZ 保留完整精度；
+很小的非零数可能显示为 `0.00`，需查看 CSV 才能区分。控制台直接打印四行 R2。
+输出 `table_R2.md/.csv`、`subject_target_weights.csv`、
+`random_seed_metrics.csv`、`spurious_edge_effects.csv`、`oof_predictions.npz`、
+每折图权重和 `summary.json`。OOF 中 Initial/FC/Global 均为 `(50,5,5)`，
+Random 为 `(20,50,5,5)`；`encoder_cache/` 保存每折模型、训练/测试 EC 和身份配置。
+
+解释限制：Random 行的 ± 是跨 20 种子的 SD，其余行是一套 50 人 OOF 的整体指标，
+不能误称被试均值 ± SD。不同折由不同编码器生成，尺度与折构成可能影响 pooled r。
+Global 在同一折测试对内完全相同，因此严格配对一致率必为 0；其 pooled r 即使非零
+也不代表个体化信息。结果仅评价群体参考，不能代替训练后 MPR/QSR 输出的表现，
+不按结果搜索 K、种子或混合比例，也不据此作未经检验的显著性结论。
+
 ## Rebuttal：仅评估 Initial EC（严格五折 OOF）
 
 新增独立入口 `main_simulation.py`。此入口只使用本目录的初始 STF-EC

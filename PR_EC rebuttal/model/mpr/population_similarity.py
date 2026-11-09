@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from PR_EC.model.mpr.population_reference import (
+from .population_reference import (
     reference_weights,
 )
 
@@ -157,9 +157,11 @@ def build_reference_graph(train_cont, train_cat, query_cont, query_cat,
 # ---------------------------------------------------------------------------
 
 def subject_fc_features(time_series):
-    """Convert each [T, 90] ROI series into its 4005-D FC upper triangle."""
+    """Convert each [T, N] ROI series into FC upper-triangle features."""
     features = []
-    upper = np.triu_indices(90, k=1)
+    if len(time_series) == 0:
+        raise ValueError("At least one subject is required")
+    upper = np.triu_indices(np.asarray(time_series[0]).shape[1], k=1)
     for index, series in enumerate(time_series, 1):
         values = np.asarray(series, dtype=np.float64)
         centered = values - values.mean(axis=0, keepdims=True)

@@ -15,16 +15,18 @@ if not __package__:
 from .simulation.initial_ec import run_experiments
 
 
-def parse_args():
+def build_parser(include_network_options=True):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-dir", type=Path, default=ROOT.parent / "MemoryEC/data/processed")
+    if include_network_options:
+        parser.add_argument("--data-dir", type=Path, default=ROOT.parent / "MemoryEC/data/processed")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "outputs/initial_ec_oof_paper_relative")
-    parser.add_argument("--network", "--networks", dest="networks", nargs="+", type=int, choices=[1, 2, 3, 4], default=[1], help="Network ID(s) to run; default: 1 only")
+    if include_network_options:
+        parser.add_argument("--network", "--networks", dest="networks", nargs="+", type=int, choices=[1, 2, 3, 4], default=[1], help="Network ID(s) to run; default: 1 only")
     parser.add_argument("--n-splits", type=int, default=5, help="OOF folds; training fraction is approximately (K-1)/K")
     parser.add_argument("--gpu-id", default="auto")
     parser.add_argument("--window-length", type=int, default=78)
     parser.add_argument("--stride", type=int, default=39)
-    parser.add_argument("--epochs", type=int, default=301)
+    parser.add_argument("--epochs", type=int, default=111)
     parser.add_argument("--stf-checkpoint", choices=["final", "best"], default="final")
     parser.add_argument("--loss-alpha", type=float, default=0.01)
     parser.add_argument("--batch-size", type=int, default=32)
@@ -47,6 +49,11 @@ def parse_args():
     parser.add_argument("--hidden-dropout-prob", type=float, default=0.5)
     parser.add_argument("--initializer-range", type=float, default=0.02)
     parser.add_argument("--no-filters", action="store_true")
+    return parser
+
+
+def parse_args(parser=None):
+    parser = build_parser() if parser is None else parser
     args = parser.parse_args()
     args.seed = 42
     if args.n_splits < 2:
