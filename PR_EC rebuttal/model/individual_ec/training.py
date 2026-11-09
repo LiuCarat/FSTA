@@ -13,11 +13,14 @@ from torch.utils.data import DataLoader
 from .encoder import STFEncoder
 from .optim import ScheduledOptim
 from .utils import STFWindowLoss
-from PR_EC.utils import RandomSubjectWindowDataset, set_seed
+from ...utils.windows import RandomSubjectWindowDataset
+from ...utils.runtime import set_seed
 
 
 def build_stf_encoder(args, device):
-    options = argparse.Namespace(**vars(args), nodes_num=90, time_num=args.window_length)
+    options = argparse.Namespace(**vars(args))
+    options.nodes_num = getattr(args, "nodes_num", 90)
+    options.time_num = args.window_length
     return STFEncoder(options, args.window_length, args.d_model, args.d_inner_hid, args.n_head, args.d_k, args.d_v, args.dropout).to(device)
 
 
@@ -30,7 +33,7 @@ def train_stf_ec(args, time_series, device, window_ranges=None):
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, generator=generator, num_workers=0)
     model = build_stf_encoder(args, device)
     optimizer = ScheduledOptim(torch.optim.Adam(model.parameters(), betas=(args.adam_beta1, args.adam_beta2), eps=1e-9, weight_decay=args.weight_decay), args.lr_mul, args.d_model, args.n_warmup_steps)
-    criterion = STFWindowLoss("entropy", args.loss_alpha, 90).to(device)
+    criterion = STFWindowLoss("entropy", args.loss_alpha, model.FA.args.nodes_num).to(device)
     best_state, best_loss, metrics = None, float("inf"), {}
     for epoch in range(1, args.epochs + 1):
         dataset.set_epoch(epoch); model.train(); values = []

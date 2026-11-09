@@ -1,8 +1,14 @@
 """General-purpose runtime, split, and window utilities."""
 
-from PR_EC.utils.folds import make_stratified_splits, prepare_fold_arrays
-from PR_EC.utils.runtime import select_device, set_seed
-from PR_EC.utils.windows import RandomSubjectWindowDataset, fixed_window_starts
+from .runtime import select_device, set_seed
+from .windows import RandomSubjectWindowDataset, fixed_window_starts
+
+
+def __getattr__(name):
+    if name in {"make_stratified_splits", "prepare_fold_arrays"}:
+        from . import folds
+        return getattr(folds, name)
+    raise AttributeError(name)
 
 __all__ = [
     "RandomSubjectWindowDataset",
