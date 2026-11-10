@@ -66,7 +66,7 @@ def add_stf_arguments(parser):
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-mode", choices=["raw"], default="raw")
-    parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=['original', "qc_refined"])
+    parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=["original", "refined", "qc_refined"])
     parser.add_argument("--ec-path", type=Path, default=DATASET_CONFIG.ec_path)
     parser.add_argument("--refined-ec-path", type=Path, default=DATASET_CONFIG.refined_ec_path)
     parser.add_argument("--qsr-refined-ec-path", type=Path, default=DATASET_CONFIG.qsr_refined_ec_path)
@@ -89,8 +89,8 @@ def parse_args():
 
     parser.add_argument("--refiner-epochs", type=int, default=100)
     parser.add_argument("--refiner-lr", type=float, default=0.03)
-    parser.add_argument("--gate-max", type=float, default=0.30)
-    parser.add_argument("--gate-l1-weight", type=float, default=0.36)
+    parser.add_argument("--gate-max", type=float, default=0.20)
+    parser.add_argument("--gate-l1-weight", type=float, default=0.34)
     parser.add_argument("--anchor-weight", type=float, default=1.2)
     parser.add_argument("--variance-weight", type=float, default=0.8)
     parser.add_argument("--variance-retention", type=float, default=0.8)
@@ -100,9 +100,9 @@ def parse_args():
     parser.add_argument("--qsr-lr", type=float, default=0.03)
     parser.add_argument("--qsr-hidden-channels", type=int, default=8)
     parser.add_argument("--qsr-eta", type=float, default=0.3)
-    parser.add_argument("--qsr-r-max", type=float, default=0.18)
+    parser.add_argument("--qsr-r-max", type=float, default=0.2)
     parser.add_argument("--qsr-perturbation-scale", type=float, default=0.5)
-    parser.add_argument("--qsr-gate-max", type=float, default=0.4)
+    parser.add_argument("--qsr-gate-max", type=float, default=0.3)
     parser.add_argument("--qsr-gate-weight", type=float, default=0.001)
     parser.add_argument("--qsr-variance-weight", type=float, default=0.25) #0.25
     parser.add_argument("--qsr-variance-retention", type=float, default=0.85) #调这个没用

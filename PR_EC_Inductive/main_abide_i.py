@@ -93,7 +93,7 @@ def parse_args():
     parser.add_argument("--refiner-lr", type=float, default=0.03)
     parser.add_argument("--gate-max", type=float, default=0.4)
     parser.add_argument("--gate-l1-weight", type=float, default=0.38)
-    parser.add_argument("--anchor-weight", type=float, default=0.8)
+    parser.add_argument("--anchor-weight", type=float, default=0.7)
     parser.add_argument("--variance-weight", type=float, default=1.0)
     parser.add_argument("--variance-retention", type=float, default=0.85)
 
@@ -104,10 +104,10 @@ def parse_args():
     parser.add_argument("--qsr-eta", type=float, default=0.15)
     parser.add_argument("--qsr-r-max", type=float, default=0.03)
     parser.add_argument("--qsr-perturbation-scale", type=float, default=0.5)
-    parser.add_argument("--qsr-gate-max", type=float, default=0.4)
+    parser.add_argument("--qsr-gate-max", type=float, default=0.35)
     parser.add_argument("--qsr-gate-weight", type=float, default=0.001)
     parser.add_argument("--qsr-variance-weight", type=float, default=0.1)
-    parser.add_argument("--qsr-variance-retention", type=float, default=0.85)
+    parser.add_argument("--qsr-variance-retention", type=float, default=0.8)
     parser.add_argument("--qsr-basis-ridge", type=float, default=0.001)
 
     add_classifier_arguments(parser)
