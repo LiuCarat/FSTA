@@ -155,29 +155,46 @@ def save_oof_predictions(output_dir, data, fold_ids, probabilities):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     selected = np.asarray(fold_ids) > 0
+    probability_columns = {
+        "original": "initial_probability",
+        "refined": "mpr_probability",
+        "qc_refined": "full_probability",
+    }
+    available = [
+        name
+        for name in probability_columns
+        if name in probabilities
+        and np.isfinite(np.asarray(probabilities[name])[selected]).all()
+    ]
     rows = []
     for index in np.flatnonzero(selected):
-        rows.append({
+        row = {
             "subject_id": str(data["subject_ids"][index]),
             "fold": int(fold_ids[index]),
             "label": int(data["labels"][index]),
-            "initial_probability": float(probabilities["original"][index]),
-            "mpr_probability": float(probabilities["refined"][index]),
-            "full_probability": float(probabilities["qc_refined"][index]),
+        }
+        row.update({
+            probability_columns[name]: float(probabilities[name][index])
+            for name in available
         })
+        rows.append(row)
     write_path = output_dir / "oof_predictions.csv"
     with write_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
+    archive = {
+        "subject_ids": np.asarray(data["subject_ids"]).astype(str)[selected],
+        "fold_ids": np.asarray(fold_ids, dtype=np.int64)[selected],
+        "labels": np.asarray(data["labels"], dtype=np.int64)[selected],
+    }
+    archive.update({
+        probability_columns[name]: np.asarray(probabilities[name])[selected]
+        for name in available
+    })
     np.savez_compressed(
         output_dir / "oof_predictions.npz",
-        subject_ids=np.asarray(data["subject_ids"]).astype(str)[selected],
-        fold_ids=np.asarray(fold_ids, dtype=np.int64)[selected],
-        labels=np.asarray(data["labels"], dtype=np.int64)[selected],
-        initial_probability=np.asarray(probabilities["original"])[selected],
-        mpr_probability=np.asarray(probabilities["refined"])[selected],
-        full_probability=np.asarray(probabilities["qc_refined"])[selected],
+        **archive,
     )
     return write_path
 

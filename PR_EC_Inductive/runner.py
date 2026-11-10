@@ -25,11 +25,7 @@ def run(args):
     )
     if args.input_mode != "raw":
         raise ValueError("Inductive evaluation requires raw time series")
-    required_representations = ("original", "refined", "qc_refined")
-    if tuple(args.representations) != required_representations:
-        raise ValueError(
-            "Table R4 requires exactly: original refined qc_refined"
-        )
+    args.representations = list(dict.fromkeys(args.representations))
     data = load_inductive_data(args)
     if data["subjects"] is None:
         raise RuntimeError("Raw subject time series were not attached")
@@ -48,16 +44,20 @@ def run(args):
         data, experiment["oof_original"], experiment["fold_ids"],
         "initial_ec",
     )
-    refined_path = save_inductive_ec_archive(
-        args.output_dir / "inductive_oof_mpr_ec.npz",
-        data, experiment["oof_pgr"], experiment["fold_ids"],
-        "mpr_only",
-    )
-    qsr_refined_path = save_inductive_ec_archive(
-        args.output_dir / "inductive_oof_full_ec.npz",
-        data, experiment["oof_qc"], experiment["fold_ids"],
-        "full_pr_ec",
-    )
+    refined_path = None
+    if "refined" in args.representations:
+        refined_path = save_inductive_ec_archive(
+            args.output_dir / "inductive_oof_mpr_ec.npz",
+            data, experiment["oof_pgr"], experiment["fold_ids"],
+            "mpr_only",
+        )
+    qsr_refined_path = None
+    if "qc_refined" in args.representations:
+        qsr_refined_path = save_inductive_ec_archive(
+            args.output_dir / "inductive_oof_full_ec.npz",
+            data, experiment["oof_qc"], experiment["fold_ids"],
+            "full_pr_ec",
+        )
     prediction_path = save_oof_predictions(
         args.output_dir, data, experiment["fold_ids"], experiment["oof_probabilities"]
     )
