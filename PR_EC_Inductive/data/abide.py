@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from PR_EC.data.common import (
+from PR_EC_Inductive.data.common import (
     ROI_COUNT,
     ROI_INDICES,
     SOURCE_ROI_COUNT,

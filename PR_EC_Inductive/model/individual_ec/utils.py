@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from PR_EC.utils import fixed_window_starts
+from PR_EC_Inductive.utils import fixed_window_starts
 
 
 # ---------------------------------------------------------------------------

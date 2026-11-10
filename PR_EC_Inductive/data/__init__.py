@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from PR_EC.data.abide import (
+from PR_EC_Inductive.data.abide import (
     ABIDERecord,
     ASD_LABEL,
     DX_TO_LABEL,
@@ -12,7 +12,7 @@ from PR_EC.data.abide import (
     load_abide_records,
     load_abide_time_series,
 )
-from PR_EC.data.adhd200 import (
+from PR_EC_Inductive.data.adhd200 import (
     ADHD200Record,
     apply_category_imputer,
     apply_numeric_imputer,
@@ -22,18 +22,18 @@ from PR_EC.data.adhd200 import (
     load_adhd200_time_series,
     prepare_adhd_fold_arrays,
 )
-from PR_EC.data.common import (
+from PR_EC_Inductive.data.common import (
     ROI_COUNT,
     SOURCE_ROI_COUNT,
     limit_archive_subjects,
     load_ec_archive,
 )
-from PR_EC.model.mpr import (
+from PR_EC_Inductive.model.mpr import (
     load_aligned_phenotypes,
     load_phenotypes,
     subject_fc_features,
 )
-from PR_EC.model.qsr.qc_target import load_aligned_qc
+from PR_EC_Inductive.model.qsr.qc_target import load_aligned_qc
 
 FIXED_DATA_CONFIG = {
     "pipeline": "cpac",
@@ -99,7 +99,7 @@ def load_subject_dataset(
 
 def load_pipeline_data(args, device):
     """Load or generate EC matrices and attach graph/QC covariates."""
-    from PR_EC.model.individual_ec import generate_subject_ec, save_subject_ec
+    from PR_EC_Inductive.model.individual_ec import generate_subject_ec, save_subject_ec
 
     stf_metrics = None
     subjects = None
@@ -153,6 +153,56 @@ def load_pipeline_data(args, device):
     data["ec"] = np.asarray(data["ec"], dtype=np.float32)
     data["labels"] = np.asarray(data["labels"], dtype=np.int64)
     return data, stf_metrics
+
+
+def load_inductive_data(args):
+    """Load raw subjects and covariates without fitting a shared EC encoder."""
+    subjects = load_subject_dataset(
+        args.data_root,
+        FIXED_DATA_CONFIG["pipeline"],
+        FIXED_DATA_CONFIG["strategy"],
+        FIXED_DATA_CONFIG["derivative"],
+        FIXED_DATA_CONFIG["standardize"],
+        FIXED_DATA_CONFIG["max_subjects"],
+        profile=args.profile,
+        patient_label=args.patient_label,
+        control_label=args.control_label,
+    )
+    data = {
+        "subjects": subjects,
+        "labels": np.asarray(subjects["labels"], dtype=np.int64),
+        "subject_ids": np.asarray(subjects["subject_ids"]).astype(str),
+        "site_ids": np.asarray(subjects["site_ids"]).astype(str),
+    }
+    if args.profile.name == "abide":
+        data["labels"] = _labels_from_abide_phenotype(
+            args.phenotype_csv,
+            data["subject_ids"],
+            args.profile,
+        )
+    if args.graph_mode == "fusion":
+        data["fmri_features"] = subject_fc_features(subjects["time_series"])
+    data.update(
+        load_phenotypes(
+            args.phenotype_csv,
+            data["subject_ids"],
+            data["site_ids"],
+            args.profile,
+        )
+    )
+    data["qsr_qc"] = load_aligned_qc(
+        args.phenotype_csv,
+        data["subject_ids"],
+        args.qsr_qc_columns,
+        args.profile,
+    )
+    data["qsr_confound_values"] = load_aligned_phenotypes(
+        args.phenotype_csv,
+        data["subject_ids"],
+        args.profile.confound_columns,
+        args.profile,
+    ).astype(np.float32)
+    return data
 
 
 def _labels_from_abide_phenotype(phenotype_csv, subject_ids, profile):
@@ -230,5 +280,6 @@ __all__ = [
     "FIXED_DATA_CONFIG", "LABEL_TO_GROUP", "ROI_COUNT", "SOURCE_ROI_COUNT",
     "TC_LABEL", "load_abide_records", "load_abide_time_series",
     "load_adhd200_records", "load_adhd200_time_series", "load_ec_archive",
-    "load_pipeline_data", "load_subject_dataset", "load_aligned_phenotypes",
+    "load_inductive_data", "load_pipeline_data", "load_subject_dataset",
+    "load_aligned_phenotypes",
 ]

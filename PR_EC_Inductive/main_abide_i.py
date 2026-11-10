@@ -4,20 +4,20 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+PROJECT_DIR = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-from PR_EC.dataset_configs import ExperimentProfile
-from PR_EC.downstream import add_classifier_arguments
+from PR_EC_Inductive.dataset_configs import ExperimentProfile
+from PR_EC_Inductive.downstream import add_classifier_arguments
 
 DATASET_CONFIG = ExperimentProfile(
     name="abide",
     data_root=ROOT / "dataset/ABIDE-I",
     phenotype_path=ROOT / "dataset/ABIDE-I/Phenotypic_Processing.csv",
-    output_dir=ROOT / "PR_EC/outputs/abide-i",
-    ec_path=ROOT / "PR_EC/outputs/abide-i/abide_subject_ec.npz",
-    refined_ec_path=ROOT / "PR_EC/outputs/abide-i/abide_refined_subject_ec.npz",
-    qsr_refined_ec_path=ROOT / "PR_EC/outputs/abide-i/abide_qsr_refined_subject_ec.npz",
+    output_dir=PROJECT_DIR / "outputs/abide-i",
+    ec_path=PROJECT_DIR / "outputs/abide-i/inductive_oof_initial_ec.npz",
+    refined_ec_path=PROJECT_DIR / "outputs/abide-i/inductive_oof_mpr_ec.npz",
+    qsr_refined_ec_path=PROJECT_DIR / "outputs/abide-i/inductive_oof_full_ec.npz",
     phenotype_format="csv",
     phenotype_id_column="FILE_ID",
     patient_column="DX_GROUP",
@@ -67,7 +67,7 @@ def add_stf_arguments(parser):
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-mode", choices=["ec", "raw"], default="raw")
+    parser.add_argument("--input-mode", choices=["raw"], default="raw")
     parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=["original", "refined", "qc_refined"])
     parser.add_argument("--ec-path", type=Path, default=DATASET_CONFIG.ec_path)
     parser.add_argument("--refined-ec-path", type=Path, default=DATASET_CONFIG.refined_ec_path)
@@ -112,6 +112,10 @@ def parse_args():
 
     add_classifier_arguments(parser)
     add_stf_arguments(parser)
+    parser.add_argument("--folds", type=int, nargs="+", help="Run selected folds (1-based); default runs all folds")
+    parser.add_argument("--encoder-cache-dir", type=Path, default=None)
+    parser.add_argument("--no-resume-fold-encoders", action="store_false", dest="resume_fold_encoders")
+    parser.set_defaults(resume_fold_encoders=True)
     args = parser.parse_args()
     args.dataset, args.profile = DATASET_CONFIG.name, DATASET_CONFIG
     if args.patient_label == args.control_label:
@@ -126,5 +130,5 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    from PR_EC.runner import run
+    from PR_EC_Inductive.runner import run
     run(args)

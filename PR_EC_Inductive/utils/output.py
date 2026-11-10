@@ -81,14 +81,24 @@ def save_qsr_ec_archive(
     return output_path
 
 
-def save_results(args, fold_results, training_metrics):
+def save_results(
+    args,
+    fold_results,
+    training_metrics,
+    csv_name="experiment_summary.csv",
+    json_name="summary.json",
+):
     rows = []
-    for fold, result in enumerate(fold_results, 1):
-        row = {"fold": fold}
+    for fallback_fold, result in enumerate(fold_results, 1):
+        row = {"fold": int(result.get("fold_id", fallback_fold))}
         names = [name for name, value in result.items() if isinstance(value, dict)]
         for name in names:
             row.update({f"{name}_{key}": value for key, value in result[name].items()})
-        row.update({key: value for key, value in result.items() if key not in names})
+        row.update({
+            key: value
+            for key, value in result.items()
+            if key not in names and key != "fold_id"
+        })
         rows.append(row)
 
     summary = {
@@ -110,24 +120,66 @@ def save_results(args, fold_results, training_metrics):
     summary["representations"] = names
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    for path in args.output_dir.iterdir():
-        if (
-            path.is_file()
-            and path.suffix != ".npz"
-            and path.name not in {"experiment_summary.csv", "summary.json"}
-        ):
-            path.unlink()
-    with (args.output_dir / "experiment_summary.csv").open(
+    with (args.output_dir / csv_name).open(
         "w", newline="", encoding="utf-8"
     ) as handle:
         writer = csv.DictWriter(handle, fieldnames=sorted(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    (args.output_dir / "summary.json").write_text(
+    (args.output_dir / json_name).write_text(
         json.dumps(summary, indent=2, ensure_ascii=False, default=str),
         encoding="utf-8",
     )
     return summary
+
+
+def save_inductive_ec_archive(output_path, data, ec, fold_ids, representation):
+    ec = np.asarray(ec, dtype=np.float32)
+    selected = np.asarray(fold_ids) > 0
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        output_path,
+        ec=ec[selected],
+        labels=np.asarray(data["labels"], dtype=np.int64)[selected],
+        subject_ids=np.asarray(data["subject_ids"]).astype(str)[selected],
+        site_ids=np.asarray(data["site_ids"]).astype(str)[selected],
+        fold_ids=np.asarray(fold_ids, dtype=np.int64)[selected],
+        representation=np.asarray(representation),
+        protocol=np.asarray("fold-specific-inductive"),
+    )
+    return output_path
+
+
+def save_oof_predictions(output_dir, data, fold_ids, probabilities):
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    selected = np.asarray(fold_ids) > 0
+    rows = []
+    for index in np.flatnonzero(selected):
+        rows.append({
+            "subject_id": str(data["subject_ids"][index]),
+            "fold": int(fold_ids[index]),
+            "label": int(data["labels"][index]),
+            "initial_probability": float(probabilities["original"][index]),
+            "mpr_probability": float(probabilities["refined"][index]),
+            "full_probability": float(probabilities["qc_refined"][index]),
+        })
+    write_path = output_dir / "oof_predictions.csv"
+    with write_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    np.savez_compressed(
+        output_dir / "oof_predictions.npz",
+        subject_ids=np.asarray(data["subject_ids"]).astype(str)[selected],
+        fold_ids=np.asarray(fold_ids, dtype=np.int64)[selected],
+        labels=np.asarray(data["labels"], dtype=np.int64)[selected],
+        initial_probability=np.asarray(probabilities["original"])[selected],
+        mpr_probability=np.asarray(probabilities["refined"])[selected],
+        full_probability=np.asarray(probabilities["qc_refined"])[selected],
+    )
+    return write_path
 
 
 def print_summary_table(summary, title="mean±std (%)"):

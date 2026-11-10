@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from .encoder import STFEncoder
 from .optim import ScheduledOptim
 from .utils import STFWindowLoss
-from PR_EC.utils import RandomSubjectWindowDataset, set_seed
+from PR_EC_Inductive.utils import RandomSubjectWindowDataset, set_seed
 
 
 def build_stf_encoder(args, device):

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
-from PR_EC.data.common import standardize_time_series, validate_time_series
-from PR_EC.utils.folds import prepare_fold_arrays
+from PR_EC_Inductive.data.common import standardize_time_series, validate_time_series
+from PR_EC_Inductive.utils.folds import prepare_fold_arrays
 
 
 def normalize_value(value):

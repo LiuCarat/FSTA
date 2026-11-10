@@ -1,35 +1,34 @@
-"""Run the ADHD200 Graph-EC experiment."""
+"""Run the ABIDE-II Graph-EC experiment."""
 import argparse
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+PROJECT_DIR = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-from PR_EC.dataset_configs import ExperimentProfile
-from PR_EC.downstream import add_classifier_arguments
-QC_COLUMNS = ("func_mean_fd", "func_dvars", "func_quality")
+from PR_EC_Inductive.dataset_configs import ExperimentProfile
+from PR_EC_Inductive.downstream import add_classifier_arguments
 
 DATASET_CONFIG = ExperimentProfile(
-    name="adhd200",
-    data_root=ROOT / "dataset/ADHD200",
-    phenotype_path=ROOT / "dataset/ADHD200/Phenotypic_Processing.csv",
-    output_dir=ROOT / "PR_EC/outputs/adhd200",
-    ec_path=ROOT / "PR_EC/outputs/adhd200/adhd200_subject_ec.npz",
-    refined_ec_path=ROOT / "PR_EC/outputs/adhd200/adhd200_refined_subject_ec.npz",
-    qsr_refined_ec_path=ROOT / "PR_EC/outputs/adhd200/adhd200_qsr_refined_subject_ec.npz",
+    name="abide_ii",
+    data_root=ROOT / "dataset/ABIDE-II",
+    phenotype_path=ROOT / "dataset/ABIDE-II/Phenotypic_Processing.csv",
+    output_dir=PROJECT_DIR / "outputs/abide-ii",
+    ec_path=PROJECT_DIR / "outputs/abide-ii/inductive_oof_initial_ec.npz",
+    refined_ec_path=PROJECT_DIR / "outputs/abide-ii/inductive_oof_mpr_ec.npz",
+    qsr_refined_ec_path=PROJECT_DIR / "outputs/abide-ii/inductive_oof_full_ec.npz",
     phenotype_format="csv",
-    phenotype_id_column="ScanDir ID",
-    patient_column="DX",
-    control_column="DX",
-    patient_values=("1", "2", "3"),
-    control_values=("0",),
-    site_column="Site",
-    sex_column="Gender",
-    continuous_columns=("Age", "Full4 IQ", "Handedness"),
-    confound_columns=("Age", "Gender", "Full4 IQ", "Handedness"),
-    qc_columns=QC_COLUMNS,
+    phenotype_id_column="FILE_ID",
+    patient_column="DX_GROUP",
+    control_column="DX_GROUP",
+    patient_values=("2",),
+    control_values=("1",),
+    site_column="SITE_ID",
+    sex_column="SEX",
+    continuous_columns=("FIQ", "PIQ"),
+    confound_columns=("AGE_AT_SCAN", "SEX", "FIQ", "PIQ"),
+    qc_columns=("func_mean_fd", "func_dvars", "func_quality"),
     source_roi_count=116,
     roi_count=90,
     exclude_subjects=(),
@@ -37,13 +36,13 @@ DATASET_CONFIG = ExperimentProfile(
 
 def add_stf_arguments(parser):
     group = parser.add_argument_group("STF-EC encoder")
-    group.add_argument("--window-length", type=int, default=76)
-    group.add_argument("--stride", type=int, default=25)
-    group.add_argument("--epochs", type=int, default=141)
+    group.add_argument("--window-length", type=int, default=80) #80
+    group.add_argument("--stride", type=int, default=40) #40
+    group.add_argument("--epochs", type=int, default=81)
     group.add_argument("--stf-checkpoint", choices=["final", "best"], default='final')
     group.add_argument("--loss-alpha", type=float, default=0.01)
     group.add_argument("--batch-size", type=int, default=32)
-    group.add_argument("--log-every", type=int, default=20)
+    group.add_argument("--log-every", type=int, default=10)
     group.add_argument("--d-model", type=int, default=16)
     group.add_argument("--d-inner-hid", type=int, default=64)
     group.add_argument("--d-k", type=int, default=8)
@@ -66,8 +65,8 @@ def add_stf_arguments(parser):
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-mode", choices=["ec", "raw"], default='raw')
-    parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=["original", "refined", "qc_refined"])
+    parser.add_argument("--input-mode", choices=["raw"], default="raw")
+    parser.add_argument("--representations", choices=["original", "refined", "qc_refined"], nargs="+", default=['original', 'refined', "qc_refined"])
     parser.add_argument("--ec-path", type=Path, default=DATASET_CONFIG.ec_path)
     parser.add_argument("--refined-ec-path", type=Path, default=DATASET_CONFIG.refined_ec_path)
     parser.add_argument("--qsr-refined-ec-path", type=Path, default=DATASET_CONFIG.qsr_refined_ec_path)
@@ -85,32 +84,36 @@ def parse_args():
     parser.add_argument("--fusion-beta", type=float, default=0.6)
     parser.add_argument("--reference-bandwidth", type=float, default=2.0)
     parser.add_argument("--categorical-penalty", type=float, default=4.0)
-    parser.add_argument("--continuous-weights", type=float, nargs=len(DATASET_CONFIG.continuous_columns), default=[1.0, 0.3, 0.3])
+    parser.add_argument("--continuous-weights", type=float, nargs=len(DATASET_CONFIG.continuous_columns), default=[1.0, 0.3])
     parser.add_argument("--permute-phenotype", action="store_true", default=False)
 
-    parser.add_argument("--refiner-epochs", type=int, default=80)
-    parser.add_argument("--refiner-lr", type=float, default=0.01)
-    parser.add_argument("--gate-max", type=float, default=0.4)
-    parser.add_argument("--gate-l1-weight", type=float, default=0.01)
-    parser.add_argument("--anchor-weight", type=float, default=1.0)
-    parser.add_argument("--variance-weight", type=float, default=1.0)
-    parser.add_argument("--variance-retention", type=float, default=0.65)
+    parser.add_argument("--refiner-epochs", type=int, default=100)
+    parser.add_argument("--refiner-lr", type=float, default=0.03)
+    parser.add_argument("--gate-max", type=float, default=0.30)
+    parser.add_argument("--gate-l1-weight", type=float, default=0.36)
+    parser.add_argument("--anchor-weight", type=float, default=1.2)
+    parser.add_argument("--variance-weight", type=float, default=0.8)
+    parser.add_argument("--variance-retention", type=float, default=0.8)
 
-    parser.add_argument("--qsr-qc-columns", nargs="+", default=list(QC_COLUMNS))
+    parser.add_argument("--qsr-qc-columns", nargs="+", default=list(['func_mean_fd', 'func_dvars', 'func_quality']))
     parser.add_argument("--qsr-epochs", type=int, default=100)
-    parser.add_argument("--qsr-lr", type=float, default=0.001)
+    parser.add_argument("--qsr-lr", type=float, default=0.03)
     parser.add_argument("--qsr-hidden-channels", type=int, default=8)
-    parser.add_argument("--qsr-eta", type=float, default=0.2)
-    parser.add_argument("--qsr-r-max", type=float, default=0.25) #0.15
+    parser.add_argument("--qsr-eta", type=float, default=0.3)
+    parser.add_argument("--qsr-r-max", type=float, default=0.18)
     parser.add_argument("--qsr-perturbation-scale", type=float, default=0.5)
-    parser.add_argument("--qsr-gate-max", type=float, default=0.38)
-    parser.add_argument("--qsr-gate-weight", type=float, default=0.01)
-    parser.add_argument("--qsr-variance-weight", type=float, default=0.25)
-    parser.add_argument("--qsr-variance-retention", type=float, default=0.95)
-    parser.add_argument("--qsr-basis-ridge", type=float, default=0.01)
+    parser.add_argument("--qsr-gate-max", type=float, default=0.45)
+    parser.add_argument("--qsr-gate-weight", type=float, default=0.001)
+    parser.add_argument("--qsr-variance-weight", type=float, default=0.25) #0.25
+    parser.add_argument("--qsr-variance-retention", type=float, default=0.85) #调这个没用
+    parser.add_argument("--qsr-basis-ridge", type=float, default=0.001)
 
     add_classifier_arguments(parser)
     add_stf_arguments(parser)
+    parser.add_argument("--folds", type=int, nargs="+", help="Run selected folds (1-based); default runs all folds")
+    parser.add_argument("--encoder-cache-dir", type=Path, default=None)
+    parser.add_argument("--no-resume-fold-encoders", action="store_false", dest="resume_fold_encoders")
+    parser.set_defaults(resume_fold_encoders=True)
     args = parser.parse_args()
     args.dataset, args.profile = DATASET_CONFIG.name, DATASET_CONFIG
     if args.patient_label == args.control_label:
@@ -125,5 +128,5 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    from PR_EC.runner import run
+    from PR_EC_Inductive.runner import run
     run(args)

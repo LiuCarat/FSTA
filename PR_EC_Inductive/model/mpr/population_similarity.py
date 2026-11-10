@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from PR_EC.model.mpr.population_reference import (
+from PR_EC_Inductive.model.mpr.population_reference import (
     reference_weights,
 )
 

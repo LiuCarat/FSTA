@@ -3,24 +3,27 @@ from __future__ import annotations
 
 import numpy as np
 
-from PR_EC.downstream import train_classifier
-from PR_EC.model.mpr.population_reference import (
+from PR_EC_Inductive.downstream import train_classifier
+from PR_EC_Inductive.model.mpr.population_reference import (
     ec_separability,
     edge_effect_sizes,
     normative_reference,
 )
-from PR_EC.model.mpr import build_reference_graph, fused_graph, topk_graph
-from PR_EC.model.ablation.mpr_refinement import apply_pgr_refiner, train_pgr_refiner
-from PR_EC.model.qsr.qsr_refiner import apply_qsr_refiner, train_qsr_refiner
-from PR_EC.data.adhd200 import (
+from PR_EC_Inductive.model.mpr import build_reference_graph, fused_graph, topk_graph
+from PR_EC_Inductive.model.ablation.mpr_refinement import apply_pgr_refiner, train_pgr_refiner
+from PR_EC_Inductive.model.qsr.qsr_refiner import apply_qsr_refiner, train_qsr_refiner
+from PR_EC_Inductive.data.adhd200 import (
     apply_numeric_imputer,
     fit_numeric_imputer,
     prepare_adhd_fold_arrays,
 )
-from PR_EC.utils import make_stratified_splits, prepare_fold_arrays, set_seed
+from PR_EC_Inductive.model.individual_ec.ec_estimator import generate_fold_subject_ec
+from PR_EC_Inductive.utils import make_stratified_splits, prepare_fold_arrays, set_seed
 
 
-def build_fold_reference(args, arrays, fmri_arrays=None):
+def build_fold_reference(
+    args, arrays, fmri_arrays=None, splits=("train", "val", "test")
+):
     common = dict(
         k=args.reference_k,
         bandwidth=args.reference_bandwidth,
@@ -30,7 +33,7 @@ def build_fold_reference(args, arrays, fmri_arrays=None):
         seed=args.seed,
     )
     phenotype_weights = {}
-    for split in ("train", "val", "test"):
+    for split in splits:
         train_weights, query_weights = build_reference_graph(
             arrays["train_cont"], arrays["train_cat"],
             arrays[f"{split}_cont"], arrays[f"{split}_cat"], **common,
@@ -41,30 +44,31 @@ def build_fold_reference(args, arrays, fmri_arrays=None):
     if args.graph_mode == "fusion":
         if fmri_arrays is None:
             raise ValueError("Fusion graph mode requires fold fMRI features")
-        train_fmri, val_fmri, test_fmri = fmri_arrays
+        train_fmri = fmri_arrays["train"]
         mean, std = train_fmri.mean(axis=0), train_fmri.std(axis=0)
         std[~np.isfinite(std) | (std < 1e-6)] = 1.0
-        train_fmri, val_fmri, test_fmri = [
-            ((values - mean) / std).astype(np.float32)
-            for values in (train_fmri, val_fmri, test_fmri)
-        ]
-        fmri_weights = {
-            "train": topk_graph(
-                train_fmri, train_fmri, args.reference_k, exclude_self=True
-            ),
-            "val": topk_graph(train_fmri, val_fmri, args.reference_k),
-            "test": topk_graph(train_fmri, test_fmri, args.reference_k),
+        standardized = {
+            split: ((fmri_arrays[split] - mean) / std).astype(np.float32)
+            for split in splits
         }
+        fmri_weights = {}
+        for split in splits:
+            fmri_weights[split] = topk_graph(
+                standardized["train"],
+                standardized[split],
+                args.reference_k,
+                exclude_self=split == "train",
+            )
         weights = {
             split: fused_graph(
                 fmri_weights[split], phenotype_weights[split],
                 args.fusion_beta, args.reference_k,
             )
-            for split in ("train", "val", "test")
+            for split in splits
         }
 
     reference = {}
-    for split in ("train", "val", "test"):
+    for split in splits:
         reference[f"{split}_neighbor"], _ = normative_reference(
             arrays["train_ec"], weights[split]
         )
@@ -74,29 +78,48 @@ def build_fold_reference(args, arrays, fmri_arrays=None):
 
 def run_fold(args, fold, data, train_index, val_index, test_index, device):
     """Fit refiners and classifiers using one fold-local data split."""
+    active_splits = ("train", "val", "test")
     representations_to_run = tuple(args.representations)
     needs_pgr = "refined" in representations_to_run
     needs_qsr = "qc_refined" in representations_to_run
     fold_seed = args.seed + fold * 1000
     set_seed(fold_seed)
+    fold_ec = generate_fold_subject_ec(
+        args,
+        fold,
+        fold_seed,
+        data["subjects"],
+        train_index,
+        val_index,
+        test_index,
+        device,
+    )
     prepare_arrays = (
         prepare_adhd_fold_arrays
         if args.profile.name == "adhd200"
         else prepare_fold_arrays
     )
     arrays = prepare_arrays(
-        data["ec"][train_index], data["ec"][val_index], data["ec"][test_index],
-        data["continuous"][train_index], data["continuous"][val_index], data["continuous"][test_index],
-        data["categorical_raw"][train_index], data["categorical_raw"][val_index], data["categorical_raw"][test_index],
+        fold_ec["train_ec"], fold_ec["val_ec"],
+        fold_ec["test_ec"],
+        data["continuous"][train_index], data["continuous"][val_index],
+        data["continuous"][test_index],
+        data["categorical_raw"][train_index], data["categorical_raw"][val_index],
+        data["categorical_raw"][test_index],
     )
     fmri_arrays = None
     if args.graph_mode == "fusion" and (needs_pgr or needs_qsr):
-        fmri_arrays = tuple(
-            data["fmri_features"][index]
-            for index in (train_index, val_index, test_index)
-        )
+        split_indices = {
+            "train": train_index,
+            "val": val_index,
+            "test": test_index,
+        }
+        fmri_arrays = {
+            split: data["fmri_features"][split_indices[split]]
+            for split in active_splits
+        }
     reference = (
-        build_fold_reference(args, arrays, fmri_arrays)
+        build_fold_reference(args, arrays, fmri_arrays, active_splits)
         if needs_pgr or needs_qsr
         else None
     )
@@ -171,8 +194,8 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
     labels = {
         "train": data["labels"][train_index],
         "val": data["labels"][val_index],
-        "test": data["labels"][test_index],
     }
+    labels["test"] = data["labels"][test_index]
     classifier_args = dict(
         device=device,
         max_epochs=args.classifier_epochs,
@@ -181,16 +204,19 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         learning_rate=args.classifier_lr,
     )
     metric_runs = {name: [] for name in representations}
+    probability_runs = {name: [] for name in representations}
     for repeat in range(args.classifier_repeats):
         classifier_seed = fold_seed + repeat + 1
         for name, representation in representations.items():
-            metrics, _ = train_classifier(
+            metrics, _, predictions = train_classifier(
                 representation["train"], labels["train"],
                 representation["val"], labels["val"],
-                representation["test"], labels["test"],
+                representation["test"],
+                labels["test"],
                 seed=classifier_seed, **classifier_args,
             )
             metric_runs[name].append(metrics)
+            probability_runs[name].append(predictions["test_probabilities"])
 
     result = {
         name: {
@@ -218,33 +244,55 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         result[f"{name}_edge_abs_d_change"] = float(
             np.mean(np.abs(effect)) - np.mean(np.abs(original_effect))
         )
+    for name in representations:
         result[f"{name}_paired_auc_delta_mean"] = float(
             result[name]["AUC"] - result["original"]["AUC"]
         )
+    result["fold_id"] = int(fold)
     return {
         "metrics": result,
         "test_pgr": test_pgr,
         "test_qc": test_qsr,
+        "test_original": fold_ec["test_ec"],
+        "test_probabilities": {
+            name: np.mean(np.stack(values), axis=0).astype(np.float32)
+            for name, values in probability_runs.items()
+        },
         "test_index": test_index,
         "ec_mean": arrays["ec_mean"],
         "ec_std": arrays["ec_std"],
         "refinement_metrics": {**pgr_metrics, **qsr_metrics},
+        "encoder_training_metrics": fold_ec["training_metrics"],
+        "encoder_manifest": fold_ec["manifest"],
     }
 
 
 def run_cross_validation(args, data, device):
     """Run all folds and assemble test-only out-of-fold refined ECs."""
-    oof_pgr = np.full_like(data["ec"], np.nan, dtype=np.float32)
-    oof_qc = np.full_like(data["ec"], np.nan, dtype=np.float32)
-    fold_ids = np.full(len(data["ec"]), -1, dtype=np.int64)
-    results, refinement_metrics = [], []
+    ec_shape = (len(data["labels"]), args.profile.roi_count, args.profile.roi_count)
+    oof_original = np.full(ec_shape, np.nan, dtype=np.float32)
+    oof_pgr = np.full(ec_shape, np.nan, dtype=np.float32)
+    oof_qc = np.full(ec_shape, np.nan, dtype=np.float32)
+    fold_ids = np.full(len(data["labels"]), -1, dtype=np.int64)
+    oof_probabilities = {
+        name: np.full(len(data["labels"]), np.nan, dtype=np.float32)
+        for name in ("original", "refined", "qc_refined")
+    }
+    selected_folds = set(args.folds or range(1, args.n_splits + 1))
+    invalid_folds = selected_folds - set(range(1, args.n_splits + 1))
+    if invalid_folds:
+        raise ValueError(f"Invalid fold numbers: {sorted(invalid_folds)}")
+    results, refinement_metrics, encoder_metrics = [], [], []
     for fold, train_index, val_index, test_index in make_stratified_splits(
         data["labels"], args.n_splits, args.seed, args.validation_size
     ):
+        if fold not in selected_folds:
+            continue
         fold_result = run_fold(
             args, fold, data, train_index, val_index, test_index, device
         )
         heldout = fold_result["test_index"]
+        oof_original[heldout] = fold_result["test_original"]
         if fold_result["test_pgr"] is not None:
             restored_pgr = (
                 fold_result["test_pgr"] * fold_result["ec_std"]
@@ -262,29 +310,49 @@ def run_cross_validation(args, data, device):
             restored_qc[:, diagonal, diagonal] = 0.0
             oof_qc[heldout] = restored_qc
         fold_ids[heldout] = fold
+        for name, probabilities in fold_result["test_probabilities"].items():
+            oof_probabilities[name][heldout] = probabilities
         results.append(fold_result["metrics"])
         refinement_metrics.append({
             "fold": fold, **fold_result["refinement_metrics"]
         })
+        encoder_metrics.append({
+            "fold": fold,
+            "training_metrics": fold_result["encoder_training_metrics"],
+            "manifest": fold_result["encoder_manifest"],
+        })
         report = " | ".join(
-            f"{name} AUC={value['AUC']:.4f}"
+            f"{name}: " + ", ".join(
+                f"{metric}={100 * value[metric]:.2f}%"
+                for metric in ("ACC", "Recall", "AUC", "Precision", "F1")
+            )
             for name, value in fold_result["metrics"].items()
             if isinstance(value, dict)
         )
-        print(f"fold {fold}: {report}")
+        print(f"fold {fold} test: {report}")
 
     needs_pgr = "refined" in args.representations
     needs_qsr = "qc_refined" in args.representations
-    if (
-        (needs_pgr and not np.isfinite(oof_pgr).all())
+    completed = len(selected_folds) == args.n_splits
+    if completed and (
+        not np.isfinite(oof_original).all()
+        or (needs_pgr and not np.isfinite(oof_pgr).all())
         or (needs_qsr and not np.isfinite(oof_qc).all())
         or np.any(fold_ids < 0)
+        or any(
+            not np.isfinite(oof_probabilities[name]).all()
+            for name in ("original", *args.representations)
+        )
     ):
         raise RuntimeError("PGR/QC refined OOF arrays are incomplete")
     return {
+        "oof_original": oof_original,
         "oof_pgr": oof_pgr,
         "oof_qc": oof_qc,
+        "oof_probabilities": oof_probabilities,
         "fold_ids": fold_ids,
         "fold_results": results,
         "refinement_metrics": refinement_metrics,
+        "encoder_metrics": encoder_metrics,
+        "completed": completed,
     }

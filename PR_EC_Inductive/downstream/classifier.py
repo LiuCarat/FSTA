@@ -6,8 +6,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from .brainnetcnn import DirectedBrainNetCNN
 from .metrics import classification_metrics, select_youden_threshold
-from PR_EC.utils.runtime import set_seed
-from PR_EC.model.mpr.population_reference import to_directed_channels
+from PR_EC_Inductive.utils.runtime import set_seed
+from PR_EC_Inductive.model.mpr.population_reference import to_directed_channels
 
 
 def add_classifier_arguments(parser):
@@ -61,8 +61,17 @@ def train_classifier(train_ec, train_labels, val_ec, val_labels,
     model.eval()
     with torch.no_grad():
         validation_probabilities = torch.sigmoid(model(validation_x)).cpu().numpy()
+    threshold = select_youden_threshold(val_labels, validation_probabilities)
+    with torch.no_grad():
         test_probabilities = torch.sigmoid(
             model(to_directed_channels(torch.from_numpy(test_ec)).float().to(device))
         ).cpu().numpy()
-    threshold = select_youden_threshold(val_labels, validation_probabilities)
-    return classification_metrics(test_labels, test_probabilities, threshold), model
+    return (
+        classification_metrics(test_labels, test_probabilities, threshold),
+        model,
+        {
+            "validation_probabilities": validation_probabilities.astype("float32"),
+            "test_probabilities": test_probabilities.astype("float32"),
+            "threshold": float(threshold),
+        },
+    )

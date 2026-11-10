@@ -31,9 +31,9 @@ class ExperimentProfile:
 
 def get_profile(name):
     modules = {
-        "abide": "PR_EC.main_abide_i",
-        "abide_ii": "PR_EC.main_abide_ii",
-        "adhd200": "PR_EC.main_adhd200",
+        "abide": "PR_EC_Inductive.main_abide_i",
+        "abide_ii": "PR_EC_Inductive.main_abide_ii",
+        "adhd200": "PR_EC_Inductive.main_adhd200",
     }
     try:
         module_name = modules[name]
