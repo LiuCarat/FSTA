@@ -1,0 +1,6 @@
+adjusted_replicated_n,original_213_retained_n,original_213_direction_consistent_n,original_213_direction_consistency_rate,original_213_between_cohort_direction_rate,mtg_thalamus_edge_n,mtg_thalamus_direction_consistent_n,mtg_thalamus_direction_consistency_rate,mtg_thalamus_significant_n,mtg_thalamus_significance_pass_rate,alpha,repeat
+103,64,211,0.9906103286384976,0.9906103286384976,8,8,1.0,1,0.125,0.05,1
+96,60,212,0.9953051643192489,0.9953051643192489,8,8,1.0,0,0.0,0.05,2
+86,58,212,0.9953051643192489,0.9953051643192489,8,8,1.0,0,0.0,0.05,3
+86,58,212,0.9953051643192489,0.9953051643192489,8,8,1.0,0,0.0,0.05,4
+96,60,212,0.9953051643192489,0.9953051643192489,8,8,1.0,0,0.0,0.05,5

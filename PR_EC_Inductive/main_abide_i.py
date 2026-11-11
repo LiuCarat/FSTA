@@ -89,9 +89,9 @@ def parse_args():
     parser.add_argument("--continuous-weights", type=float, nargs=len(DATASET_CONFIG.continuous_columns), default=[1.0, 0.3])
     parser.add_argument("--permute-phenotype", action="store_true", default=False)
 
-    parser.add_argument("--refiner-epochs", type=int, default=80)
-    parser.add_argument("--refiner-lr", type=float, default=0.03)
-    parser.add_argument("--gate-max", type=float, default=0.4)
+    parser.add_argument("--refiner-epochs", type=int, default=100)
+    parser.add_argument("--refiner-lr", type=float, default=0.01)
+    parser.add_argument("--gate-max", type=float, default=0.15)
     parser.add_argument("--gate-l1-weight", type=float, default=0.38)
     parser.add_argument("--anchor-weight", type=float, default=0.7)
     parser.add_argument("--variance-weight", type=float, default=1.0)

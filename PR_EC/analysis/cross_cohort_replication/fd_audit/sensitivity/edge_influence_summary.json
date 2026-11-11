@@ -1,0 +1,31 @@
+{
+  "fd_beta_cross_edge_correlation_full_vs_exclude_two": 0.6916330932234971,
+  "fd_beta_change_full_se_absolute_quantiles_50_90_99_100": [
+    12.477448412727394,
+    33.85875145682019,
+    57.770113358298765,
+    88.72330165122958
+  ],
+  "asd_beta_cross_edge_correlation_full_vs_exclude_two": 0.9814118148809031,
+  "cooks_distance": {
+    "sub-29887": {
+      "quantiles_50_90_99_100": [
+        0.02413864641243063,
+        0.1766663890661743,
+        0.5240541965702011,
+        1.5615202215899004
+      ],
+      "edges_gt_4_over_n": 6201
+    },
+    "sub-29888": {
+      "quantiles_50_90_99_100": [
+        0.0028226592921296667,
+        0.020883131084222795,
+        0.07004950510759266,
+        0.30994731052478175
+      ],
+      "edges_gt_4_over_n": 3351
+    }
+  },
+  "note": "Cook distances are per single observation; the FD coefficient comparison deletes both flagged observations. Full-model SE scales the two-observation coefficient change, not a formal single-observation DFBETAS."
+}

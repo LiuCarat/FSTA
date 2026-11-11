@@ -1,0 +1,14 @@
+{
+  "adjusted_replicated_n": 96,
+  "original_213_retained_n": 60,
+  "original_213_direction_consistent_n": 212,
+  "original_213_direction_consistency_rate": 0.9953051643192489,
+  "original_213_between_cohort_direction_rate": 0.9953051643192489,
+  "mtg_thalamus_edge_n": 8,
+  "mtg_thalamus_direction_consistent_n": 8,
+  "mtg_thalamus_direction_consistency_rate": 1.0,
+  "mtg_thalamus_significant_n": 0,
+  "mtg_thalamus_significance_pass_rate": 0.0,
+  "alpha": 0.05,
+  "repeat": 2
+}

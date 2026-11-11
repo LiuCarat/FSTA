@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "audited_training_folds": 100,
+  "audited_oof_archives": 10,
+  "fixed_test_folds_match_original": true,
+  "initial_ec_unchanged": true,
+  "original_files_hashes_unchanged": true,
+  "train_test_subject_overlap_n": 0,
+  "unique_numeric_sub_ids_within_each_cohort": true,
+  "all_edge_ols_p_q_recomputed_and_matched": true
+}

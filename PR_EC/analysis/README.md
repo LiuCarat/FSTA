@@ -208,3 +208,14 @@ Self-edges are excluded by default. Missing QC rows are excluded consistently fr
 eta values, and constant edges are omitted from the mean because their `R^2` is
 undefined. This analysis is descriptive; it does not by itself provide uncertainty
 intervals or a significance test for differences between eta values.
+
+## W3：MPR/QSR 训练参考重采样敏感性
+
+新增入口 `mpr_qsr_reference_bootstrap.py` 固定初始 EC 和原十折测试/验证分区，
+在原训练子集内作被试级有放回抽样，每次重新构建 MPR、拟合 QC 模式并训练 QSR，
+不训练初始 EC 编码器或疾病分类器。随后复用协变量调整的跨队列分析，报告原 213 条
+及 MTG–丘脑 8 条连接的方向保持和显著性通过情况。
+
+运行方式和解释边界见 `mpr_qsr_reference_bootstrap/README.md`；五次 pilot 结果与审计见
+`mpr_qsr_reference_bootstrap/pilot_5_20261111/REPORT.md`。
+本实验是训练参考选择的条件敏感性分析，不是充分考虑全部被试抽样依赖性的正式 Bootstrap CI。

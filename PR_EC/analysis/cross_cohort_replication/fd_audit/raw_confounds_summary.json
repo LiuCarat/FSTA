@@ -1,0 +1,266 @@
+[
+  {
+    "SubjectID": "sub-29880",
+    "confounds_file": "PR_EC/analysis/cross_cohort_replication/fd_audit/raw_confounds/sub-29880/sub-29880_ses-1_task-rest_run-1_desc-confounds_timeseries.tsv",
+    "sha256": "4647f91d20f8602cd444d87de4f4b7bac1557f3d6c5f565ca3915cdf4678fbb7",
+    "n_frames": 160,
+    "n_nonfinite_fd": 1,
+    "csv_mean_fd": 6.2748616,
+    "mean_fd_first_nan_zero": 6.2748616048817265,
+    "mean_fd_finite_only": 6.314326143277209,
+    "median_fd": 4.219740100286087,
+    "max_fd": 35.702837262676304,
+    "frames_fd_gt_1": 130,
+    "frames_fd_gt_10": 34,
+    "frames_fd_gt_100": 0,
+    "power_50mm_reconstruction_max_abs_error": 7.105427357601002e-15,
+    "max_translation_step_each_axis": [
+      3.347600459497002,
+      14.320110491652272,
+      17.296596482697836
+    ],
+    "max_rotation_step_each_axis": [
+      0.2749156133530822,
+      0.1435006963736128,
+      0.0724965950043277
+    ],
+    "top_fd_frames_zero_based": [
+      35,
+      3,
+      5,
+      1,
+      4,
+      56,
+      103,
+      55,
+      6,
+      102
+    ],
+    "top_fd_values": [
+      35.702837262676304,
+      34.00895955455355,
+      32.47785993389375,
+      26.62481106964217,
+      23.807341093787866,
+      22.292620171946574,
+      22.060104727987685,
+      19.45011162154409,
+      18.23372448759928,
+      17.934914450491856
+    ],
+    "qc_from_current_extraction_code": {
+      "func_mean_fd": 6.2748616048817265,
+      "func_fd_gt_0_2": 0.96875,
+      "func_fd_gt_0_5": 0.91875,
+      "func_dvars": 189.4236348679245,
+      "func_quality": 0.03125
+    },
+    "csv_dvars": 189.42363,
+    "csv_quality": 0.03125,
+    "fd_metadata": {
+      "Units": "mm"
+    },
+    "motion_metadata": {
+      "trans_x": {
+        "Description": "Translation along left-right axis.",
+        "Units": "mm"
+      },
+      "trans_y": {
+        "Description": "Translation along anterior-posterior axis.",
+        "Units": "mm"
+      },
+      "trans_z": {
+        "Description": "Translation along superior-inferior axis.",
+        "Units": "mm"
+      },
+      "rot_x": {
+        "Description": "Rotation about left-right axis. Also known as \"pitch\".",
+        "Units": "rad"
+      },
+      "rot_y": {
+        "Description": "Rotation about anterior-posterior axis. Also known as \"roll\".",
+        "Units": "rad"
+      },
+      "rot_z": {
+        "Description": "Rotation about superior-inferior axis. Also known as \"yaw\".",
+        "Units": "rad"
+      }
+    }
+  },
+  {
+    "SubjectID": "sub-29887",
+    "confounds_file": "PR_EC/analysis/cross_cohort_replication/fd_audit/raw_confounds/sub-29887/sub-29887_ses-1_task-rest_run-1_desc-confounds_timeseries.tsv",
+    "sha256": "5ccc6c7da0e224fff1f640f4443e5e5f5302da817022a93d537261520ba0b3b4",
+    "n_frames": 160,
+    "n_nonfinite_fd": 1,
+    "csv_mean_fd": 69.489473,
+    "mean_fd_first_nan_zero": 69.48947302939133,
+    "mean_fd_finite_only": 69.926513740268,
+    "median_fd": 44.26903228113265,
+    "max_fd": 831.934197052863,
+    "frames_fd_gt_1": 145,
+    "frames_fd_gt_10": 138,
+    "frames_fd_gt_100": 16,
+    "power_50mm_reconstruction_max_abs_error": 1.1368683772161603e-13,
+    "max_translation_step_each_axis": [
+      269.819158248988,
+      364.6975183666606,
+      299.5504604683723
+    ],
+    "max_rotation_step_each_axis": [
+      4.8444042358338395,
+      0.3471291961668612,
+      1.6795034931825994
+    ],
+    "top_fd_frames_zero_based": [
+      16,
+      20,
+      24,
+      30,
+      31,
+      17,
+      19,
+      159,
+      18,
+      25
+    ],
+    "top_fd_values": [
+      831.934197052863,
+      582.450809164546,
+      560.6664975392713,
+      551.4079687449037,
+      524.3100435855467,
+      450.9116594162823,
+      432.8948720257417,
+      407.54080008301776,
+      159.2267139954031,
+      141.16428240561052
+    ],
+    "qc_from_current_extraction_code": {
+      "func_mean_fd": 69.48947302939133,
+      "func_fd_gt_0_2": 0.925,
+      "func_fd_gt_0_5": 0.9125,
+      "func_dvars": 33622741512.050316,
+      "func_quality": 0.075
+    },
+    "csv_dvars": 33622742000.0,
+    "csv_quality": 0.075,
+    "fd_metadata": {
+      "Units": "mm"
+    },
+    "motion_metadata": {
+      "trans_x": {
+        "Description": "Translation along left-right axis.",
+        "Units": "mm"
+      },
+      "trans_y": {
+        "Description": "Translation along anterior-posterior axis.",
+        "Units": "mm"
+      },
+      "trans_z": {
+        "Description": "Translation along superior-inferior axis.",
+        "Units": "mm"
+      },
+      "rot_x": {
+        "Description": "Rotation about left-right axis. Also known as \"pitch\".",
+        "Units": "rad"
+      },
+      "rot_y": {
+        "Description": "Rotation about anterior-posterior axis. Also known as \"roll\".",
+        "Units": "rad"
+      },
+      "rot_z": {
+        "Description": "Rotation about superior-inferior axis. Also known as \"yaw\".",
+        "Units": "rad"
+      }
+    }
+  },
+  {
+    "SubjectID": "sub-29888",
+    "confounds_file": "PR_EC/analysis/cross_cohort_replication/fd_audit/raw_confounds/sub-29888/sub-29888_ses-1_task-rest_run-1_desc-confounds_timeseries.tsv",
+    "sha256": "d9b315a434f21a198ef16ed9d0d023bc0f983bb48fe19fe90a59902ff7ead40c",
+    "n_frames": 160,
+    "n_nonfinite_fd": 1,
+    "csv_mean_fd": 44.670752,
+    "mean_fd_first_nan_zero": 44.670751516955605,
+    "mean_fd_finite_only": 44.951699639703754,
+    "median_fd": 0.7822276927657985,
+    "max_fd": 986.9338604704544,
+    "frames_fd_gt_1": 78,
+    "frames_fd_gt_10": 43,
+    "frames_fd_gt_100": 17,
+    "power_50mm_reconstruction_max_abs_error": 1.1368683772161603e-13,
+    "max_translation_step_each_axis": [
+      426.1122040703277,
+      413.3682250904326,
+      293.3613989141477
+    ],
+    "max_rotation_step_each_axis": [
+      2.4399411402003364,
+      0.827333580880867,
+      2.716805914981352
+    ],
+    "top_fd_frames_zero_based": [
+      150,
+      151,
+      122,
+      159,
+      123,
+      132,
+      129,
+      145,
+      126,
+      136
+    ],
+    "top_fd_values": [
+      986.9338604704544,
+      920.3439587117164,
+      888.2916338123459,
+      419.22249866738935,
+      401.9585344015575,
+      378.85147050282274,
+      263.2840077548643,
+      236.5123029557776,
+      229.67568229107496,
+      227.0514034297273
+    ],
+    "qc_from_current_extraction_code": {
+      "func_mean_fd": 44.670751516955605,
+      "func_fd_gt_0_2": 0.71875,
+      "func_fd_gt_0_5": 0.55625,
+      "func_dvars": 142.65376673584905,
+      "func_quality": 0.28125
+    },
+    "csv_dvars": 142.65377,
+    "csv_quality": 0.28125,
+    "fd_metadata": {
+      "Units": "mm"
+    },
+    "motion_metadata": {
+      "trans_x": {
+        "Description": "Translation along left-right axis.",
+        "Units": "mm"
+      },
+      "trans_y": {
+        "Description": "Translation along anterior-posterior axis.",
+        "Units": "mm"
+      },
+      "trans_z": {
+        "Description": "Translation along superior-inferior axis.",
+        "Units": "mm"
+      },
+      "rot_x": {
+        "Description": "Rotation about left-right axis. Also known as \"pitch\".",
+        "Units": "rad"
+      },
+      "rot_y": {
+        "Description": "Rotation about anterior-posterior axis. Also known as \"roll\".",
+        "Units": "rad"
+      },
+      "rot_z": {
+        "Description": "Rotation about superior-inferior axis. Also known as \"yaw\".",
+        "Units": "rad"
+      }
+    }
+  }
+]

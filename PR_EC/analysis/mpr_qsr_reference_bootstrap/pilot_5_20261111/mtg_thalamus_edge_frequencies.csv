@@ -1,0 +1,9 @@
+SourceIndex,TargetIndex,Source,Target,repeats,OriginalDirectionBothCohortsRate,BetweenCohortDirectionRate,ABIDE_I_FDRPassFrequency,ABIDE_II_FDRPassFrequency,BothCohortsFDRPassFrequency,ReplicationPassFrequency
+76,84,ROI_077,ROI_085,5,1.0,1.0,1.0,0.0,0.0,0.0
+76,85,ROI_077,ROI_086,5,1.0,1.0,1.0,0.0,0.0,0.0
+77,84,ROI_078,ROI_085,5,1.0,1.0,1.0,0.2,0.2,0.2
+77,85,ROI_078,ROI_086,5,1.0,1.0,1.0,0.0,0.0,0.0
+84,76,ROI_085,ROI_077,5,1.0,1.0,1.0,0.0,0.0,0.0
+84,77,ROI_085,ROI_078,5,1.0,1.0,1.0,0.0,0.0,0.0
+85,76,ROI_086,ROI_077,5,1.0,1.0,1.0,0.0,0.0,0.0
+85,77,ROI_086,ROI_078,5,1.0,1.0,1.0,0.0,0.0,0.0

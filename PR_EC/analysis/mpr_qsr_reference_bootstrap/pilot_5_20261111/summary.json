@@ -1,0 +1,129 @@
+{
+  "purpose": "Sensitivity of discovered connections to MPR training-reference subject selection and QSR retraining",
+  "interpretation_warning": "These five checks are a training-reference selection sensitivity analysis, not formal bootstrap confidence intervals accounting for all subject-sampling dependence.",
+  "repeats": 5,
+  "fixed_initial_ec": true,
+  "fixed_test_folds": true,
+  "n_splits": 10,
+  "original_edges_n": 213,
+  "mtg_thalamus_edges": [
+    [
+      76,
+      84
+    ],
+    [
+      76,
+      85
+    ],
+    [
+      77,
+      84
+    ],
+    [
+      77,
+      85
+    ],
+    [
+      84,
+      76
+    ],
+    [
+      84,
+      77
+    ],
+    [
+      85,
+      76
+    ],
+    [
+      85,
+      77
+    ]
+  ],
+  "replicates": [
+    {
+      "adjusted_replicated_n": 103,
+      "original_213_retained_n": 64,
+      "original_213_direction_consistent_n": 211,
+      "original_213_direction_consistency_rate": 0.9906103286384976,
+      "original_213_between_cohort_direction_rate": 0.9906103286384976,
+      "mtg_thalamus_edge_n": 8,
+      "mtg_thalamus_direction_consistent_n": 8,
+      "mtg_thalamus_direction_consistency_rate": 1.0,
+      "mtg_thalamus_significant_n": 1,
+      "mtg_thalamus_significance_pass_rate": 0.125,
+      "alpha": 0.05,
+      "repeat": 1
+    },
+    {
+      "adjusted_replicated_n": 96,
+      "original_213_retained_n": 60,
+      "original_213_direction_consistent_n": 212,
+      "original_213_direction_consistency_rate": 0.9953051643192489,
+      "original_213_between_cohort_direction_rate": 0.9953051643192489,
+      "mtg_thalamus_edge_n": 8,
+      "mtg_thalamus_direction_consistent_n": 8,
+      "mtg_thalamus_direction_consistency_rate": 1.0,
+      "mtg_thalamus_significant_n": 0,
+      "mtg_thalamus_significance_pass_rate": 0.0,
+      "alpha": 0.05,
+      "repeat": 2
+    },
+    {
+      "adjusted_replicated_n": 86,
+      "original_213_retained_n": 58,
+      "original_213_direction_consistent_n": 212,
+      "original_213_direction_consistency_rate": 0.9953051643192489,
+      "original_213_between_cohort_direction_rate": 0.9953051643192489,
+      "mtg_thalamus_edge_n": 8,
+      "mtg_thalamus_direction_consistent_n": 8,
+      "mtg_thalamus_direction_consistency_rate": 1.0,
+      "mtg_thalamus_significant_n": 0,
+      "mtg_thalamus_significance_pass_rate": 0.0,
+      "alpha": 0.05,
+      "repeat": 3
+    },
+    {
+      "adjusted_replicated_n": 86,
+      "original_213_retained_n": 58,
+      "original_213_direction_consistent_n": 212,
+      "original_213_direction_consistency_rate": 0.9953051643192489,
+      "original_213_between_cohort_direction_rate": 0.9953051643192489,
+      "mtg_thalamus_edge_n": 8,
+      "mtg_thalamus_direction_consistent_n": 8,
+      "mtg_thalamus_direction_consistency_rate": 1.0,
+      "mtg_thalamus_significant_n": 0,
+      "mtg_thalamus_significance_pass_rate": 0.0,
+      "alpha": 0.05,
+      "repeat": 4
+    },
+    {
+      "adjusted_replicated_n": 96,
+      "original_213_retained_n": 60,
+      "original_213_direction_consistent_n": 212,
+      "original_213_direction_consistency_rate": 0.9953051643192489,
+      "original_213_between_cohort_direction_rate": 0.9953051643192489,
+      "mtg_thalamus_edge_n": 8,
+      "mtg_thalamus_direction_consistent_n": 8,
+      "mtg_thalamus_direction_consistency_rate": 1.0,
+      "mtg_thalamus_significant_n": 0,
+      "mtg_thalamus_significance_pass_rate": 0.0,
+      "alpha": 0.05,
+      "repeat": 5
+    }
+  ],
+  "mean": {
+    "adjusted_replicated_n": 93.4,
+    "original_213_retained_n": 60.0,
+    "original_213_direction_consistency_rate": 0.9943661971830986,
+    "mtg_thalamus_direction_consistency_rate": 1.0,
+    "mtg_thalamus_significance_pass_rate": 0.025
+  },
+  "sd": {
+    "adjusted_replicated_n": 7.334848328356899,
+    "original_213_retained_n": 2.449489742783178,
+    "original_213_direction_consistency_rate": 0.002099594345070255,
+    "mtg_thalamus_direction_consistency_rate": 0.0,
+    "mtg_thalamus_significance_pass_rate": 0.055901699437494755
+  }
+}

@@ -1,0 +1,9 @@
+Scenario,Cohort,N,ASD_N,HC_N,ExcludedFromOriginalN,ExcludedIDs,SignificantEdges
+raw_fd,ABIDE-I,871,403,468,0,,602
+exclude_two_flagged,ABIDE-I,871,403,468,0,,602
+exclude_fd_gt_2,ABIDE-I,871,403,468,0,,602
+log1p_fd,ABIDE-I,871,403,468,0,,587
+raw_fd,ABIDE-II,975,462,513,0,,705
+exclude_two_flagged,ABIDE-II,973,460,513,2,sub-29887;sub-29888,299
+exclude_fd_gt_2,ABIDE-II,969,456,513,6,sub-28832;sub-29102;sub-29514;sub-29880;sub-29887;sub-29888,118
+log1p_fd,ABIDE-II,975,462,513,0,,285

@@ -1,0 +1,11 @@
+{
+  "Name": "ABIDE-II fMRIPrep retained derivatives",
+  "PipelineDescription": {
+    "Name": "fMRIPrep",
+    "Version": "25.2.5",
+    "Container": "Docker"
+  },
+  "OutputSpace": "MNI152NLin6Asym",
+  "TemplateOutputSpaces": ["MNI152NLin6Asym"],
+  "RetainedFiles": ["preproc_bold", "confounds_timeseries", "bold_json", "brain_mask"]
+}

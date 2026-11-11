@@ -1,0 +1,5 @@
+Scenario,ReplicatedN,OriginalRetainedN,OriginalSameDirectionN,OriginalPreservesDirectionN
+raw_fd,90,59,212,212
+exclude_two_flagged,50,46,213,213
+exclude_fd_gt_2,31,31,211,211
+log1p_fd,46,43,213,213
