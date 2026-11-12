@@ -21,12 +21,12 @@ def build_parser(include_network_options=True):
         parser.add_argument("--data-dir", type=Path, default=ROOT.parent / "MemoryEC/data/processed")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "outputs/initial_ec_oof_paper_relative")
     if include_network_options:
-        parser.add_argument("--network", "--networks", dest="networks", nargs="+", type=int, choices=[1, 2, 3, 4], default=[1], help="Network ID(s) to run; default: 1 only")
+        parser.add_argument("--network", "--networks", dest="networks", nargs="+", type=int, choices=[1, 2, 3, 4], default=[4], help="Network ID(s) to run; default: 1 only")
     parser.add_argument("--n-splits", type=int, default=5, help="OOF folds; training fraction is approximately (K-1)/K")
     parser.add_argument("--gpu-id", default="auto")
     parser.add_argument("--window-length", type=int, default=78)
     parser.add_argument("--stride", type=int, default=39)
-    parser.add_argument("--epochs", type=int, default=111)
+    parser.add_argument("--epochs", type=int, default=301) #111
     parser.add_argument("--stf-checkpoint", choices=["final", "best"], default="final")
     parser.add_argument("--loss-alpha", type=float, default=0.01)
     parser.add_argument("--batch-size", type=int, default=32)
