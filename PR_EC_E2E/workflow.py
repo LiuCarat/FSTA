@@ -213,9 +213,10 @@ def run_fold(args, fold, data, train_index, val_index, test_index, device):
         result[f"{name}_edge_abs_d_change"] = float(
             np.mean(np.abs(effect)) - np.mean(np.abs(original_effect))
         )
-        result[f"{name}_paired_auc_delta_mean"] = float(
-            result[name]["AUC"] - result["original"]["AUC"]
-        )
+        if "original" in result:
+            result[f"{name}_paired_auc_delta_mean"] = float(
+                result[name]["AUC"] - result["original"]["AUC"]
+            )
     return {
         "metrics": result,
         "test_pgr": test_pgr,

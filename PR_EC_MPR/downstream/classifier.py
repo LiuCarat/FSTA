@@ -23,7 +23,7 @@ def add_classifier_arguments(parser):
 def train_classifier(train_ec, train_labels, val_ec, val_labels,
                      test_ec, test_labels, device, seed,
                      max_epochs=80, patience=12, batch_size=32,
-                     learning_rate=1e-3):
+                     learning_rate=1e-3, return_predictions=False):
     """Use a stage-local seed and keep test labels out of model selection."""
     set_seed(seed)
     model = DirectedBrainNetCNN(nodes_num=train_ec.shape[-1], dropout=0.3).to(device)
@@ -65,4 +65,12 @@ def train_classifier(train_ec, train_labels, val_ec, val_labels,
             model(to_directed_channels(torch.from_numpy(test_ec)).float().to(device))
         ).cpu().numpy()
     threshold = select_youden_threshold(val_labels, validation_probabilities)
-    return classification_metrics(test_labels, test_probabilities, threshold), model
+    metrics = classification_metrics(test_labels, test_probabilities, threshold)
+    if return_predictions:
+        predictions = {
+            "validation_probabilities": validation_probabilities.astype("float32"),
+            "test_probabilities": test_probabilities.astype("float32"),
+            "threshold": float(threshold),
+        }
+        return metrics, model, predictions
+    return metrics, model

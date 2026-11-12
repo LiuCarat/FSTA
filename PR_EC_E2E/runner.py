@@ -1,6 +1,9 @@
 """Shared execution flow for the dataset-specific Graph-EC entry points."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 
 from PR_EC.data import load_pipeline_data
@@ -15,6 +18,18 @@ from PR_EC_E2E.workflow import run_cross_validation
 
 
 def run(args):
+    if args.qsr_eta == 0 and not args.qsr_disable_perturbation_restoration:
+        args.experiment_name = "w/o QC-guided Target Correction (η=0)"
+        default_output = args.profile.output_dir
+        if args.output_dir == default_output:
+            args.output_dir = default_output.parent.parent / "qsr-no-target-correction" / default_output.name
+        args.qsr_refined_ec_path = args.output_dir / "qsr_eta0_subject_ec.npz"
+        args.refined_ec_path = args.output_dir / "mpr_and_qsr_eta0_subject_ec.npz"
+        protected = (Path(__file__).resolve().parents[1] / "PR_EC/outputs", default_output)
+        if any(root.resolve() == args.output_dir.resolve() or root.resolve() in args.output_dir.resolve().parents
+               for root in protected):
+            raise ValueError("η=0 output must not overwrite Full PR-EC or w/o Restoration results")
+        print(f"Experiment: {args.experiment_name}; output={args.output_dir}")
     device = select_device(args.gpu_id)
     set_seed(args.seed)
     print(
@@ -31,6 +46,16 @@ def run(args):
 
     print("\n===== fold refinement + BrainNetCNN =====")
     experiment = run_cross_validation(args, data, device)
+    if getattr(args, "experiment_name", None) == "w/o QC-guided Target Correction (η=0)":
+        source = args.profile.ec_path.parent / "summary.json"
+        original = json.loads(source.read_text())
+        with np.load(args.profile.refined_ec_path) as archive:
+            if (not np.array_equal(data["subject_ids"], archive["subject_ids"])
+                    or not np.array_equal(data["labels"], archive["labels"])
+                    or not np.array_equal(experiment["fold_ids"], archive["fold_ids"])):
+                raise ValueError("Cannot pair AUC: subjects, labels or test folds differ from Full PR-EC")
+        for result, control in zip(experiment["fold_results"], original["folds"], strict=True):
+            result["full_minus_eta0_auc"] = control["qc_refined_AUC"] - result["qc_refined"]["AUC"]
     refined_path = qsr_refined_path = None
     if "refined" in args.representations and "qc_refined" in args.representations:
         refined_path = save_refined_ec_archive(
@@ -53,7 +78,12 @@ def run(args):
         "classification_protocol": "fold-local train/val/test representations; test-only OOF NPZ",
     }
     summary = save_results(args, experiment["fold_results"], training_summary)
-    print_summary_table(summary, title="fold-local mean±std (%)")
+    title = getattr(args, "experiment_name", "QSR-EC") + ": fold-local mean±std (%)"
+    print_summary_table(summary, title=title)
+    if "full_minus_eta0_auc_mean" in summary:
+        print(f"Paired ΔAUC (Full − η=0): "
+              f"{100 * summary['full_minus_eta0_auc_mean']:+.2f} ± "
+              f"{100 * summary['full_minus_eta0_auc_std']:.2f} percentage points")
     print(
         "\nQSR-EC configuration:\n"
         f"  QC columns: {', '.join(args.qsr_qc_columns)}\n"

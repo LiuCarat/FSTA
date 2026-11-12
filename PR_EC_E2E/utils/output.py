@@ -108,6 +108,10 @@ def save_results(args, fold_results, training_metrics):
             summary[f"{name}_{metric}_std"] = std
             summary[f"{name}_{metric}_display"] = f"{100 * mean:.2f}±{100 * std:.2f}"
     summary["representations"] = names
+    if all("full_minus_eta0_auc" in row for row in rows):
+        deltas = [row["full_minus_eta0_auc"] for row in rows]
+        summary["full_minus_eta0_auc_mean"] = float(np.mean(deltas))
+        summary["full_minus_eta0_auc_std"] = float(np.std(deltas, ddof=0))
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for path in args.output_dir.iterdir():
