@@ -37,12 +37,21 @@ class STMultiHeadAtt(nn.Module):
         self.slf_attn = SpatialMultiHeadAttention(
             n_head, d_model, d_k, d_v, dropout=dropout
         )
-    def forward(self, enc_input, slf_attn_mask=None):
+    def forward(self, enc_input, slf_attn_mask=None, fusion_mode="batch_mean",
+                return_batch_mean=False):
         # enc_input: [B, len1, len2, d_model]
         # temporal:[B, N, T, d_model], spatial:[B, T, N, d_model], len1、len2 correspond to T or N
         out, attn = self.slf_attn(enc_input, enc_input, enc_input, mask=slf_attn_mask) # [B, l1, l2, d_model], [B, l1, h, l2, l2]
-        attn = torch.mean(torch.mean(torch.mean(attn, dim=0), dim=0), dim=0)  # [B, l1, h, l2, l2]->[l2, l2]
-        return out, attn
+        batch_attention = torch.mean(torch.mean(torch.mean(attn, dim=0), dim=0), dim=0)
+        if fusion_mode == "batch_mean":
+            attention = batch_attention
+        elif fusion_mode == "subject_specific":
+            attention = attn.mean(dim=1).mean(dim=1)
+        else:
+            raise ValueError(f"Unknown STF fusion mode: {fusion_mode}")
+        if return_batch_mean:
+            return out, attention, batch_attention
+        return out, attention
 
 class PositionwiseFeedForward(nn.Module):
     ''' A two-feed-forward-layer module '''

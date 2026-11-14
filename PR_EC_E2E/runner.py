@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from PR_EC.data import load_pipeline_data
+from PR_EC_E2E.data import load_pipeline_data
 from PR_EC.utils import select_device, set_seed
 from PR_EC_E2E.utils.output import (
     print_summary_table,
@@ -18,6 +18,9 @@ from PR_EC_E2E.workflow import run_cross_validation
 
 
 def run(args):
+    if getattr(args, "w7_enabled", False):
+        from PR_EC_E2E.w7_runner import run_w7
+        return run_w7(args)
     if args.qsr_eta == 0 and not args.qsr_disable_perturbation_restoration:
         args.experiment_name = "w/o QC-guided Target Correction (η=0)"
         default_output = args.profile.output_dir

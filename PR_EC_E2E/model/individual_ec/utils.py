@@ -29,6 +29,8 @@ class STFWindowLoss(nn.Module):
         self.reconstruction = nn.MSELoss()
 
     def forward(self, reconstruction, attention, target):
+        if attention.ndim != 2:
+            raise ValueError("STF regularization must receive the original [N, N] batch-mean attention")
         prediction = self.reconstruction(reconstruction, target)
         if self.mode == "original":
             regularizer = attention.sum()
@@ -77,7 +79,13 @@ def extract_subject_ec(
                 .to(device)
             )
             reconstruction, attention = model(window)
-            attentions.append(attention.squeeze(0).cpu().numpy())
+            if attention.ndim == 3:
+                if attention.shape[0] != 1:
+                    raise ValueError("EC extraction must process one subject window at a time")
+                attention = attention[0]
+            if attention.shape != (series.shape[1], series.shape[1]):
+                raise ValueError("Window attention must be a square ROI matrix")
+            attentions.append(attention.cpu().numpy())
             errors.append(
                 float((reconstruction - window).pow(2).mean().item())
             )

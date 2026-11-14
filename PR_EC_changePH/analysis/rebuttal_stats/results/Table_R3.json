@@ -1,0 +1,128 @@
+{
+  "ABIDE-I": {
+    "status": "computed",
+    "source": "/storage/users/liulin/PythonCode/ST-MRI/FSTA/PR_EC/outputs/abide-i/experiment_summary.csv",
+    "comparisons": {
+      "mpr_minus_initial": {
+        "mean_delta_auc": -0.004093657634078629,
+        "mean_delta_percentage_points": -0.40936576340786285,
+        "sample_std_auc": 0.01510374724809242,
+        "sample_std_percentage_points": 1.510374724809242,
+        "ci95_low_percentage_points": -1.4898227534303927,
+        "ci95_high_percentage_points": 0.671091226614667,
+        "positive_folds": 5,
+        "nonnegative_folds": 6,
+        "n_folds": 10,
+        "ci_method": "two-sided paired t interval over 10 fold-level differences, df=9"
+      },
+      "qc_minus_mpr": {
+        "mean_delta_auc": 0.010672931567428545,
+        "mean_delta_percentage_points": 1.0672931567428545,
+        "sample_std_auc": 0.01641988867397242,
+        "sample_std_percentage_points": 1.641988867397242,
+        "ci95_low_percentage_points": -0.10731491910573529,
+        "ci95_high_percentage_points": 2.2419012325914442,
+        "positive_folds": 8,
+        "nonnegative_folds": 8,
+        "n_folds": 10,
+        "ci_method": "two-sided paired t interval over 10 fold-level differences, df=9"
+      },
+      "qc_minus_initial": {
+        "mean_delta_auc": 0.0065792739333499165,
+        "mean_delta_percentage_points": 0.6579273933349916,
+        "sample_std_auc": 0.016897070188241138,
+        "sample_std_percentage_points": 1.689707018824114,
+        "ci95_low_percentage_points": -0.5508161916778082,
+        "ci95_high_percentage_points": 1.8666709783477915,
+        "positive_folds": 4,
+        "nonnegative_folds": 8,
+        "n_folds": 10,
+        "ci_method": "two-sided paired t interval over 10 fold-level differences, df=9"
+      }
+    }
+  },
+  "ABIDE-II": {
+    "status": "computed",
+    "source": "/storage/users/liulin/PythonCode/ST-MRI/FSTA/PR_EC/outputs/abide-ii/experiment_summary.csv",
+    "comparisons": {
+      "mpr_minus_initial": {
+        "mean_delta_auc": -0.01140597988288029,
+        "mean_delta_percentage_points": -1.140597988288029,
+        "sample_std_auc": 0.02100279518344683,
+        "sample_std_percentage_points": 2.1002795183446827,
+        "ci95_low_percentage_points": -2.643047446241762,
+        "ci95_high_percentage_points": 0.36185146966570425,
+        "positive_folds": 3,
+        "nonnegative_folds": 4,
+        "n_folds": 10,
+        "ci_method": "two-sided paired t interval over 10 fold-level differences, df=9"
+      },
+      "qc_minus_mpr": {
+        "mean_delta_auc": 0.014449622088926584,
+        "mean_delta_percentage_points": 1.4449622088926584,
+        "sample_std_auc": 0.019375905018826637,
+        "sample_std_percentage_points": 1.9375905018826638,
+        "ci95_low_percentage_points": 0.05889346239348128,
+        "ci95_high_percentage_points": 2.8310309553918356,
+        "positive_folds": 7,
+        "nonnegative_folds": 8,
+        "n_folds": 10,
+        "ci_method": "two-sided paired t interval over 10 fold-level differences, df=9"
+      },
+      "qc_minus_initial": {
+        "mean_delta_auc": 0.003043642206046293,
+        "mean_delta_percentage_points": 0.3043642206046293,
+        "sample_std_auc": 0.006504276863847238,
+        "sample_std_percentage_points": 0.6504276863847238,
+        "ci95_low_percentage_points": -0.16092371669670116,
+        "ci95_high_percentage_points": 0.7696521579059598,
+        "positive_folds": 2,
+        "nonnegative_folds": 10,
+        "n_folds": 10,
+        "ci_method": "two-sided paired t interval over 10 fold-level differences, df=9"
+      }
+    }
+  },
+  "ADHD200": {
+    "status": "computed",
+    "source": "/storage/users/liulin/PythonCode/ST-MRI/FSTA/PR_EC/outputs/adhd200/experiment_summary.csv",
+    "comparisons": {
+      "mpr_minus_initial": {
+        "mean_delta_auc": 0.0018837535014005423,
+        "mean_delta_percentage_points": 0.18837535014005424,
+        "sample_std_auc": 0.012163865770193415,
+        "sample_std_percentage_points": 1.2163865770193416,
+        "ci95_low_percentage_points": -0.6817751880822496,
+        "ci95_high_percentage_points": 1.058525888362358,
+        "positive_folds": 5,
+        "nonnegative_folds": 5,
+        "n_folds": 10,
+        "ci_method": "two-sided paired t interval over 10 fold-level differences, df=9"
+      },
+      "qc_minus_mpr": {
+        "mean_delta_auc": 0.00341036414565824,
+        "mean_delta_percentage_points": 0.341036414565824,
+        "sample_std_auc": 0.011040338379449788,
+        "sample_std_percentage_points": 1.1040338379449788,
+        "ci95_low_percentage_points": -0.4487418158529283,
+        "ci95_high_percentage_points": 1.1308146449845764,
+        "positive_folds": 7,
+        "nonnegative_folds": 7,
+        "n_folds": 10,
+        "ci_method": "two-sided paired t interval over 10 fold-level differences, df=9"
+      },
+      "qc_minus_initial": {
+        "mean_delta_auc": 0.0052941176470587825,
+        "mean_delta_percentage_points": 0.5294117647058783,
+        "sample_std_auc": 0.015293216975380145,
+        "sample_std_percentage_points": 1.5293216975380144,
+        "ci95_low_percentage_points": -0.5645990731057516,
+        "ci95_high_percentage_points": 1.6234226025175083,
+        "positive_folds": 4,
+        "nonnegative_folds": 6,
+        "n_folds": 10,
+        "ci_method": "two-sided paired t interval over 10 fold-level differences, df=9"
+      }
+    }
+  }
+}

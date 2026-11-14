@@ -114,13 +114,6 @@ def save_results(args, fold_results, training_metrics):
         summary["full_minus_eta0_auc_std"] = float(np.std(deltas, ddof=0))
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    for path in args.output_dir.iterdir():
-        if (
-            path.is_file()
-            and path.suffix != ".npz"
-            and path.name not in {"experiment_summary.csv", "summary.json"}
-        ):
-            path.unlink()
     with (args.output_dir / "experiment_summary.csv").open(
         "w", newline="", encoding="utf-8"
     ) as handle:

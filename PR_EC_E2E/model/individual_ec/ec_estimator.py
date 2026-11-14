@@ -8,6 +8,7 @@ import numpy as np
 
 from .training import train_stf_ec
 from .utils import extract_subject_ec
+from PR_EC_E2E.w7 import initial_ec_metadata
 
 
 def generate_subject_ec(args, subjects, device):
@@ -33,6 +34,8 @@ def generate_subject_ec(args, subjects, device):
         "subject_ids": subjects["subject_ids"],
         "site_ids": subjects["site_ids"],
         "reconstruction_mse": extracted["reconstruction_mse"],
+        **initial_ec_metadata(args, training_metrics),
+        **({"roi_names": subjects["roi_names"]} if "roi_names" in subjects else {}),
     }, training_metrics
 
 
@@ -47,4 +50,7 @@ def save_subject_ec(path, data):
         subject_ids=data["subject_ids"],
         site_ids=data["site_ids"],
         reconstruction_mse=data["reconstruction_mse"],
+        **{key: data[key] for key in (
+            "roi_names", "stf_fusion_mode", "stf_config_json", "stf_training_metrics_json", "pretraining_protocol",
+        ) if key in data},
     )

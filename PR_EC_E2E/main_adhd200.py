@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
 
 from PR_EC.dataset_configs import ExperimentProfile
 from PR_EC_E2E.downstream import add_classifier_arguments
+from PR_EC_E2E.w7 import add_w7_arguments, finalize_w7_arguments
 QC_COLUMNS = ("func_mean_fd", "func_dvars", "func_quality")
 
 DATASET_CONFIG = ExperimentProfile(
@@ -112,6 +113,7 @@ def parse_args():
 
     add_classifier_arguments(parser)
     add_stf_arguments(parser)
+    add_w7_arguments(parser)
     args = parser.parse_args()
     args.dataset, args.profile = DATASET_CONFIG.name, DATASET_CONFIG
     if args.patient_label == args.control_label:
@@ -121,7 +123,7 @@ def parse_args():
         parser.error("Strict fold-local refinement supports one seed per run")
     if args.seeds:
         args.seed = args.seeds[0]
-    return args
+    return finalize_w7_arguments(parser, args)
 
 
 if __name__ == "__main__":

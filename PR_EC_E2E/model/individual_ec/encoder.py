@@ -12,6 +12,9 @@ from .spectral_block import FourierAtt
 class STFEncoder(nn.Module):
     def __init__(self, opt, time_num, d_model, d_inner, n_head, d_k, d_v, dropout=0.1):
         super().__init__()
+        self.stf_fusion_mode = getattr(opt, "stf_fusion_mode", "batch_mean")
+        if self.stf_fusion_mode not in ("batch_mean", "subject_specific"):
+            raise ValueError(f"Unknown STF fusion mode: {self.stf_fusion_mode}")
         self.FA = FourierAtt(opt)
         self.conv1 = nn.Conv2d(1, d_model, kernel_size=1)
         self.position_enc = PositionalEncoding(d_hid=d_model, n_position=time_num)
@@ -39,16 +42,27 @@ class STFEncoder(nn.Module):
 
     def _decode_with_spatial_attention(self, spatial_features, temporal_features, spatial_attention):
         temporal_features = temporal_features.transpose(2, 3)
+        if spatial_attention.ndim == 3:
+            if spatial_attention.shape != (temporal_features.shape[0], temporal_features.shape[-1], temporal_features.shape[-1]):
+                raise ValueError("Subject attention must be [B, N, N]")
+            spatial_attention = spatial_attention.unsqueeze(1)
+        elif spatial_attention.ndim != 2:
+            raise ValueError("Spatial attention must be [N, N] or [B, N, N]")
         fused = torch.matmul(temporal_features, spatial_attention)
         fused = fused.transpose(2, 3)
         fused = self.pos_ffn(fused + spatial_features)
         output = self.conv2(fused.permute(0, 3, 1, 2)).squeeze(1)
         return output
 
-    def forward(self, inputs, slf_attn_mask=None):
+    def forward(self, inputs, slf_attn_mask=None, return_batch_mean=False):
         spatial_features, temporal_features = self._encode(inputs, slf_attn_mask)
-        _, spatial_attention = self.slf_attn(spatial_features, slf_attn_mask)
+        _, spatial_attention, batch_attention = self.slf_attn(
+            spatial_features, slf_attn_mask, fusion_mode=self.stf_fusion_mode,
+            return_batch_mean=True,
+        )
         reconstruction = self._decode_with_spatial_attention(
             spatial_features, temporal_features, spatial_attention
         )
+        if return_batch_mean:
+            return reconstruction, spatial_attention, batch_attention
         return reconstruction, spatial_attention

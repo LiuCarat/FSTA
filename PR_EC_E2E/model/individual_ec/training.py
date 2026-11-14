@@ -36,8 +36,8 @@ def train_stf_ec(args, time_series, device, window_ranges=None):
         dataset.set_epoch(epoch); model.train(); values = []
         for windows in loader:
             windows = windows.to(device); optimizer.zero_grad()
-            reconstruction, attention = model(windows)
-            total, prediction, regularizer = criterion(reconstruction, attention, windows)
+            reconstruction, _, batch_attention = model(windows, return_batch_mean=True)
+            total, prediction, regularizer = criterion(reconstruction, batch_attention, windows)
             total.backward(); optimizer.step_and_update_lr()
             values.append((total.item(), prediction.item(), regularizer.item()))
         mean_values = np.mean(values, axis=0)

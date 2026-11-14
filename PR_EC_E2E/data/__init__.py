@@ -1,7 +1,11 @@
 """Dataset loading and experiment-input assembly for Graph-EC."""
 from __future__ import annotations
 
+import json
+
 import numpy as np
+
+from PR_EC_E2E.w7 import validate_initial_ec_mode, validate_reference_subjects
 
 from PR_EC.data.abide import (
     ABIDERecord,
@@ -99,7 +103,7 @@ def load_subject_dataset(
 
 def load_pipeline_data(args, device):
     """Load or generate EC matrices and attach graph/QC covariates."""
-    from PR_EC.model.individual_ec import generate_subject_ec, save_subject_ec
+    from PR_EC_E2E.model.individual_ec import generate_subject_ec, save_subject_ec
 
     stf_metrics = None
     subjects = None
@@ -115,6 +119,8 @@ def load_pipeline_data(args, device):
             patient_label=args.patient_label,
             control_label=args.control_label,
         )
+        if getattr(args, "w7_enabled", False):
+            validate_reference_subjects(args, subjects)
         print(f"Training STF-EC from {len(subjects['records'])} subject time series...")
         data, stf_metrics = generate_subject_ec(args, subjects, device)
         _report_existing_archive_difference(args.ec_path, data)
@@ -124,6 +130,9 @@ def load_pipeline_data(args, device):
         data = limit_archive_subjects(
             load_ec_archive(args.ec_path), FIXED_DATA_CONFIG["max_subjects"]
         )
+        validate_initial_ec_mode(args, data)
+        if "stf_training_metrics_json" in data:
+            stf_metrics = json.loads(str(np.asarray(data["stf_training_metrics_json"]).item()))
 
     if args.profile.name == "abide":
         data["labels"] = _labels_from_abide_phenotype(
@@ -131,6 +140,12 @@ def load_pipeline_data(args, device):
             data["subject_ids"],
             args.profile,
         )
+
+    if getattr(args, "w7_enabled", False):
+        validate_initial_ec_mode(args, data)
+        validate_reference_subjects(args, data)
+        if args.w7_stage == "pretrain":
+            return data, stf_metrics
 
     if args.graph_mode == "fusion":
         data["fmri_features"] = subject_fc_features(

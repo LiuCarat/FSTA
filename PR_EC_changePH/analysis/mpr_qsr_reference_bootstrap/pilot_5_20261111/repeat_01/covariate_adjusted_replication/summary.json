@@ -1,0 +1,234 @@
+{
+  "formula": "EC_edge ~ ASD + Age + Sex + C(Site) + Mean_FD",
+  "alpha": 0.05,
+  "adjusted_replicated_n": 103,
+  "cohorts": {
+    "ABIDE-I": {
+      "formula": "EC_edge ~ ASD + Age + Sex + C(Site) + Mean_FD",
+      "design_columns": [
+        "Intercept",
+        "ASD",
+        "Age",
+        "Sex",
+        "Mean_FD",
+        "C(Site)[T.CMU]",
+        "C(Site)[T.KKI]",
+        "C(Site)[T.LEUVEN_1]",
+        "C(Site)[T.LEUVEN_2]",
+        "C(Site)[T.MAX_MUN]",
+        "C(Site)[T.NYU]",
+        "C(Site)[T.OHSU]",
+        "C(Site)[T.OLIN]",
+        "C(Site)[T.PITT]",
+        "C(Site)[T.SBL]",
+        "C(Site)[T.SDSU]",
+        "C(Site)[T.STANFORD]",
+        "C(Site)[T.TRINITY]",
+        "C(Site)[T.UCLA_1]",
+        "C(Site)[T.UCLA_2]",
+        "C(Site)[T.UM_1]",
+        "C(Site)[T.UM_2]",
+        "C(Site)[T.USM]",
+        "C(Site)[T.YALE]"
+      ],
+      "site_reference": "CALTECH",
+      "site_counts": {
+        "CMU": 11,
+        "CALTECH": 15,
+        "KKI": 33,
+        "LEUVEN_1": 28,
+        "LEUVEN_2": 28,
+        "MAX_MUN": 46,
+        "NYU": 172,
+        "OHSU": 25,
+        "OLIN": 28,
+        "PITT": 50,
+        "SBL": 26,
+        "SDSU": 27,
+        "STANFORD": 25,
+        "TRINITY": 44,
+        "UCLA_1": 64,
+        "UCLA_2": 21,
+        "UM_1": 86,
+        "UM_2": 34,
+        "USM": 67,
+        "YALE": 41
+      },
+      "design_rank": 24,
+      "design_condition_number": 663.9782944432174,
+      "residual_df": 847,
+      "tested_edges": 8010,
+      "single_edge_lstsq_verification": [
+        {
+          "SourceIndex": 0,
+          "TargetIndex": 1,
+          "BetaAbsError": 7.37257477290143e-18,
+          "PAbsError": 5.484501741648273e-14
+        },
+        {
+          "SourceIndex": 11,
+          "TargetIndex": 23,
+          "BetaAbsError": 4.797594613248357e-18,
+          "PAbsError": 1.2129186544029835e-14
+        },
+        {
+          "SourceIndex": 22,
+          "TargetIndex": 45,
+          "BetaAbsError": 7.054090384733813e-18,
+          "PAbsError": 7.882583474838611e-14
+        },
+        {
+          "SourceIndex": 33,
+          "TargetIndex": 67,
+          "BetaAbsError": 7.399679827213568e-18,
+          "PAbsError": 1.404432126150823e-14
+        },
+        {
+          "SourceIndex": 44,
+          "TargetIndex": 89,
+          "BetaAbsError": 6.640738306473715e-18,
+          "PAbsError": 3.2851325826310784e-17
+        },
+        {
+          "SourceIndex": 56,
+          "TargetIndex": 21,
+          "BetaAbsError": 5.502326025363935e-18,
+          "PAbsError": 4.447830992404533e-15
+        },
+        {
+          "SourceIndex": 67,
+          "TargetIndex": 43,
+          "BetaAbsError": 7.555533889508359e-18,
+          "PAbsError": 8.837375276016246e-14
+        },
+        {
+          "SourceIndex": 78,
+          "TargetIndex": 65,
+          "BetaAbsError": 6.491660507756958e-18,
+          "PAbsError": 6.583622536027178e-14
+        },
+        {
+          "SourceIndex": 89,
+          "TargetIndex": 88,
+          "BetaAbsError": 7.426784881525705e-18,
+          "PAbsError": 1.0269562977782698e-14
+        }
+      ],
+      "archive_sha256": "362a8bdd9acec65adc72be032eb6e69b2322b23fc6611dcedd1e36b7d3bef02e",
+      "phenotype_sha256": "b5127c7a6781f785334aa0cffa0698e8a5b0dfa47442abb9b8ebd8892f1b2fd4",
+      "included_n": 871,
+      "excluded_n": 0,
+      "significant_edges": 602
+    },
+    "ABIDE-II": {
+      "formula": "EC_edge ~ ASD + Age + Sex + C(Site) + Mean_FD",
+      "design_columns": [
+        "Intercept",
+        "ASD",
+        "Age",
+        "Sex",
+        "Mean_FD",
+        "C(Site)[T.EMC_1]",
+        "C(Site)[T.GU_1]",
+        "C(Site)[T.IP_1]",
+        "C(Site)[T.IU_1]",
+        "C(Site)[T.KKI_1]",
+        "C(Site)[T.KUL_3]",
+        "C(Site)[T.NYU_1]",
+        "C(Site)[T.NYU_2]",
+        "C(Site)[T.OHSU_1]",
+        "C(Site)[T.ONRC_2]",
+        "C(Site)[T.SDSU_1]",
+        "C(Site)[T.TCD_1]",
+        "C(Site)[T.UCD_1]",
+        "C(Site)[T.UCLA_1]",
+        "C(Site)[T.USM_1]"
+      ],
+      "site_reference": "BNI_1",
+      "site_counts": {
+        "ONRC_2": 59,
+        "GU_1": 75,
+        "SDSU_1": 58,
+        "OHSU_1": 93,
+        "BNI_1": 58,
+        "TCD_1": 42,
+        "NYU_2": 27,
+        "NYU_1": 78,
+        "KKI_1": 211,
+        "USM_1": 33,
+        "IU_1": 40,
+        "IP_1": 55,
+        "KUL_3": 28,
+        "UCLA_1": 32,
+        "EMC_1": 54,
+        "UCD_1": 32
+      },
+      "design_rank": 20,
+      "design_condition_number": 446.86306804422156,
+      "residual_df": 955,
+      "tested_edges": 8010,
+      "single_edge_lstsq_verification": [
+        {
+          "SourceIndex": 0,
+          "TargetIndex": 1,
+          "BetaAbsError": 6.423897871976614e-18,
+          "PAbsError": 9.2148511043888e-15
+        },
+        {
+          "SourceIndex": 11,
+          "TargetIndex": 23,
+          "BetaAbsError": 4.445228907190568e-18,
+          "PAbsError": 6.433215234396411e-19
+        },
+        {
+          "SourceIndex": 22,
+          "TargetIndex": 45,
+          "BetaAbsError": 1.6263032587282567e-18,
+          "PAbsError": 3.344546861683284e-15
+        },
+        {
+          "SourceIndex": 33,
+          "TargetIndex": 67,
+          "BetaAbsError": 4.174178364069192e-18,
+          "PAbsError": 7.605027718682322e-15
+        },
+        {
+          "SourceIndex": 44,
+          "TargetIndex": 89,
+          "BetaAbsError": 3.584643432780199e-18,
+          "PAbsError": 2.6201263381153694e-14
+        },
+        {
+          "SourceIndex": 56,
+          "TargetIndex": 21,
+          "BetaAbsError": 1.6940658945086007e-18,
+          "PAbsError": 1.1657341758564144e-14
+        },
+        {
+          "SourceIndex": 67,
+          "TargetIndex": 43,
+          "BetaAbsError": 1.7076184216646695e-18,
+          "PAbsError": 1.5681900222830336e-15
+        },
+        {
+          "SourceIndex": 78,
+          "TargetIndex": 65,
+          "BetaAbsError": 1.9244588561617704e-18,
+          "PAbsError": 9.936496070395151e-15
+        },
+        {
+          "SourceIndex": 89,
+          "TargetIndex": 88,
+          "BetaAbsError": 4.87890977618477e-19,
+          "PAbsError": 2.886579864025407e-15
+        }
+      ],
+      "archive_sha256": "ad38cbc8db58041b6f8fd00325aeb76ab155f5ecea0acc0262c024a32b8a8fd1",
+      "phenotype_sha256": "61af88949e96e971d516d725866e34942513932e4ed2f08a3c6fad88969302f9",
+      "included_n": 975,
+      "excluded_n": 0,
+      "significant_edges": 835
+    }
+  },
+  "original_edges_sha256": "e2f95559300fb0c92ea4ed4ee70d14b7023713a8a2984e72faaa1b082fcac68c"
+}
