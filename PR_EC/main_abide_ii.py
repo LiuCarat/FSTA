@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
 
 from PR_EC.dataset_configs import ExperimentProfile
 from PR_EC.downstream import add_classifier_arguments
+from PR_EC.multi_seed import add_multi_seed_arguments, validate_multi_seed_arguments
 
 DATASET_CONFIG = ExperimentProfile(
     name="abide_ii",
@@ -40,6 +41,9 @@ def add_stf_arguments(parser):
     group.add_argument("--stride", type=int, default=40) #40
     group.add_argument("--epochs", type=int, default=81)
     group.add_argument("--stf-checkpoint", choices=["final", "best"], default='final')
+    group.add_argument("--initial-ec-checkpoint-path", type=Path)
+    group.add_argument("--initial-ec-config-path", type=Path)
+    group.add_argument("--initial-ec-complete-path", type=Path)
     group.add_argument("--loss-alpha", type=float, default=0.01)
     group.add_argument("--batch-size", type=int, default=32)
     group.add_argument("--log-every", type=int, default=10)
@@ -77,6 +81,7 @@ def parse_args():
     parser.add_argument("--validation-size", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--seeds", type=int, nargs="+")
+    add_multi_seed_arguments(parser)
     parser.add_argument("--gpu-id", default='auto')
 
     parser.add_argument("--reference-k", type=int, default=20)
@@ -115,11 +120,7 @@ def parse_args():
     if args.patient_label == args.control_label:
         parser.error("--patient-label and --control-label must be different")
     args.asd_label, args.tc_label = args.patient_label, args.control_label
-    if args.seeds is not None and len(args.seeds) > 1:
-        parser.error("Strict fold-local refinement supports one seed per run")
-    if args.seeds:
-        args.seed = args.seeds[0]
-    return args
+    return validate_multi_seed_arguments(parser, args)
 
 
 if __name__ == "__main__":

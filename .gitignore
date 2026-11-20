@@ -26,6 +26,7 @@ PR-EC/outputs/
 *.npy
 *.npz
 *.part
+PR_EC/rebuttal.zip
 
 # IDE
 .vscode/

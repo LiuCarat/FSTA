@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from .training import train_stf_ec
 from .utils import extract_subject_ec
@@ -18,6 +20,30 @@ def generate_subject_ec(args, subjects, device):
         device,
         subjects.get("window_ranges"),
     )
+    checkpoint_path = getattr(args, "initial_ec_checkpoint_path", None)
+    if checkpoint_path is not None:
+        checkpoint_path = Path(checkpoint_path)
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                "model_state_dict": {
+                    key: value.detach().cpu() for key, value in model.state_dict().items()
+                },
+                "seed": int(args.seed),
+                "epochs": int(args.epochs),
+                "checkpoint_selection": str(args.stf_checkpoint),
+                "training_metrics": training_metrics,
+            },
+            checkpoint_path,
+        )
+    config_path = getattr(args, "initial_ec_config_path", None)
+    if config_path is not None:
+        config_path = Path(config_path)
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            json.dumps(vars(args), indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
     extracted = extract_subject_ec(
         model,
         subjects["records"],

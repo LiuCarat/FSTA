@@ -1,6 +1,9 @@
 """Dataset loading and experiment-input assembly for Graph-EC."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 
 from PR_EC.data.abide import (
@@ -120,6 +123,26 @@ def load_pipeline_data(args, device):
         _report_existing_archive_difference(args.ec_path, data)
         save_subject_ec(args.ec_path, data)
         print(f"Saved STF-EC archive: {args.ec_path.resolve()}")
+        complete_path = getattr(args, "initial_ec_complete_path", None)
+        if complete_path is not None:
+            complete_path = Path(complete_path)
+            complete_path.parent.mkdir(parents=True, exist_ok=True)
+            complete_path.write_text(
+                json.dumps(
+                    {
+                        "stage": "initial_ec",
+                        "status": "complete",
+                        "seed": int(args.seed),
+                        "epochs": int(args.epochs),
+                        "checkpoint_selection": str(args.stf_checkpoint),
+                        "ec_path": str(Path(args.ec_path).resolve()),
+                        "checkpoint_path": str(Path(args.initial_ec_checkpoint_path).resolve())
+                        if getattr(args, "initial_ec_checkpoint_path", None) else None,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
     else:
         data = limit_archive_subjects(
             load_ec_archive(args.ec_path), FIXED_DATA_CONFIG["max_subjects"]

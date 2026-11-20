@@ -14,7 +14,7 @@ from PR_EC.utils.output import (
 from PR_EC.workflow import run_cross_validation
 
 
-def run(args):
+def run_single(args):
     device = select_device(args.gpu_id)
     set_seed(args.seed)
     print(
@@ -62,3 +62,11 @@ def run(args):
         f"  Pseudo-target: eta={args.qsr_eta:g}; r_max={args.qsr_r_max:g}\n"
         f"  Synthetic perturbation: scale={args.qsr_perturbation_scale:g}"
     )
+    return summary
+
+
+def run(args):
+    if args.seeds is not None and len(args.seeds) > 1:
+        from PR_EC.multi_seed import run_multi_seed
+        return run_multi_seed(args, run_single)
+    return run_single(args)

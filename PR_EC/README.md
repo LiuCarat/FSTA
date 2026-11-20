@@ -154,3 +154,93 @@ PR_EC/
 - 运行前请安装项目所需的 Python 依赖，并确保 PyTorch 可以正常使用目标设备。
 - 三个数据集的表型文件格式、字段名、默认路径和默认超参数已分别写入对应 `main_*.py`；更换数据位置时优先使用命令行参数覆盖。
 - 结果解释应同时报告 Original、Refined 和 QC-refined EC，避免只比较单一表示。
+# Multi-seed protocols
+
+The dataset entry points support two explicitly separated multi-seed protocols.
+Single-seed commands and defaults are unchanged.
+
+- `--multi-seed-mode reuse_ec --input-mode ec`: reuse the same cached Initial EC
+  archive for every seed and vary the stratified ten-fold split, MPR, QSR, and
+  classifier randomness.
+- `--multi-seed-mode end_to_end --input-mode raw`: independently train and
+  extract Initial EC for every seed, then run that seed's complete ten-fold
+  downstream pipeline.
+
+For each seed, the console reports the ten-fold ACC, AUC, SEN, PRE, and F1 as
+mean ± population standard deviation (`ddof=0`, matching the existing fold
+summary). After all seeds finish, the console reports all five metrics as the
+mean and **sample standard deviation** (`ddof=1`) across the seed-level ten-fold
+means. Results are isolated under
+`<output-dir>/multi_seed/<mode>/seeds_<...>/seed_<seed>/`, with aggregate files
+`seed_summaries.csv`, `cross_seed_summary.csv`, and `multi_seed_summary.json`.
+
+Seed 42 is mandatory. If `--seeds` omits it, the entry points automatically add
+42. Its already completed results are read from
+`PR_EC/outputs/seed42/<dataset>/summary.json` and included in the final
+aggregation without rerunning Initial EC training or the ten-fold pipeline.
+Only the non-42 seeds are executed. Use `--seed42-results-dir` to override the
+existing seed42 result directory. The saved seed42 configuration is checked
+against the requested experiment before reuse.
+
+Example using one existing Initial EC for three downstream seeds:
+
+```bash
+python PR_EC/main_abide_i.py --input-mode ec \
+  --ec-path PR_EC/outputs/seed42/abide-i/abide_subject_ec.npz \
+  --seeds 43 44 --multi-seed-mode reuse_ec
+```
+
+Example using three independent end-to-end seeds:
+
+```bash
+python PR_EC/main_abide_i.py --input-mode raw \
+  --seeds 43 44 --multi-seed-mode end_to_end
+```
+
+## Full end-to-end 12-seed rebuttal runner
+
+`PR_EC/run_full_multiseed.py` is the W3/W4/Q2 full end-to-end runner. Unlike the
+lighter `--multi-seed-mode reuse_ec` workflow, it never imports seed42 results
+and never shares Initial EC between seeds. Every dataset/seed job starts with
+`--input-mode raw`, uses the seed for Initial EC pretraining and the ten-fold
+pipeline, and writes to an isolated directory under
+`PR_EC/outputs/rebuttal_w3_w4_q2/<dataset>/seed_<seed>/`.
+
+Default seeds are `0 1 2 3 7 10 21 42 123 3407 2023 2024`. During execution,
+seed-specific Initial and refined EC NPZ files are temporary artifacts used for
+stage recovery. After a job passes full validation, the runner deletes every
+`.npz` below that seed directory. The completed result keeps the Initial EC
+checkpoint/config, fold and seed metric CSVs, logs, manifests, status and
+completion markers. Re-running the identical command skips fully validated jobs. If Initial
+EC completed but the downstream job failed, it resumes from the seed-specific
+Initial EC; it does not train Initial EC again. A configuration mismatch fails
+instead of mixing outputs.
+
+Sequential execution:
+
+```bash
+python PR_EC/run_full_multiseed.py --execution-mode sequential --gpus auto
+```
+
+One concurrent task per selected GPU:
+
+```bash
+python PR_EC/run_full_multiseed.py \
+  --execution-mode parallel --gpus 0 1 2 3 --max-parallel 4
+```
+
+Custom datasets/seeds and CPU dry-run:
+
+```bash
+python PR_EC/run_full_multiseed.py \
+  --datasets abide-i abide-ii adhd200 --seeds 0 1 42 \
+  --execution-mode sequential --gpus cpu --dry-run
+```
+
+When all requested jobs validate, root-level outputs include
+`full_pr_ec_seed_metrics.csv`, `cross_seed_summary.csv`,
+`seed_rankings_by_dataset.csv`, `seed_ranking_overall.csv`, and
+`top3_seeds_exploratory.csv`. The cross-seed standard deviation uses `ddof=1`;
+the per-seed ten-fold standard deviation uses the existing `ddof=0`. Rankings
+use Full PR-EC (`qc_refined`) only. The top-three file is explicitly exploratory
+and does not replace the formal statistics over all pre-specified seeds.
