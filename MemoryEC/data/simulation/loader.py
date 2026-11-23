@@ -1,4 +1,4 @@
-"""Utilities for loading preprocessed Sanchez-Romero scenes."""
+"""Utilities for loading preprocessed Sanchez-Romero simulation scenes."""
 
 from __future__ import annotations
 
@@ -12,8 +12,9 @@ import numpy as np
 
 
 DATA_DIR = Path(__file__).resolve().parent
-PROCESSED_DIR = DATA_DIR / "processed"
-SPLITS_PATH = DATA_DIR / "splits.json"
+SIMULATION_DIR = DATA_DIR / "simulation"
+PROCESSED_DIR = SIMULATION_DIR / "processed"
+SPLITS_PATH = SIMULATION_DIR / "splits.json"
 
 
 def load_scene(

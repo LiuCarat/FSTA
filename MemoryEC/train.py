@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from data.loader import make_dataloader
+from MemoryEC.data.simulation.loader import make_dataloader
 from model.memory_ec import MemoryEC
 from utils import (
     count_parameters,
@@ -22,7 +22,7 @@ from utils import (
 
 
 ROOT = Path(__file__).resolve().parent
-OUTPUT_DIR = ROOT / "outputs"
+OUTPUT_DIR = ROOT / "outputs" / "simulation"
 
 
 def resolve_device(requested: str) -> torch.device:

@@ -51,6 +51,7 @@ dataset/ADHD200/*
 dataset/SanchezRomero2019_SimpleNetworks
 dataset/atlas
 dataset/NetSim
+dataset/MTLnet
 
 # Download and pipeline temporary files
 *.download

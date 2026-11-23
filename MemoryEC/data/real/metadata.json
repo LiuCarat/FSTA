@@ -1,0 +1,43 @@
+{
+  "dataset": "MTLnet",
+  "hemispheres": [
+    {
+      "side": "left",
+      "subjects": 24,
+      "timepoint_lengths": [
+        303,
+        420
+      ],
+      "roi_names": [
+        "CA1",
+        "CA2",
+        "DG",
+        "CA3",
+        "SUB",
+        "ERC",
+        "PHC"
+      ],
+      "ground_truth_edges": 17,
+      "output": "/storage/users/liulin/PythonCode/ST-MRI/FSTA/MemoryEC/data/real/MTLnet/processed/left.npz"
+    },
+    {
+      "side": "right",
+      "subjects": 24,
+      "timepoint_lengths": [
+        303,
+        420
+      ],
+      "roi_names": [
+        "CA1",
+        "CA2",
+        "DG",
+        "CA3",
+        "SUB",
+        "ERC",
+        "PHC"
+      ],
+      "ground_truth_edges": 17,
+      "output": "/storage/users/liulin/PythonCode/ST-MRI/FSTA/MemoryEC/data/real/MTLnet/processed/right.npz"
+    }
+  ]
+}

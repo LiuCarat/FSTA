@@ -12,15 +12,15 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from data.loader import PROCESSED_DIR, base_network, make_dataloader
+from MemoryEC.data.simulation.loader import PROCESSED_DIR, base_network, make_dataloader
 from model.memory_ec import MemoryEC
 from train import resolve_device, train
 from utils import MODEL_TYPES, adaptive_threshold, configure_determinism, directed_metrics, save_json, zero_diagonal
 
 
 ROOT = Path(__file__).resolve().parent
-OUTPUTS = ROOT / "outputs"
-METHODS = ("validation_selected", "fixed_0.5", "fsta_adaptive")
+OUTPUTS = ROOT / "outputs" / "simulation"
+
 METRICS = (
     "precision", "recall", "directed_f1", "accuracy", "shd", "auprc", "auroc",
     "fp", "fn", "predicted_edges", "true_edges",
@@ -143,10 +143,7 @@ def evaluate_method(data: dict, method: str, selected: float,
                     fsta_ratio: float = 0.5) -> list[dict]:
     rows = []
     for scene, (probability, target) in sorted(data.items()):
-        threshold = {
-            "validation_selected": selected, "fixed_0.5": 0.5,
-            "fsta_adaptive": adaptive_threshold(probability, fsta_ratio),
-        }[method]
+        threshold = selected if method == "validation" else adaptive_threshold(probability, fsta_ratio)
         mask = ~np.eye(target.shape[0], dtype=bool)
         labels = target[mask].astype(bool)
         prediction = probability[mask] >= threshold
@@ -172,6 +169,7 @@ def load_model(path: Path, device: str) -> tuple[MemoryEC, dict]:
 def train_and_validate(args: argparse.Namespace, split: dict, directory: Path) -> dict:
     options = vars(args).copy()
     options.pop("fsta_ratio", None)
+    options.pop("threshold_method", None)
     options.update(output_dir=directory, split_scenes=split)
     train(argparse.Namespace(**options))
     checkpoint_path = directory / f"{args.model_type}_best.pt"
@@ -182,14 +180,21 @@ def train_and_validate(args: argparse.Namespace, split: dict, directory: Path) -
         "checkpoint": str(checkpoint_path),
         "checkpoint_epoch": checkpoint["epoch"], "checkpoint_selection": "val_loss",
         "threshold": threshold, "validation_family_macro_f1": score,
-        "validation_metrics": evaluate_method(validation, "validation_selected", threshold),
+        "validation_metrics": evaluate_method(
+            validation, args.threshold_method, threshold, args.fsta_ratio
+        ),
     }
 
 
 def run_model(args: argparse.Namespace, split: dict, directory: Path) -> list[dict]:
     selection = train_and_validate(args, split, directory)
+    threshold_description = (
+        f"ratio={args.fsta_ratio:.2f}"
+        if args.threshold_method == "ratio"
+        else f"validation_threshold={selection['threshold']:.2f}"
+    )
     print(f"  best_epoch={selection['checkpoint_epoch']}, "
-          f"validation_threshold={selection['threshold']:.2f}, "
+          f"threshold_method={args.threshold_method}, {threshold_description}, "
           f"validation_family_F1={selection['validation_family_macro_f1']:.4f}", flush=True)
     save_json({
         **selection,
@@ -205,18 +210,20 @@ def evaluate_selection(args: argparse.Namespace, split: dict, directory: Path,
     rows = []
     model, _ = load_model(Path(selection["checkpoint"]), args.device)
     test_data = aggregate_predictions(model, split["test"], args)
-    for method in METHODS:
-        for metrics in evaluate_method(test_data, method, selection["threshold"], args.fsta_ratio):
-            rows.append({
-                "repeat": args.repeat, "seed": args.seed, "fold": args.fold,
-                "model": args.model_type, "variant": args.model_type,
-                "fsta_ratio": args.fsta_ratio,
-                "checkpoint_epoch": selection["checkpoint_epoch"],
-                "checkpoint_selection": selection["checkpoint_selection"],
-                "validation_threshold": selection["threshold"],
-                "validation_family_macro_f1": selection["validation_family_macro_f1"],
-                **metrics,
-            })
+    for metrics in evaluate_method(
+        test_data, args.threshold_method, selection["threshold"], args.fsta_ratio
+    ):
+        rows.append({
+            "repeat": args.repeat, "seed": args.seed, "fold": args.fold,
+            "model": args.model_type, "variant": args.model_type,
+            "threshold_method": args.threshold_method,
+            "fsta_ratio": args.fsta_ratio,
+            "checkpoint_epoch": selection["checkpoint_epoch"],
+            "checkpoint_selection": selection["checkpoint_selection"],
+            "validation_threshold": selection["threshold"],
+            "validation_family_macro_f1": selection["validation_family_macro_f1"],
+            **metrics,
+        })
     save_json(rows, directory / "results.json")
     return rows
 
@@ -230,8 +237,7 @@ def protocol(args: argparse.Namespace, families: dict) -> dict:
         "training": {key: getattr(args, key) for key in TRAIN_KEYS},
         "splits": {str(fold): fold_split(fold, families) for fold in range(1, 10)},
         "checkpoint_selection": "minimum validation BCE; early stopping on the same metric",
-        "threshold_selection": "validation family-macro F1; grid 0.05..0.95 step 0.01; lowest threshold wins ties",
-        "primary_method": "validation_selected",
+        "threshold_selection": "ratio (default) or validation family-macro F1 selected at evaluation",
     }
 
 
@@ -241,11 +247,11 @@ def print_summary(family_rows: list[dict], fsta_ratio: float = 0.5) -> None:
     repeats = sorted({row["repeat"] for row in family_rows})
     width = max(22, *(len(LABELS.get(variant, variant)) + 2 for variant in variants))
     print(f"Completed test families: {networks}; repetitions: {len(repeats)}")
-    for method in METHODS:
+    methods = list(dict.fromkeys(row["method"] for row in family_rows))
+    for method in methods:
         titles = {
-            "validation_selected": "Validation-selected threshold [PRIMARY]",
-            "fixed_0.5": "Fixed threshold=0.50 [comparison]",
-            "fsta_adaptive": f"FSTA per-scene threshold, ratio={fsta_ratio:.2f} [comparison]",
+            "validation": "Validation-selected threshold",
+            "ratio": f"FSTA per-scene threshold, ratio={fsta_ratio:.2f}",
         }
         print(f"\n--- {titles[method]} ---")
         for metric, title in CONSOLE_METRICS.items():
@@ -266,7 +272,7 @@ def print_summary(family_rows: list[dict], fsta_ratio: float = 0.5) -> None:
                     cells.append(cell)
                 print(f"{'Network' + str(network):<16}" + "".join(f"{cell:>{width}}" for cell in cells))
 
-def summarize(directory: Path, config: dict, fsta_ratio: float) -> None:
+def summarize(directory: Path, config: dict, threshold_method: str, fsta_ratio: float) -> None:
     rows = []
     expected = {
         (repeat + 1, fold, model)
@@ -280,11 +286,15 @@ def summarize(directory: Path, config: dict, fsta_ratio: float) -> None:
             present[(repeat, fold, model)] = read_json(path)
     complete_folds = [fold for fold in range(1, 10) if all(
         (repeat + 1, fold, model) in present
+        and any(
+            row["method"] == threshold_method
+            for row in present[(repeat + 1, fold, model)]
+        )
         for repeat in range(config["repeats"]) for model in config["models"]
     )]
     for key, records in sorted(present.items()):
         if key[1] in complete_folds:
-            rows.extend(records)
+            rows.extend(row for row in records if row["method"] == threshold_method)
     if not rows:
         print("No fully completed fold (all selected models and repeats) to summarize.")
         return
@@ -302,7 +312,7 @@ def summarize(directory: Path, config: dict, fsta_ratio: float) -> None:
     variants = list(dict.fromkeys(row["variant"] for row in family_rows))
     network_rows = []
     for variant in variants:
-        for method in METHODS:
+        for method in dict.fromkeys(row["method"] for row in family_rows):
             group = [row for row in family_rows if row["variant"] == variant and row["method"] == method]
             for network in complete_folds:
                 entries = [row for row in group if row["network"] == network]
@@ -324,8 +334,8 @@ def summarize(directory: Path, config: dict, fsta_ratio: float) -> None:
         wide_rows.append(wide)
     write_csv(wide_rows, directory / "network_table.csv")
     save_json({"complete_test_families": complete_folds, "complete_nine_fold": len(complete_folds) == 9,
-               "repeats": config["repeats"], "fsta_ratio": fsta_ratio,
-               "primary": "validation_selected"},
+               "repeats": config["repeats"], "threshold_method": threshold_method,
+               "fsta_ratio": fsta_ratio, "primary": threshold_method},
               directory / "summary.json")
     print_summary(family_rows, fsta_ratio)
     print(f"\nSaved summaries: {directory}")
@@ -350,6 +360,7 @@ def reevaluate(directory: Path, config: dict, args: argparse.Namespace,
                     device=device,
                     fold=fold,
                     fsta_ratio=args.fsta_ratio,
+                    threshold_method=args.threshold_method,
                     model_type=model_type,
                     repeat=repeat,
                     seed=seed,
@@ -363,7 +374,7 @@ def reevaluate(directory: Path, config: dict, args: argparse.Namespace,
                 completed += 1
     if completed == 0:
         raise FileNotFoundError(f"No completed checkpoints found under {directory}")
-    summarize(directory, config, args.fsta_ratio)
+    summarize(directory, config, args.threshold_method, args.fsta_ratio)
 
 
 def prepare_training_output(directory: Path, config: dict, folds: list[int]) -> None:
@@ -389,8 +400,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="train",
     )
     parser.add_argument("--model-type", choices=("st_no_memory", "st_global_memory", "st_pair_memory"), default="st_pair_memory")
-    parser.add_argument("--fold", type=int, choices=range(1, 10), help="Test family; omit for all nine folds")
-    parser.add_argument("--repeats", type=int, choices=(1, 5, 20), default=5)
+    parser.add_argument("--fold", type=int, choices=range(1, 10))
+    parser.add_argument("--repeats", type=int, choices=(1, 5, 10), default=5)
     parser.add_argument("--seed", type=int, default=42)
 
     parser.add_argument("--hidden-dim", type=int, default=32)
@@ -398,12 +409,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--memory-temperature", type=float, default=1.0)
     parser.add_argument("--attention-heads", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.2)
-    parser.add_argument("--learning-rate", type=float, default=0.0001)
+    parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--weight-decay", type=float, default=1e-3) #优化器权重衰减
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=250)
     parser.add_argument("--patience", type=int, default=15)
     parser.add_argument("--min-delta", type=float, default=1e-5) #早停判断中，验证损失需要降低的最小幅度
+    parser.add_argument("--threshold-method", choices=("ratio", "validation"), default="ratio")
     parser.add_argument("--fsta-ratio", type=float, default=0.4)
     
     args = parser.parse_args(argv)
@@ -444,7 +456,11 @@ def main(args: argparse.Namespace | None = None) -> None:
         flush=True,
     )
     if evaluation_only:
-        print(f"Evaluation only: source={directory}, FSTA ratio={args.fsta_ratio:.2f}", flush=True)
+        print(
+            f"Evaluation only: source={directory}, threshold={args.threshold_method}, "
+            f"FSTA ratio={args.fsta_ratio:.2f}",
+            flush=True,
+        )
         reevaluate(directory, read_json(config_path), args, device)
         return
     families = family_scenes()
@@ -453,8 +469,8 @@ def main(args: argparse.Namespace | None = None) -> None:
     print(f"Mode={args.mode}, models={config['models']}, repeats={args.repeats}, seeds={config['seeds']}")
     print(f"Output={directory}")
     print(f"Memory temperature={args.memory_temperature:.2f}", flush=True)
-    print(f"FSTA ratio={args.fsta_ratio:.2f} [comparison]", flush=True)
-    print("Checkpoint: minimum validation BCE; primary threshold: validation family-macro F1.")
+    print(f"Threshold method={args.threshold_method}; FSTA ratio={args.fsta_ratio:.2f}", flush=True)
+    print("Checkpoint: minimum validation BCE; default threshold: FSTA per-scene ratio.")
     for fold in folds:
         print(f"Fold {fold}: " + "; ".join(
             f"{part}={sorted({base_network(scene) for scene in scenes})}"
@@ -474,7 +490,7 @@ def main(args: argparse.Namespace | None = None) -> None:
                 options.update(repeat=repeat, seed=seed, fold=fold, model_type=model_type, device=device)
                 print(f"\nRepeat {repeat}/{args.repeats}, fold={fold}, model={model_type}, seed={seed}", flush=True)
                 run_model(argparse.Namespace(**options), split, fold_dir / model_type)
-    summarize(directory, config, args.fsta_ratio)
+    summarize(directory, config, args.threshold_method, args.fsta_ratio)
 
 
 if __name__ == "__main__":
