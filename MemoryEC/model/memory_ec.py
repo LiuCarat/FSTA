@@ -5,10 +5,10 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-from model.memory import KeyValueMemory
-from model.spatial import SpatialAttention
-from model.tcn import SharedTCN
-from utils import normalize_per_roi
+from MemoryEC.model.memory import KeyValueMemory
+from MemoryEC.model.spatial import SpatialAttention
+from MemoryEC.model.tcn import SharedTCN
+from MemoryEC.utils import normalize_per_roi
 
 
 MEMORY_MODES = {

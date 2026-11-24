@@ -11,7 +11,7 @@ from typing import Iterator
 import numpy as np
 
 
-DATA_DIR = Path(__file__).resolve().parent
+DATA_DIR = Path(__file__).resolve().parent.parent
 SIMULATION_DIR = DATA_DIR / "simulation"
 PROCESSED_DIR = SIMULATION_DIR / "processed"
 SPLITS_PATH = SIMULATION_DIR / "splits.json"

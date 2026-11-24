@@ -12,9 +12,9 @@ import numpy as np
 from scipy.io import loadmat
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SOURCE = REPO_ROOT / "dataset" / "SanchezRomero2019_SimpleNetworks"
-SIMULATION_DIR = Path(__file__).resolve().parent / "simulation"
+SIMULATION_DIR = Path(__file__).resolve().parent
 DEFAULT_OUTPUT = SIMULATION_DIR / "processed"
 DEFAULT_SPLITS = SIMULATION_DIR / "splits.json"
 SCENE_PATTERN = re.compile(r"Network(\d+)(?:_|$)")

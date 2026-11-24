@@ -3,39 +3,147 @@
   "hemispheres": [
     {
       "side": "left",
-      "subjects": 24,
+      "subjects": 23,
+      "subject_ids": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "excluded_incomplete_subject_ids": [
+        1
+      ],
+      "paper_reported_timepoints": 421,
+      "numeric_timepoints_loaded": 420,
       "timepoint_lengths": [
-        303,
         420
       ],
       "roi_names": [
         "CA1",
-        "CA2",
-        "DG",
-        "CA3",
+        "CA23DG",
         "SUB",
         "ERC",
+        "BA35",
+        "BA36",
         "PHC"
       ],
+      "roi_construction": {
+        "CA1": [
+          "CA1"
+        ],
+        "CA23DG": [
+          "CA2",
+          "CA3",
+          "DG"
+        ],
+        "SUB": [
+          "SUB"
+        ],
+        "ERC": [
+          "ERC"
+        ],
+        "BA35": [
+          "BA35"
+        ],
+        "BA36": [
+          "BA36"
+        ],
+        "PHC": [
+          "PHC"
+        ]
+      },
       "ground_truth_edges": 17,
       "output": "/storage/users/liulin/PythonCode/ST-MRI/FSTA/MemoryEC/data/real/MTLnet/processed/left.npz"
     },
     {
       "side": "right",
-      "subjects": 24,
+      "subjects": 23,
+      "subject_ids": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "excluded_incomplete_subject_ids": [
+        1
+      ],
+      "paper_reported_timepoints": 421,
+      "numeric_timepoints_loaded": 420,
       "timepoint_lengths": [
-        303,
         420
       ],
       "roi_names": [
         "CA1",
-        "CA2",
-        "DG",
-        "CA3",
+        "CA23DG",
         "SUB",
         "ERC",
+        "BA35",
+        "BA36",
         "PHC"
       ],
+      "roi_construction": {
+        "CA1": [
+          "CA1"
+        ],
+        "CA23DG": [
+          "CA2",
+          "CA3",
+          "DG"
+        ],
+        "SUB": [
+          "SUB"
+        ],
+        "ERC": [
+          "ERC"
+        ],
+        "BA35": [
+          "BA35"
+        ],
+        "BA36": [
+          "BA36"
+        ],
+        "PHC": [
+          "PHC"
+        ]
+      },
       "ground_truth_edges": 17,
       "output": "/storage/users/liulin/PythonCode/ST-MRI/FSTA/MemoryEC/data/real/MTLnet/processed/right.npz"
     }

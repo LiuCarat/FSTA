@@ -11,8 +11,8 @@ import numpy as np
 import torch
 
 from MemoryEC.data.simulation.loader import make_dataloader
-from model.memory_ec import MemoryEC
-from utils import (
+from MemoryEC.model.memory_ec import MemoryEC
+from MemoryEC.utils import (
     count_parameters,
     directed_metrics,
     masked_bce_loss,

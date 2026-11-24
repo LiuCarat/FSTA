@@ -11,11 +11,14 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from MemoryEC.data.simulation.loader import PROCESSED_DIR, base_network, make_dataloader
-from model.memory_ec import MemoryEC
-from train import resolve_device, train
-from utils import MODEL_TYPES, adaptive_threshold, configure_determinism, directed_metrics, save_json, zero_diagonal
+from MemoryEC.model.memory_ec import MemoryEC
+from MemoryEC.train import resolve_device, train
+from MemoryEC.utils import MODEL_TYPES, adaptive_threshold, configure_determinism, directed_metrics, save_json, zero_diagonal
 
 
 ROOT = Path(__file__).resolve().parent
@@ -401,7 +404,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--model-type", choices=("st_no_memory", "st_global_memory", "st_pair_memory"), default="st_pair_memory")
     parser.add_argument("--fold", type=int, choices=range(1, 10))
-    parser.add_argument("--repeats", type=int, choices=(1, 5, 10), default=5)
+    parser.add_argument("--repeats", type=int, choices=(1, 5, 10), default=3)
     parser.add_argument("--seed", type=int, default=42)
 
     parser.add_argument("--hidden-dim", type=int, default=32)
