@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 import shutil
 from pathlib import Path
 
@@ -66,7 +65,7 @@ def read_validation_selection(path: Path) -> dict:
 
 
 def experiment_name(mode: str, args: argparse.Namespace) -> str:
-    name = f"cv_{mode}_{args.model_type}_r{args.repeats}"
+    name = f"cv_{mode}_{args.model_type}_r{len(args.seeds)}"
     if args.memory_temperature != 1.0:
         name += f"_tau{args.memory_temperature:g}"
     return name
@@ -236,7 +235,7 @@ def protocol(args: argparse.Namespace, families: dict) -> dict:
         "protocol": "unified_cv_v1", "mode": args.mode,
         "runtime": "strict_deterministic_math_sdp_v1",
         "models": list(MODEL_TYPES) if args.mode == "ablation" else [args.model_type],
-        "repeats": args.repeats, "seeds": [args.seed + repeat for repeat in range(args.repeats)],
+        "seeds": args.seeds,
         "training": {key: getattr(args, key) for key in TRAIN_KEYS},
         "splits": {str(fold): fold_split(fold, families) for fold in range(1, 10)},
         "checkpoint_selection": "minimum validation BCE; early stopping on the same metric",
@@ -277,9 +276,10 @@ def print_summary(family_rows: list[dict], fsta_ratio: float = 0.5) -> None:
 
 def summarize(directory: Path, config: dict, threshold_method: str, fsta_ratio: float) -> None:
     rows = []
+    repeat_count = len(config["seeds"])
     expected = {
         (repeat + 1, fold, model)
-        for repeat in range(config["repeats"]) for fold in range(1, 10)
+        for repeat in range(repeat_count) for fold in range(1, 10)
         for model in config["models"]
     }
     present = {}
@@ -293,7 +293,7 @@ def summarize(directory: Path, config: dict, threshold_method: str, fsta_ratio: 
             row["method"] == threshold_method
             for row in present[(repeat + 1, fold, model)]
         )
-        for repeat in range(config["repeats"]) for model in config["models"]
+        for repeat in range(repeat_count) for model in config["models"]
     )]
     for key, records in sorted(present.items()):
         if key[1] in complete_folds:
@@ -337,7 +337,7 @@ def summarize(directory: Path, config: dict, threshold_method: str, fsta_ratio: 
         wide_rows.append(wide)
     write_csv(wide_rows, directory / "network_table.csv")
     save_json({"complete_test_families": complete_folds, "complete_nine_fold": len(complete_folds) == 9,
-               "repeats": config["repeats"], "threshold_method": threshold_method,
+               "seeds": config["seeds"], "threshold_method": threshold_method,
                "fsta_ratio": fsta_ratio, "primary": threshold_method},
               directory / "summary.json")
     print_summary(family_rows, fsta_ratio)
@@ -384,7 +384,7 @@ def prepare_training_output(directory: Path, config: dict, folds: list[int]) -> 
     config_path = directory / "config.json"
     if directory.exists() and (not config_path.is_file() or read_json(config_path) != config):
         shutil.rmtree(directory)
-    for repeat in range(1, config["repeats"] + 1):
+    for repeat in range(1, len(config["seeds"]) + 1):
         for fold in folds:
             fold_dir = directory / f"repeat_{repeat:02d}" / f"fold_{fold:02d}"
             if fold_dir.exists():
@@ -404,8 +404,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--model-type", choices=("st_no_memory", "st_global_memory", "st_pair_memory"), default="st_pair_memory")
     parser.add_argument("--fold", type=int, choices=range(1, 10))
-    parser.add_argument("--repeats", type=int, choices=(1, 5, 10), default=3)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seeds", type=int, nargs="+", default=[42, 43, 44])
 
     parser.add_argument("--hidden-dim", type=int, default=32)
     parser.add_argument("--memory-slots", type=int, default=16)
@@ -422,20 +421,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--fsta-ratio", type=float, default=0.4)
     
     args = parser.parse_args(argv)
-    for key in ("hidden_dim", "memory_slots", "attention_heads", "batch_size", "epochs", "patience"):
-        if getattr(args, key) <= 0:
-            parser.error(f"{key} must be positive")
-    if args.hidden_dim % args.attention_heads:
-        parser.error("hidden-dim must be divisible by attention-heads")
-    if not math.isfinite(args.fsta_ratio) or not 0 <= args.fsta_ratio <= 1:
-        parser.error("fsta-ratio must be finite and in [0,1]")
-    if not math.isfinite(args.memory_temperature) or args.memory_temperature <= 0:
-        parser.error("memory-temperature must be finite and positive")
-    for key in ("learning_rate", "weight_decay", "min_delta", "dropout"):
-        if not math.isfinite(getattr(args, key)) or getattr(args, key) < 0:
-            parser.error(f"{key} must be finite and non-negative")
-    if args.dropout >= 1 or args.seed < 0 or args.seed + args.repeats - 1 >= 2**32:
-        parser.error("dropout must be < 1; seeds must fit numpy's unsigned 32-bit range")
     return args
 
 
@@ -469,9 +454,8 @@ def main(args: argparse.Namespace | None = None) -> None:
     families = family_scenes()
     config = protocol(args, families)
     folds = [args.fold] if args.fold else list(range(1, 10))
-    print(f"Mode={args.mode}, models={config['models']}, repeats={args.repeats}, seeds={config['seeds']}")
+    print(f"Mode={args.mode}, models={config['models']}, repeats={len(args.seeds)}, seeds={config['seeds']}")
     print(f"Output={directory}")
-    print(f"Memory temperature={args.memory_temperature:.2f}", flush=True)
     print(f"Threshold method={args.threshold_method}; FSTA ratio={args.fsta_ratio:.2f}", flush=True)
     print("Checkpoint: minimum validation BCE; default threshold: FSTA per-scene ratio.")
     for fold in folds:
@@ -491,7 +475,7 @@ def main(args: argparse.Namespace | None = None) -> None:
             for model_type in config["models"]:
                 options = vars(args).copy()
                 options.update(repeat=repeat, seed=seed, fold=fold, model_type=model_type, device=device)
-                print(f"\nRepeat {repeat}/{args.repeats}, fold={fold}, model={model_type}, seed={seed}", flush=True)
+                print(f"\nRepeat {repeat}/{len(args.seeds)}, fold={fold}, model={model_type}, seed={seed}", flush=True)
                 run_model(argparse.Namespace(**options), split, fold_dir / model_type)
     summarize(directory, config, args.threshold_method, args.fsta_ratio)
 
