@@ -3,6 +3,10 @@
 仿真实验入口为 `main.py`，真实 MTLnet 迁移评价入口为 `real_main.py`，`train.py`
 保留为共享底层训练实现。仿真和真实数据、输出分别存放，避免结果混用。
 
+输入默认符合项目约定，不再手动检查张量维度、参数范围、数据字段、ROI顺序或有限值；
+读取和计算失败时由Python、NumPy或PyTorch直接报错。仅保留CUDA运行环境、实验目录和
+推理配置匹配等运行保护，不改变数据处理和训练算法。
+
 ## 快速运行
 
 以下命令从项目根目录运行；请使用安装了 PyTorch 的 Python 环境。
@@ -68,6 +72,10 @@ Test=k，Validation=k+1/k+2（超过9循环），其余六家族 Train。同家�
 `scores = sqrt(hidden_dim) / temperature * cosine_similarity`。默认1.0与原实现一致；
 小于1使检索权重更集中，大于1使权重更平滑。该参数只影响Global/Pair Memory，
 No Memory不执行检索。不同于1.0的值会加入输出目录名，便于保留调参结果。
+
+Pair Memory使用四状态关系分类损失，并通过`--lambda-memory`控制Memory监督损失权重，
+默认0.1。验证集checkpoint仍按逐边BCE选择。训练history和checkpoint记录relation loss、
+memory loss、逐边BCE、Slot Assignment、三类关系有效容量和Slot检索利用率。
 
 ```bash
 python -u MemoryEC/main.py --model-type st_pair_memory --memory-temperature 0.7

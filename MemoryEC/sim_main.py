@@ -36,7 +36,7 @@ CONSOLE_METRICS = {
 }
 TRAIN_KEYS = (
     "hidden_dim", "memory_slots", "memory_temperature", "attention_heads", "dropout", "learning_rate",
-    "weight_decay", "batch_size", "epochs", "patience", "min_delta",
+    "weight_decay", "batch_size", "epochs", "patience", "min_delta", "lambda_memory",
 )
 LABELS = {
     "st_no_memory": "No Memory", "st_global_memory": "Global Memory",
@@ -90,11 +90,7 @@ def family_scenes() -> dict[int, list[str]]:
     families = {family: [] for family in range(1, 10)}
     for path in sorted(PROCESSED_DIR.glob("Network*.npz")):
         family = base_network(path.stem)
-        if family not in families:
-            raise ValueError(f"Unexpected family: {path}")
         families[family].append(path.stem)
-    if any(not scenes for scenes in families.values()):
-        raise ValueError("Processed data must contain every family Network1..9")
     return families
 
 
@@ -404,7 +400,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--model-type", choices=("st_no_memory", "st_global_memory", "st_pair_memory"), default="st_pair_memory")
     parser.add_argument("--fold", type=int, choices=range(1, 10))
-    parser.add_argument("--seeds", type=int, nargs="+", default=[42, 43, 44])
+    parser.add_argument("--seeds", type=int, nargs="+", default=[42]) # , 43, 44
 
     parser.add_argument("--hidden-dim", type=int, default=32)
     parser.add_argument("--memory-slots", type=int, default=16)
@@ -417,8 +413,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=250)
     parser.add_argument("--patience", type=int, default=15)
     parser.add_argument("--min-delta", type=float, default=1e-5) #早停判断中，验证损失需要降低的最小幅度
+    parser.add_argument("--lambda-memory", type=float, default=0.1)
     parser.add_argument("--threshold-method", choices=("ratio", "validation"), default="ratio")
-    parser.add_argument("--fsta-ratio", type=float, default=0.4)
+    parser.add_argument("--fsta-ratio", type=float, default=0.5)
     
     args = parser.parse_args(argv)
     return args

@@ -26,7 +26,7 @@ OUTPUTS = ROOT / "outputs" / "real"
 MODEL_TYPE = "st_pair_memory"
 TRAIN_KEYS = (
     "hidden_dim", "memory_slots", "memory_temperature", "attention_heads",
-    "dropout", "learning_rate", "weight_decay", "batch_size", "epochs",
+    "dropout", "learning_rate", "weight_decay", "batch_size", "epochs", "lambda_memory",
 )
 
 
@@ -95,13 +95,20 @@ def train_full_simulation(
     for epoch in range(1, args.epochs + 1):
         if hasattr(loader.batch_sampler, "set_epoch"):
             loader.batch_sampler.set_epoch(epoch)
-        train_loss, _ = run_epoch(model, loader, torch.device(args.device), optimizer)
+        train_loss, train_metrics = run_epoch(
+            model,
+            loader,
+            torch.device(args.device),
+            optimizer,
+            args.lambda_memory,
+        )
         if epoch == 1 or epoch % 10 == 0 or epoch == args.epochs:
             print(f"repeat={repeat:02d} epoch={epoch:03d} train_loss={train_loss:.4f}", flush=True)
     torch.save(
         {
             "model_state": model.state_dict(),
             "model_config": model.config(),
+            "training_metrics": train_metrics,
         },
         checkpoint_path,
     )
@@ -302,7 +309,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--hemisphere", choices=("left", "right", "both"), default="both")
     parser.add_argument("--seeds", type=int, nargs="+", default=[42])
 
-    parser.add_argument("--hidden-dim", type=int, default=64)
+    parser.add_argument("--hidden-dim", type=int, default=32)
     parser.add_argument("--memory-slots", type=int, default=128)
     parser.add_argument("--memory-temperature", type=float, default=1.0)
     parser.add_argument("--attention-heads", type=int, default=2)
@@ -310,7 +317,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--weight-decay", type=float, default=1e-3)
     parser.add_argument("--batch-size", type=int, default=128)
-    parser.add_argument("--epochs", type=int, default=150)
+    parser.add_argument("--epochs", type=int, default=300)
+    parser.add_argument("--lambda-memory", type=float, default=0.1)
     parser.add_argument("--fsta-ratio", type=float, default=0.3)
     args = parser.parse_args(argv)
     return args

@@ -23,64 +23,21 @@ def load_scene(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Load one scene as ``bold [S,T,N]`` and ``adj [N,N]``."""
     path = Path(processed_dir) / f"{scene}.npz"
-    if not path.is_file():
-        raise FileNotFoundError(f"Processed scene not found: {path}")
-
     with np.load(path, allow_pickle=False) as data:
-        if set(data.files) != {"bold", "adj"}:
-            raise ValueError(f"{path} must contain exactly 'bold' and 'adj'")
         bold = data["bold"]
         adj = data["adj"]
-
-    if bold.ndim != 3:
-        raise ValueError(f"{path}: bold must have shape [S,T,N], got {bold.shape}")
-    if adj.shape != (bold.shape[-1], bold.shape[-1]):
-        raise ValueError(
-            f"{path}: adj shape {adj.shape} does not match N={bold.shape[-1]}"
-        )
-    if not np.isfinite(bold).all() or not np.isfinite(adj).all():
-        raise ValueError(f"{path}: arrays contain non-finite values")
-    if np.any(np.diag(adj) != 0):
-        raise ValueError(f"{path}: adj diagonal must be zero")
-
     return bold, adj
 
 
 def load_splits(path: str | Path = SPLITS_PATH) -> dict[str, dict[str, list]]:
-    """Load scene splits and verify that base networks do not overlap."""
-    split_path = Path(path)
-    with split_path.open(encoding="utf-8") as file:
-        splits = json.load(file)
-
-    expected = {"train", "val", "test"}
-    if set(splits) != expected:
-        raise ValueError(f"{split_path}: expected split keys {sorted(expected)}")
-
-    seen_networks: set[int] = set()
-    seen_scenes: set[str] = set()
-    for split_name in ("train", "val", "test"):
-        split = splits[split_name]
-        if set(split) != {"base_networks", "scenes"}:
-            raise ValueError(
-                f"{split_path}: {split_name} must contain base_networks and scenes"
-            )
-        networks = set(split["base_networks"])
-        scenes = set(split["scenes"])
-        if networks & seen_networks:
-            raise ValueError(f"{split_path}: base networks overlap across splits")
-        if scenes & seen_scenes:
-            raise ValueError(f"{split_path}: scenes overlap across splits")
-        seen_networks.update(networks)
-        seen_scenes.update(scenes)
-
-    return splits
+    """Load scene splits."""
+    with Path(path).open(encoding="utf-8") as file:
+        return json.load(file)
 
 
 def base_network(scene: str) -> int:
     """Return the integer family identifier from a scene name."""
     match = re.match(r"Network(\d+)(?:_|$)", scene)
-    if match is None:
-        raise ValueError(f"Invalid scene name: {scene}")
     return int(match.group(1))
 
 
@@ -131,8 +88,6 @@ class BalancedNetworkBatchSampler:
         seed: int,
         samples_per_epoch: int | None = None,
     ) -> None:
-        if batch_size <= 0:
-            raise ValueError("batch_size must be positive")
         self.dataset = dataset
         self.batch_size = batch_size
         self.seed = seed
@@ -149,7 +104,6 @@ class BalancedNetworkBatchSampler:
     def __iter__(self) -> Iterator[list[int]]:
         rng = np.random.default_rng(self.seed + self.epoch)
         buffers: dict[int, list[int]] = defaultdict(list)
-        yielded = 0
         for _ in range(self.samples_per_epoch):
             network = int(rng.choice(self.networks))
             candidates = self.dataset.indices_by_network[network]
@@ -158,14 +112,10 @@ class BalancedNetworkBatchSampler:
             buffers[nodes].append(index)
             if len(buffers[nodes]) == self.batch_size:
                 yield buffers.pop(nodes)
-                yielded += self.batch_size
 
         for nodes in sorted(buffers):
             if buffers[nodes]:
                 yield buffers[nodes]
-                yielded += len(buffers[nodes])
-        if yielded != self.samples_per_epoch:
-            raise RuntimeError("Balanced sampler yielded an unexpected sample count")
 
 
 class GroupedBatchSampler:
@@ -191,10 +141,6 @@ class GroupedBatchSampler:
 def collate_samples(samples: list[dict], permute_rois: bool = False) -> dict:
     """Stack equal-size samples and optionally apply synchronized ROI permutations."""
     import torch
-
-    node_counts = {sample["nodes"] for sample in samples}
-    if len(node_counts) != 1:
-        raise ValueError(f"A batch must have one ROI count, got {sorted(node_counts)}")
 
     bold = torch.from_numpy(np.stack([sample["bold"] for sample in samples])).float()
     adj = torch.from_numpy(np.stack([sample["adj"] for sample in samples])).float()
@@ -232,8 +178,6 @@ def make_dataloader(
 
     if scenes is None:
         splits = load_splits(splits_path)
-        if split not in splits:
-            raise ValueError(f"Unknown split: {split}")
         scenes = splits[split]["scenes"]
     dataset = SanchezRomeroDataset(
         scenes, processed_dir

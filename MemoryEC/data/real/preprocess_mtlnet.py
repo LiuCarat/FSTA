@@ -42,8 +42,6 @@ GROUND_TRUTH = np.array(
 
 def subject_number(path: Path) -> int:
     match = re.fullmatch(r"S(\d+)", path.name)
-    if match is None:
-        raise ValueError(f"Unexpected subject directory: {path}")
     return int(match.group(1))
 
 
@@ -53,36 +51,18 @@ def roi_name(raw_name: str) -> str:
 
 def load_subject(path: Path) -> tuple[np.ndarray, list[str]]:
     lines = path.read_text(encoding="utf-8").splitlines()
-    if not lines:
-        raise ValueError(f"Empty MTLnet file: {path}")
-    declared_rows, declared_timepoints = map(int, lines[0].split())
-    if len(lines) != declared_rows + 1:
-        raise ValueError(
-            f"{path}: declared {declared_rows} rows, found {len(lines) - 1}"
-        )
-
     values = []
     names = []
     for line in lines[1:]:
         fields = line.split()
-        if len(fields) != declared_timepoints + 1:
-            raise ValueError(
-                f"{path}: expected {declared_timepoints} values, found {len(fields) - 1}"
-            )
         names.append(roi_name(fields[0]))
         values.append([float(value) for value in fields[1:]])
 
     array = np.asarray(values, dtype=np.float32)
-    required = {name for source_names in ROI_SOURCES.values() for name in source_names}
-    missing = sorted(required.difference(names))
-    if missing:
-        raise ValueError(f"{path}: missing reduced ROIs {missing}")
     reduced = np.stack([
         array[[names.index(name) for name in source_names]].mean(axis=0)
         for source_names in ROI_SOURCES.values()
     ])
-    if not np.isfinite(reduced).all():
-        raise ValueError(f"{path}: selected reduced ROIs contain non-finite values")
     return reduced.T, list(ROI_NAMES)
 
 
@@ -93,16 +73,8 @@ def complete_subject_dirs(source_dir: Path) -> tuple[list[Path], list[int], int]
     )
     lengths = {}
     for subject_dir in subject_dirs:
-        declared = []
-        for suffix in SIDES.values():
-            with (subject_dir / f"res_tcourse_{suffix}.txt").open(encoding="utf-8") as file:
-                _, timepoints = map(int, file.readline().split())
-            declared.append(timepoints)
-        if len(set(declared)) != 1:
-            raise ValueError(f"{subject_dir}: left/right timepoint counts differ: {declared}")
-        lengths[subject_dir] = declared[0]
-    if not lengths:
-        raise ValueError(f"No MTLnet subjects found in {source_dir}")
+        with (subject_dir / "res_tcourse_L.txt").open(encoding="utf-8") as file:
+            lengths[subject_dir] = int(file.readline().split()[1])
     complete_length = max(lengths.values())
     selected = [path for path in subject_dirs if lengths[path] == complete_length]
     excluded = [subject_number(path) for path in subject_dirs if lengths[path] != complete_length]
@@ -119,21 +91,11 @@ def preprocess_side(
     suffix = SIDES[side]
     subject_ids = [subject_number(path) for path in subject_dirs]
 
-    subjects = []
-    expected_rois = None
-    for subject_dir in subject_dirs:
-        bold, names = load_subject(subject_dir / f"res_tcourse_{suffix}.txt")
-        if expected_rois is None:
-            expected_rois = names
-        elif names != expected_rois:
-            raise ValueError(f"{subject_dir}: inconsistent ROI order")
-        subjects.append(bold)
-
-    if not subjects:
-        raise ValueError("No complete MTLnet subjects selected")
+    subjects = [
+        load_subject(subject_dir / f"res_tcourse_{suffix}.txt")[0]
+        for subject_dir in subject_dirs
+    ]
     lengths = np.asarray([subject.shape[0] for subject in subjects], dtype=np.int32)
-    if np.any(lengths != numeric_timepoints):
-        raise ValueError(f"Unexpected selected timepoint lengths: {sorted(set(lengths.tolist()))}")
     padded = np.zeros((len(subjects), int(lengths.max()), len(ROI_NAMES)), dtype=np.float32)
     for index, subject in enumerate(subjects):
         padded[index, : subject.shape[0]] = subject

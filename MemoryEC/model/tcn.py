@@ -39,8 +39,6 @@ class SharedTCN(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.ndim != 3:
-            raise ValueError(f"Expected x [B,T,N], got {tuple(x.shape)}")
         batch, _, nodes = x.shape
         x = x.permute(0, 2, 1).reshape(batch * nodes, 1, x.shape[1])
         x = self.blocks(self.input_projection(x))

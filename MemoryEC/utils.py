@@ -72,8 +72,6 @@ def directed_metrics(
         roc_auc_score,
     )
 
-    if target.shape != probability.shape or target.ndim != 2:
-        raise ValueError("target and probability must be matching [N,N] arrays")
     mask = ~np.eye(target.shape[0], dtype=bool)
     labels = target[mask].astype(np.uint8)
     scores = probability[mask].astype(np.float64)
@@ -93,8 +91,6 @@ def directed_metrics(
 def zero_diagonal(array: np.ndarray) -> np.ndarray:
     """Return a copy with a zero diagonal on the final two axes."""
     values = np.array(array, copy=True)
-    if values.ndim < 2 or values.shape[-2] != values.shape[-1]:
-        raise ValueError(f"Expected [...,N,N], got {values.shape}")
     diagonal = np.arange(values.shape[-1])
     values[..., diagonal, diagonal] = 0
     return values
@@ -102,11 +98,7 @@ def zero_diagonal(array: np.ndarray) -> np.ndarray:
 
 def adaptive_threshold(probability: np.ndarray, ratio: float = 0.5) -> float:
     """FSTA-style scene threshold from off-diagonal sigmoid probabilities."""
-    if probability.ndim != 2 or probability.shape[0] != probability.shape[1]:
-        raise ValueError("probability must be square [N,N]")
     values = probability[~np.eye(probability.shape[0], dtype=bool)]
-    if not np.isfinite(values).all():
-        raise ValueError("probability contains non-finite values")
     return float(values.min() + ratio * (values.max() - values.min()))
 
 

@@ -29,8 +29,6 @@ class SpatialAttention(nn.Module):
         x: torch.Tensor,
         return_attention: bool = False,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-        if x.ndim != 4:
-            raise ValueError(f"Expected x [B,T,N,H], got {tuple(x.shape)}")
         batch, time, nodes, hidden = x.shape
         flat = x.reshape(batch * time, nodes, hidden)
         with sdpa_kernel(SDPBackend.MATH):

@@ -23,7 +23,7 @@ class DirectedPairQuery(nn.Module):
         super().__init__()
         self.max_lag = max_lag
         self.projection = nn.Sequential(
-            nn.Linear(2 * hidden_dim + 2 * max_lag, hidden_dim),
+            nn.Linear(4 * hidden_dim + 3 * max_lag, hidden_dim),
             nn.GELU(),
             nn.LayerNorm(hidden_dim),
         )
@@ -35,16 +35,28 @@ class DirectedPairQuery(nn.Module):
             later = x[:, lag:]
             source_to_target = torch.einsum("bti,btj->bij", earlier, later)
             source_to_target = source_to_target / earlier.shape[1]
-            target_to_source = source_to_target.transpose(1, 2)
-            features.extend((source_to_target, target_to_source))
+            features.append(source_to_target)
         return torch.stack(features, dim=-1)
 
     def forward(self, node_features: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
         nodes = node_features.shape[1]
         source = node_features[:, :, None, :].expand(-1, -1, nodes, -1)
         target = node_features[:, None, :, :].expand(-1, nodes, -1, -1)
-        lag = self.lag_features(x)
-        return self.projection(torch.cat((source, target, lag), dim=-1))
+        forward_lag = self.lag_features(x)
+        reverse_lag = forward_lag.transpose(1, 2)
+        global_context = node_features.mean(dim=1)[:, None, None, :].expand_as(source)
+        return self.projection(torch.cat(
+            (
+                source,
+                target,
+                source - target,
+                forward_lag,
+                reverse_lag,
+                forward_lag - reverse_lag,
+                global_context,
+            ),
+            dim=-1,
+        ))
 
 
 class MemoryEC(nn.Module):
@@ -58,8 +70,6 @@ class MemoryEC(nn.Module):
         dropout: float = 0.2,
     ) -> None:
         super().__init__()
-        if model_type not in MEMORY_MODES:
-            raise ValueError(f"Unknown model_type: {model_type}")
         self.model_type = model_type
         self.memory_mode = MEMORY_MODES[model_type]
         self.hidden_dim = hidden_dim
@@ -72,17 +82,71 @@ class MemoryEC(nn.Module):
         self.spatial = SpatialAttention(hidden_dim, attention_heads, dropout)
         self.pair_query = DirectedPairQuery(hidden_dim, max_lag=3)
         if self.memory_mode != "none":
-            self.memory = KeyValueMemory(hidden_dim, memory_slots, memory_temperature)
+            self.memory = KeyValueMemory(
+                hidden_dim,
+                memory_slots,
+                memory_temperature,
+                adaptive_relations=self.memory_mode == "pair",
+            )
             self.gate = nn.Linear(2 * hidden_dim, hidden_dim)
         else:
             self.memory = None
             self.gate = None
+        decoder_input = hidden_dim + 1 if self.memory_mode == "pair" else hidden_dim
         self.decoder = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(decoder_input, hidden_dim),
             nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_dim, 1),
         )
+
+    @staticmethod
+    def enforce_relation_exchange(logits: torch.Tensor) -> torch.Tensor:
+        reverse = logits.transpose(1, 2)
+        return torch.stack(
+            (
+                (logits[..., 0] + reverse[..., 0]) / 2,
+                (logits[..., 1] + reverse[..., 2]) / 2,
+                (logits[..., 2] + reverse[..., 1]) / 2,
+                (logits[..., 3] + reverse[..., 3]) / 2,
+            ),
+            dim=-1,
+        )
+
+    def pair_memory_forward(
+        self,
+        query: torch.Tensor,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        reverse_query = query.transpose(1, 2)
+        symmetric_query = (query + reverse_query) / 2
+        candidates = torch.stack(
+            (symmetric_query, query, reverse_query, symmetric_query),
+            dim=-2,
+        )
+        relation_types = torch.tensor((0, 1, 1, 2), device=query.device)
+        retrieved, memory_weights, memory_evidence = self.memory.retrieve_relations(
+            candidates,
+            relation_types,
+        )
+        gate = torch.sigmoid(self.gate(torch.cat((candidates, retrieved), dim=-1)))
+        fused = candidates + gate * retrieved
+        raw_relation_logits = self.decoder(
+            torch.cat((fused, memory_evidence.unsqueeze(-1)), dim=-1)
+        ).squeeze(-1)
+        relation_logits = self.enforce_relation_exchange(raw_relation_logits)
+        memory_evidence = self.enforce_relation_exchange(memory_evidence)
+        edge_logits = torch.logsumexp(relation_logits[..., (1, 3)], dim=-1)
+        edge_logits = edge_logits - torch.logsumexp(
+            relation_logits[..., (0, 2)],
+            dim=-1,
+        )
+        return edge_logits, {
+            "relation_logits": relation_logits,
+            "relation_probs": relation_logits.softmax(dim=-1),
+            "memory_logits": memory_evidence,
+            "memory_weights": memory_weights,
+            "gate": gate,
+        }
 
     def config(self) -> dict:
         return {
@@ -104,6 +168,19 @@ class MemoryEC(nn.Module):
         spatial = self.spatial(temporal)
         pooled = spatial.mean(dim=1)
         query = self.pair_query(pooled, normalized)
+
+        if self.memory_mode == "pair":
+            logits, pair_aux = self.pair_memory_forward(query)
+            if not return_aux:
+                return logits
+            return logits, {
+                "normalized": normalized,
+                "temporal": temporal,
+                "spatial": spatial,
+                "pooled": pooled,
+                "pair_query": query,
+                **pair_aux,
+            }
 
         memory_weights = None
         gate = None

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from torch.nn import functional as F
 
 from MemoryEC.data.simulation.loader import make_dataloader
 from MemoryEC.model.memory_ec import MemoryEC
@@ -39,11 +40,15 @@ def run_epoch(
     loader,
     device: torch.device,
     optimizer: torch.optim.Optimizer | None = None,
-) -> tuple[float, dict[str, float]]:
+    lambda_memory: float = 0.1,
+) -> tuple[float, dict]:
     training = optimizer is not None
     model.train(training)
     total_loss = 0.0
     total_edges = 0
+    loss_totals = defaultdict(float)
+    total_pairs = 0
+    slot_usage = None
     scene_probabilities: dict[str, list[np.ndarray]] = defaultdict(list)
     scene_targets: dict[str, np.ndarray] = {}
 
@@ -52,8 +57,40 @@ def run_epoch(
         for batch in loader:
             bold = batch["bold"].to(device)
             adj = batch["adj"].to(device)
-            logits = model(bold)
-            loss = masked_bce_loss(logits, adj)
+            if model.model_type == "st_pair_memory":
+                logits, aux = model(bold, return_aux=True)
+                nodes = adj.shape[-1]
+                source, target = torch.triu_indices(nodes, nodes, offset=1, device=device)
+                relation_target = (
+                    adj[:, source, target] + 2 * adj[:, target, source]
+                ).long()
+                relation_logits = aux["relation_logits"][:, source, target]
+                memory_logits = aux["memory_logits"][:, source, target]
+                relation_loss = F.cross_entropy(
+                    relation_logits.reshape(-1, 4),
+                    relation_target.reshape(-1),
+                )
+                memory_loss = F.cross_entropy(
+                    memory_logits.reshape(-1, 4),
+                    relation_target.reshape(-1),
+                )
+                objective_loss = relation_loss + lambda_memory * memory_loss
+                bce_loss = masked_bce_loss(logits, adj)
+                loss = objective_loss if training else bce_loss
+                pair_count = bold.shape[0] * source.numel()
+                loss_totals["relation_loss"] += float(relation_loss.detach()) * pair_count
+                loss_totals["memory_loss"] += float(memory_loss.detach()) * pair_count
+                loss_totals["objective_loss"] += float(objective_loss.detach()) * pair_count
+                loss_totals["bce_loss"] += float(bce_loss.detach()) * pair_count
+                total_pairs += pair_count
+                usage = aux["memory_weights"][:, source, target].mean(dim=(0, 1, 2))
+                if slot_usage is None:
+                    slot_usage = usage.detach() * pair_count
+                else:
+                    slot_usage += usage.detach() * pair_count
+            else:
+                logits = model(bold)
+                loss = masked_bce_loss(logits, adj)
 
             if training:
                 optimizer.zero_grad(set_to_none=True)
@@ -72,7 +109,13 @@ def run_epoch(
                     scene_probabilities[scene].append(probabilities[index])
                     scene_targets[scene] = targets[index]
 
-    metrics: dict[str, float] = {}
+    metrics: dict = {}
+    if model.model_type == "st_pair_memory":
+        metrics.update({name: value / total_pairs for name, value in loss_totals.items()})
+        metrics["slot_retrieval_utilization"] = (slot_usage / total_pairs).cpu().tolist()
+        metrics.update(model.memory.assignment_statistics())
+    else:
+        metrics["bce_loss"] = total_loss / total_edges
     if not training:
         scene_metrics = [
             directed_metrics(scene_targets[scene], np.mean(predictions, axis=0))
@@ -94,7 +137,7 @@ def save_loss_curve(history: list[dict], path: Path) -> bool:
     plt.plot(epochs, [item["train_loss"] for item in history], label="train")
     plt.plot(epochs, [item["val_loss"] for item in history], label="validation")
     plt.xlabel("Epoch")
-    plt.ylabel("BCE loss")
+    plt.ylabel("Loss")
     plt.legend()
     plt.tight_layout()
     plt.savefig(path, dpi=160)
@@ -133,6 +176,7 @@ def train(arguments: argparse.Namespace) -> None:
         attention_heads=arguments.attention_heads,
         dropout=arguments.dropout,
     ).to(device)
+    lambda_memory = getattr(arguments, "lambda_memory", 0.1)
     parameter_count = count_parameters(model)
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -155,22 +199,39 @@ def train(arguments: argparse.Namespace) -> None:
     for epoch in range(1, arguments.epochs + 1):
         if hasattr(train_loader.batch_sampler, "set_epoch"):
             train_loader.batch_sampler.set_epoch(epoch)
-        train_loss, _ = run_epoch(model, train_loader, device, optimizer)
-        val_loss, val_metrics = run_epoch(model, val_loader, device)
+        train_loss, train_metrics = run_epoch(
+            model,
+            train_loader,
+            device,
+            optimizer,
+            lambda_memory,
+        )
+        val_loss, val_metrics = run_epoch(
+            model,
+            val_loader,
+            device,
+            lambda_memory=lambda_memory,
+        )
         record = {
             "epoch": epoch,
             "train_loss": train_loss,
             "val_loss": val_loss,
+            **{f"train_{name}": value for name, value in train_metrics.items()},
             **{f"val_{name}": value for name, value in val_metrics.items()},
         }
         history.append(record)
         save_json(history, history_path)
         if epoch == 1 or epoch % 10 == 0:
-            print(
+            message = (
                 f"epoch={epoch:03d} train_loss={train_loss:.4f} "
-                f"val_loss={val_loss:.4f} val_f1={val_metrics['directed_f1']:.4f}",
-                flush=True,
+                f"val_bce={val_loss:.4f} val_f1={val_metrics['directed_f1']:.4f}"
             )
+            if arguments.model_type == "st_pair_memory":
+                message += (
+                    f" relation={train_metrics['relation_loss']:.4f}"
+                    f" memory={train_metrics['memory_loss']:.4f}"
+                )
+            print(message, flush=True)
 
         if val_metrics["auprc"] > best_auprc + arguments.min_delta:
             best_auprc = val_metrics["auprc"]
@@ -186,6 +247,9 @@ def train(arguments: argparse.Namespace) -> None:
                     "parameter_count": parameter_count,
                     "seed": arguments.seed,
                     "training_arguments": vars(arguments),
+                    "memory_analysis": model.memory.assignment_statistics()
+                    if model.memory is not None else None,
+                    "training_metrics": train_metrics,
                 },
                 auprc_checkpoint_path,
             )
@@ -204,6 +268,9 @@ def train(arguments: argparse.Namespace) -> None:
                 "parameter_count": parameter_count,
                 "seed": arguments.seed,
                 "training_arguments": vars(arguments),
+                "memory_analysis": model.memory.assignment_statistics()
+                if model.memory is not None else None,
+                "training_metrics": train_metrics,
             }
             torch.save(checkpoint, checkpoint_path)
         else:
